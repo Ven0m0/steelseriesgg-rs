@@ -218,4 +218,4 @@ Contributions are welcome! Feel free to open issues or submit pull requests.
 ## Acknowledgments
 
 - [hidapi](https://crates.io/crates/hidapi) - Cross-platform HID device library
-- [apex-tux](https://github.com/apex-tux), [apex7tkl_linux](https://github.com/apex7tkl_linux) - Inspiration for keyboard support
+- [apex-tux](https://github.com/apex-tux), apex7tkl_linux - Inspiration for keyboard support
