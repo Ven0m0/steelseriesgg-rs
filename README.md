@@ -1,126 +1,221 @@
-# AntiBloatLight [![Latest Release](https://img.shields.io/github/v/release/ScepticDope/AntiBloatLight?style=flat-square)](https://github.com/ScepticDope/AntiBloatLight/releases) [![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](https://github.com/ScepticDope/AntiBloatLight/blob/main/LICENSE) [![Total Downloads](https://img.shields.io/github/downloads/ScepticDope/AntiBloatLight/total?label=total%20downloads&style=flat-square)](https://github.com/ScepticDope/AntiBloatLight/releases)
-This Rust application interacts with a SteelSeries keyboard via the HID protocol, allowing you to send data to the device. Removing the need for `SteelSeries GG` to run if you only want to set colours.
+# SteelSeries GG for Linux
 
-You can also use something like: [SharpKeys](https://github.com/randyrants/sharpkeys), to replace `SteelSeries GG` remap functionality if you would miss that.
+[![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
+[![Rust](https://img.shields.io/badge/rust-1.70+-orange?style=flat-square)](https://www.rust-lang.org/)
 
-## Feature
-- Send a raw data packet to a connected `Steelseries Apex 3 TKL (Qwerty US)` setting the color on all LED lights to rgb(157, 0, 255) (`0x9d, 0x0, 0xff`).
+A complete open-source replacement for SteelSeries GG on Linux. Control your SteelSeries keyboards and headsets with RGB lighting, audio mixing, GameSense API compatibility, and profile management.
 
-## Prerequisites
-_You have two options to use this repository:_
+## Features
 
-**Public Fork and Release**:
-   - Make a public fork of this repository.
-   - Modify the code as needed, refer to the [Usage](#usage) section for guidance.
-   - Create a release, the GitHub Actions workflow [`.github/workflows/rust.yml`](https://github.com/ScepticDope/AntiBloatLight/blob/main/.github/workflows/rust.yml) will attempt to build the project and attach the `.exe` file to the release.
-   - Wait for it to finish, then download the `.exe` file from the release and try running it.
+- **RGB Lighting Control** - Static colors, breathing, spectrum cycling, wave effects, reactive effects, and gradients
+- **GameSense Server** - HTTP API compatible with SteelSeries GameSense for game integrations
+- **Audio Mixer** - Per-channel volume control with PulseAudio/PipeWire integration
+- **Profile Management** - Save and load device configurations
+- **Daemon Mode** - Run as a background service
 
-**Local Build**:  
-Ensure the following prerequisites are installed before building:
+## Supported Devices
 
-1. **Supported Operating Systems**  
-   Tested on Windows 10 and 11. <sub><sup>_Credit to [JayRom95_fr](https://www.reddit.com/r/steelseries/comments/1gubzvp/comment/ly7yo92/) for testing Windows 11._</sup></sub>
+### Keyboards
+- Apex Pro / Apex Pro TKL / Apex Pro TKL 2023
+- Apex 3 / Apex 3 TKL
+- Apex 5
+- Apex 7 / Apex 7 TKL
 
-2. **Rust Programming Language**  
-   Ensure you have the Rust toolchain installed. If you don't have it, install Rust using [rustup](https://rustup.rs/).
-
-3. **Visual Studio Build Tools 2022**  
-   AntiBloatLight requires the Visual Studio C++ Build Tools to be installed on your system to compile and link the required dependencies.  
-   Download and install Visual Studio Build Tools from the following link:  
-   [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/)
-
-   Make sure to select: `Desktop development with C++`.
-   
-   _Here is a screencap with the only required components:_
-   ![Rust Config - Visual Studio Build Tools 2022](https://github.com/ScepticDope/AntiBloatLight/blob/main/Rust%20Config%20-%20Visual%20Studio%20Build%20Tools%202022.PNG?raw=true)
+### Headsets
+- Arctis 1 / Arctis 1 Wireless
+- Arctis 5 / Arctis 7 / Arctis 7 (2019 Edition)
+- Arctis 9 / Arctis Pro / Arctis Pro Wireless
+- Arctis Nova Pro / Arctis Nova Pro Wireless
+- Arctis Nova 5 / Arctis Nova 3 / Arctis Nova 1
 
 ## Installation
-Clone the repository and build the project using Cargo:
+
+### Prerequisites
+
+- Linux with udev support
+- Rust toolchain (1.70+)
+- `libudev-dev` or equivalent for your distribution
+- `libhidapi-dev` for HID device communication
+
+**Debian/Ubuntu:**
+```bash
+sudo apt install libudev-dev libhidapi-dev
 ```
-git clone https://github.com/ScepticDope/AntiBloatLight.git
-cd AntiBloatLight
+
+**Fedora:**
+```bash
+sudo dnf install systemd-devel hidapi-devel
+```
+
+**Arch Linux:**
+```bash
+sudo pacman -S hidapi
+```
+
+### Building from Source
+
+```bash
+git clone https://github.com/Ven0m0/steelseriesgg-rs.git
+cd steelseriesgg-rs
 cargo build --release
 ```
 
-## Dependencies
-The project uses the following dependencies:
+The binary will be located at `target/release/ssgg`.
 
-    hidapi - A Rust crate for cross-platform HID device communication.
+### Device Permissions (udev rules)
 
-You can find the latest version of the hidapi crate on [crates.io](https://crates.io/crates/hidapi).
+To access SteelSeries devices without root, install the udev rules:
 
-<details>
-<summary><strong>File: Cargo.toml</strong></summary>
-
-```rust
-[dependencies]
-hidapi = "2.6.3" # Check for the latest version on https://crates.io/crates/hidapi
+```bash
+sudo cp assets/99-steelseries.rules /etc/udev/rules.d/
+sudo udevadm control --reload-rules
+sudo udevadm trigger
 ```
-</details>
+
+Then add your user to the `input` group:
+
+```bash
+sudo usermod -aG input $USER
+```
+
+Log out and log back in for the group change to take effect.
 
 ## Usage
-After building the project, you can run the application by running `AntiBloatLight.exe`.
 
-The application will search for a connected HID device with the specified Vendor ID, Product ID, and Interface Number. Once found, it will send a raw data packet to the device.
+### List Connected Devices
 
-<details>
-<summary><strong>File: main.rs</strong></summary>
-
-```rust
-// Raw data that needs to be sent to the device, starting with an extra 0x0 to ensure proper alignment.
-// Main colour rgb(157, 0, 255) = 0x9d, 0x0, 0xff
-// Alternative colour rgb(247, 75, 0) = 0xF7, 0x4B, 0x00
-let raw_data_to_send = [
-    0x0, 0x21, 0xff, 0x9d, 0x0, 0xff, 0x9d, 0x0, 0xff, 0x9d, 0x0, 0xff, 0x9d, 0x0, 0xff, 0x9d,
-    0x0, 0xff, 0x9d, 0x0, 0xff, 0x9d, 0x0, 0xff, 0x9d, 0x0, 0xff, 0x9d, 0x0, 0xff, 0x0, 0x0, 0x0,
-    0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0,
-    0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0,
-];
-```
-</details>
-
-Just change the code to support your specific Steelseries keyboard and change the color. Personally I used: [WireShark](https://www.wireshark.org/download.html), to sniff out the packet containing the info I needed.
-You can also use Windows' **Devices and Printers** to find this information. Simply follow these steps:
-
-1. Open **Devices and Printers** in the Control Panel.  
-2. Right-click on your keyboard and select **Properties**.  
-3. Go to the **Hardware** tab and select the HID keyboard entries.  
-4. Check the **Hardware Ids** under the **Details** tab.  
-
-For example, on my system, the Hardware Ids are:
-```
-HID\VID_1038&PID_1622&REV_0300&MI_00
-HID\VID_1038&PID_1622&MI_00
-HID\VID_1038&UP:0001_U:0006
-HID_DEVICE_SYSTEM_KEYBOARD
-HID_DEVICE_UP:0001_U:0006
-HID_DEVICE
+```bash
+ssgg devices
 ```
 
-**VID** stands for **Vendor ID** and **PID** for **Product ID**, while `UP:0001_U:0006` likely represents the range of interfaces. If you're unsure, try all possible combinations until it works. 
-Below is the code you need to modify. If you have multiple HID entries (e.g., my keyboard had two), test each option one by one until you find the correct configuration.
+### RGB Lighting
 
-<details>
-<summary><strong>File: main.rs</strong></summary>
-
-```rust
-.find(|device| {
-   device.vendor_id() == 0x1038
-       && device.product_id() == 0x1622
-       && device.interface_number() == 0x01
-})
+Set a static color:
+```bash
+ssgg rgb --color red
+ssgg rgb --color "#ff5500"
 ```
-</details>
 
-You can place `AntiBloatLight.exe`, or a shortcut to it, in your startup folder so it runs once automatically after startup.  
-To easily access this folder, press `Win + R`, type `shell:startup`, and press Enter.
+Set brightness:
+```bash
+ssgg rgb --brightness 80
+```
+
+Apply effects:
+```bash
+ssgg rgb --effect breathing --color cyan
+ssgg rgb --effect spectrum
+ssgg rgb --effect wave --direction left-to-right
+```
+
+Available effects: `static`, `breathing`, `spectrum`, `wave`, `reactive`, `gradient`, `off`
+
+### Profile Management
+
+Save current configuration:
+```bash
+ssgg profile save my-profile
+```
+
+Load a profile:
+```bash
+ssgg profile load my-profile
+```
+
+List profiles:
+```bash
+ssgg profile list
+```
+
+### Audio Mixer
+
+View audio status:
+```bash
+ssgg audio status
+```
+
+Set volume:
+```bash
+ssgg audio volume --channel master --level 75
+```
+
+Mute/unmute:
+```bash
+ssgg audio mute --channel game
+ssgg audio unmute --channel game
+```
+
+Adjust chat mix:
+```bash
+ssgg audio chat-mix --balance 25
+```
+
+### GameSense Server
+
+Start the GameSense HTTP server:
+```bash
+ssgg server
+```
+
+The server runs on port 27301 by default and is compatible with games that support SteelSeries GameSense.
+
+### Daemon Mode
+
+Run as a background daemon with device control and GameSense server:
+```bash
+ssgg daemon
+```
+
+## Configuration
+
+Configuration is stored in `~/.config/steelseries-gg/ssgg/config.toml`:
+
+```toml
+[gamesense]
+enabled = true
+bind = "127.0.0.1"
+port = 27301
+
+[audio]
+master_volume = 100
+game_volume = 100
+chat_volume = 100
+
+[general]
+default_profile = "default"
+debug = false
+```
+
+## Dependencies
+
+| Crate | Purpose |
+|-------|---------|
+| hidapi | HID device communication |
+| tokio | Async runtime |
+| axum | HTTP server for GameSense |
+| serde | Serialization |
+| clap | CLI argument parsing |
+| libpulse-binding | PulseAudio integration (optional) |
+
+## Features Flags
+
+- `audio` (default) - Enable audio mixer with PulseAudio support
+- `compat` - Enable compatibility with existing SteelSeries crates
+
+Build without audio:
+```bash
+cargo build --release --no-default-features
+```
 
 ## License
-This project is licensed under the MIT License - see the [LICENSE](https://github.com/ScepticDope/AntiBloatLight/blob/main/LICENSE) file for details.
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## Contributing
-Feel free to open issues or submit pull requests for improvements or bug fixes.
+
+Contributions are welcome! Feel free to open issues or submit pull requests.
 
 ## Acknowledgments
-- The [Rust Programming Language](https://www.rust-lang.org/) for providing a safe, fast, and efficient way to build system applications like AntiBloatLight.
-- The [HIDAPI](https://crates.io/crates/hidapi) crate for HID device communication, the only lib I found that plays well with Windows.
+
+- [hidapi](https://crates.io/crates/hidapi) - Cross-platform HID device library
+- [apex-tux](https://github.com/apex-tux), [apex7tkl_linux](https://github.com/apex7tkl_linux) - Inspiration for keyboard support
