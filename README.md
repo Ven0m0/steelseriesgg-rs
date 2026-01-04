@@ -1,4 +1,4 @@
-# SteelSeries GG for Linux
+# steelseriesgg-rs – SteelSeries GG for Linux
 
 [![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
 [![Rust](https://img.shields.io/badge/rust-1.70+-orange?style=flat-square)](https://www.rust-lang.org/)
