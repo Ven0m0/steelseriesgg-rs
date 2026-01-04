@@ -197,7 +197,7 @@ debug = false
 | clap | CLI argument parsing |
 | libpulse-binding | PulseAudio integration (optional) |
 
-## Features Flags
+## Feature Flags
 
 - `audio` (default) - Enable audio mixer with PulseAudio support
 - `compat` - Enable compatibility with existing SteelSeries crates
