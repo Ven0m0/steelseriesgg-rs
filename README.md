@@ -9,7 +9,7 @@ A complete open-source replacement for SteelSeries GG on Linux. Control your Ste
 
 - **RGB Lighting Control** - Static colors, breathing, spectrum cycling, wave effects, reactive effects, and gradients
 - **GameSense Server** - HTTP API compatible with SteelSeries GameSense for game integrations
-- **Audio Mixer** - Per-channel volume control with PulseAudio/PipeWire integration
+- **Audio Mixer** - Per-channel volume control (PulseAudio/PipeWire integration is a work in progress)
 - **Profile Management** - Save and load device configurations
 - **Daemon Mode** - Run as a background service
 
