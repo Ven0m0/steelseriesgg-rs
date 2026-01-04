@@ -168,7 +168,7 @@ ssgg daemon
 
 ## Configuration
 
-Configuration is stored in `~/.config/steelseries-gg/ssgg/config.toml`:
+Configuration is stored in `~/.config/ssgg/config.toml`:
 
 ```toml
 [gamesense]
