@@ -366,7 +366,7 @@ impl SonarClient {
     }
 
     /// Perform a PUT request.
-    async fn put<T: Serialize>(&self, url: &str, _body: &T) -> Result<()> {
+    async fn put(&self, url: &str) -> Result<()> {
         let response = self
             .client
             .put(url)
