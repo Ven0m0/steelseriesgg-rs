@@ -10,6 +10,7 @@ A complete open-source replacement for SteelSeries GG on Linux. Control your Ste
 - **RGB Lighting Control** - Static colors, breathing, spectrum cycling, wave effects, reactive effects, and gradients
 - **GameSense Server** - HTTP API compatible with SteelSeries GameSense for game integrations
 - **Audio Mixer** - Per-channel volume control (PulseAudio/PipeWire integration is a work in progress)
+- **Sonar API Integration** - Direct control of SteelSeries Sonar audio device (based on [GGSonarRev](https://github.com/PrzemekkkYT/GGSonarRev))
 - **Profile Management** - Save and load device configurations
 - **Daemon Mode** - Run as a background service
 
@@ -150,6 +151,52 @@ Adjust chat mix:
 ssgg audio chat-mix --balance 25
 ```
 
+### SteelSeries Sonar Control
+
+The Sonar integration provides direct control over the SteelSeries Sonar audio device through its HTTP API. Sonar must be running for these commands to work.
+
+View Sonar status:
+```bash
+ssgg sonar status
+```
+
+Discover the dynamic Sonar API port:
+```bash
+ssgg sonar discover
+```
+
+List audio devices:
+```bash
+ssgg sonar devices
+```
+
+Set volume for a channel (classic mode):
+```bash
+ssgg sonar volume master 80
+ssgg sonar volume game 100
+ssgg sonar volume chat 75
+```
+
+Get current mode:
+```bash
+ssgg sonar mode
+```
+
+Control streamer mode volumes:
+```bash
+# Set monitoring volume
+ssgg sonar streamer monitoring master 75
+ssgg sonar streamer monitoring game 80
+
+# Set streaming volume
+ssgg sonar streamer streaming master 90
+```
+
+List available configurations:
+```bash
+ssgg sonar configs
+```
+
 ### GameSense Server
 
 Start the GameSense HTTP server:
@@ -193,6 +240,7 @@ debug = false
 | hidapi | HID device communication |
 | tokio | Async runtime |
 | axum | HTTP server for GameSense |
+| reqwest | HTTP client for Sonar API |
 | serde | Serialization |
 | clap | CLI argument parsing |
 | libpulse-binding | PulseAudio integration (optional) |

@@ -5,10 +5,13 @@
 //! - Per-application audio routing
 //! - Streamer mode with separate streaming/monitoring sliders
 
+pub mod sonar;
+
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 use crate::{Error, Result};
+pub use sonar::SonarClient;
 
 /// Audio channel identifier.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]

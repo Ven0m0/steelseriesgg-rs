@@ -7,6 +7,7 @@ use std::time::Duration;
 use tracing::{info, Level};
 use tracing_subscriber::FmtSubscriber;
 
+use steelseries_gg::audio::SonarClient;
 use steelseries_gg::config::Config;
 use steelseries_gg::devices::{discovery::print_device_summary, DeviceManager, DeviceType};
 use steelseries_gg::gamesense::GameSenseServer;
@@ -51,6 +52,12 @@ enum Commands {
     Audio {
         #[command(subcommand)]
         action: AudioAction,
+    },
+
+    /// Control SteelSeries Sonar (direct API access)
+    Sonar {
+        #[command(subcommand)]
+        action: SonarAction,
     },
 
     /// Start the GameSense server
@@ -148,6 +155,63 @@ enum AudioAction {
     },
 }
 
+#[derive(Subcommand)]
+enum SonarAction {
+    /// Show current Sonar status and volumes
+    Status,
+
+    /// Discover the Sonar API port
+    Discover,
+
+    /// Get audio devices
+    Devices,
+
+    /// Get current mode (classic or streamer)
+    Mode,
+
+    /// Set volume for a channel (classic mode)
+    Volume {
+        /// Channel: master, game, chat, media, aux
+        channel: String,
+
+        /// Volume level (0-100)
+        level: u8,
+    },
+
+    /// Get chat mix settings
+    ChatMix,
+
+    /// Control streamer mode
+    Streamer {
+        #[command(subcommand)]
+        action: StreamerAction,
+    },
+
+    /// Get all configurations
+    Configs,
+}
+
+#[derive(Subcommand)]
+enum StreamerAction {
+    /// Set monitoring volume for a channel
+    Monitoring {
+        /// Channel: master, game, chat
+        channel: String,
+
+        /// Volume level (0-100)
+        level: u8,
+    },
+
+    /// Set streaming volume for a channel
+    Streaming {
+        /// Channel: master, game, chat
+        channel: String,
+
+        /// Volume level (0-100)
+        level: u8,
+    },
+}
+
 fn parse_color(s: &str) -> Option<Color> {
     // Try named colors
     match s.to_lowercase().as_str() {
@@ -219,6 +283,10 @@ async fn main() -> anyhow::Result<()> {
         #[cfg(feature = "audio")]
         Commands::Audio { action } => {
             cmd_audio(action)?;
+        }
+
+        Commands::Sonar { action } => {
+            cmd_sonar(action).await?;
         }
 
         Commands::Server { port } => {
@@ -423,6 +491,152 @@ fn cmd_audio(action: AudioAction) -> anyhow::Result<()> {
             let balance = (balance.clamp(-100, 100) as f32) / 100.0;
             mixer.set_chat_mix(balance)?;
             println!("Chat mix set to {:+.0}%", balance * 100.0);
+        }
+    }
+
+    Ok(())
+}
+
+async fn cmd_sonar(action: SonarAction) -> anyhow::Result<()> {
+    match action {
+        SonarAction::Status => {
+            println!("Connecting to SteelSeries Sonar...");
+            let client = SonarClient::new().await?;
+            println!("Connected to Sonar API: {}", client.base_url());
+            println!();
+
+            // Get mode
+            match client.get_mode().await {
+                Ok(mode) => println!("Mode: {:?}", mode),
+                Err(e) => println!("Failed to get mode: {}", e),
+            }
+
+            // Get classic volumes
+            match client.get_classic_volumes().await {
+                Ok(volumes) => {
+                    println!("\nClassic Mode Volumes:");
+                    println!("  Master: {:.0}%", volumes.master * 100.0);
+                    println!("  Game:   {:.0}%", volumes.game * 100.0);
+                    println!("  Chat:   {:.0}%", volumes.chat * 100.0);
+                    println!("  Media:  {:.0}%", volumes.media * 100.0);
+                    println!("  Aux:    {:.0}%", volumes.aux * 100.0);
+                }
+                Err(e) => println!("\nFailed to get classic volumes: {}", e),
+            }
+
+            // Get chat mix
+            match client.get_chat_mix().await {
+                Ok(chat_mix) => println!("\nChat Mix: {:.0}%", chat_mix.value * 100.0),
+                Err(e) => println!("\nFailed to get chat mix: {}", e),
+            }
+        }
+
+        SonarAction::Discover => {
+            println!("Discovering Sonar API port...");
+            let client = SonarClient::new().await?;
+            println!("Sonar API found at: {}", client.base_url());
+        }
+
+        SonarAction::Devices => {
+            let client = SonarClient::new().await?;
+            let devices = client.get_audio_devices().await?;
+
+            println!("Audio Devices:");
+            for device in devices {
+                println!("  [{}] {} ({})", device.id, device.name, device.device_type);
+            }
+        }
+
+        SonarAction::Mode => {
+            let client = SonarClient::new().await?;
+            let mode = client.get_mode().await?;
+            println!("Current mode: {:?}", mode);
+        }
+
+        SonarAction::Volume { channel, level } => {
+            let client = SonarClient::new().await?;
+            let volume = (level.min(100) as f32) / 100.0;
+
+            match channel.to_lowercase().as_str() {
+                "master" => client.set_classic_master_volume(volume).await?,
+                "game" => client.set_classic_game_volume(volume).await?,
+                "chat" => client.set_classic_chat_volume(volume).await?,
+                "media" => client.set_classic_media_volume(volume).await?,
+                "aux" => client.set_classic_aux_volume(volume).await?,
+                _ => {
+                    return Err(anyhow::anyhow!(
+                        "Invalid channel: {}. Use master, game, chat, media, or aux",
+                        channel
+                    ));
+                }
+            }
+
+            println!("{} volume set to {}%", channel, level.min(100));
+        }
+
+        SonarAction::ChatMix => {
+            let client = SonarClient::new().await?;
+            let chat_mix = client.get_chat_mix().await?;
+            println!("Chat Mix: {:.0}%", chat_mix.value * 100.0);
+        }
+
+        SonarAction::Streamer { action } => {
+            let client = SonarClient::new().await?;
+
+            match action {
+                StreamerAction::Monitoring { channel, level } => {
+                    let volume = (level.min(100) as f32) / 100.0;
+
+                    match channel.to_lowercase().as_str() {
+                        "master" => client.set_monitoring_master_volume(volume).await?,
+                        "game" => client.set_monitoring_game_volume(volume).await?,
+                        "chat" => client.set_monitoring_chat_volume(volume).await?,
+                        _ => {
+                            return Err(anyhow::anyhow!(
+                                "Invalid channel: {}. Use master, game, or chat",
+                                channel
+                            ));
+                        }
+                    }
+
+                    println!(
+                        "Monitoring {} volume set to {}%",
+                        channel,
+                        level.min(100)
+                    );
+                }
+
+                StreamerAction::Streaming { channel, level } => {
+                    let volume = (level.min(100) as f32) / 100.0;
+
+                    match channel.to_lowercase().as_str() {
+                        "master" => client.set_streaming_master_volume(volume).await?,
+                        _ => {
+                            return Err(anyhow::anyhow!(
+                                "Invalid channel: {}. Only master is currently supported",
+                                channel
+                            ));
+                        }
+                    }
+
+                    println!(
+                        "Streaming {} volume set to {}%",
+                        channel,
+                        level.min(100)
+                    );
+                }
+            }
+        }
+
+        SonarAction::Configs => {
+            let client = SonarClient::new().await?;
+            let configs = client.get_configs().await?;
+
+            println!("Audio Configurations:");
+            for config in configs {
+                let selected = if config.selected { " (selected)" } else { "" };
+                println!("  [{}] {}{}", config.id, config.name, selected);
+            }
         }
     }
 
