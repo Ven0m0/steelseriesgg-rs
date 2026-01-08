@@ -34,7 +34,7 @@ clap = { version = "4.5", features = ["derive"] }
 # Configuration
 directories = "6.0"
 gamesense = { version = "0.1.2", optional = true }
-hidapi = "=2.6.3" # Pinned to avoid build issues with 2.6.4 requiring libudev-dev
+hidapi = "=2.6.4" # Pinned to avoid build issues with 2.6.4 requiring libudev-dev
 libpulse-binding = { version = "2.30.1", optional = true }
 
 # HTTP client for Sonar API
