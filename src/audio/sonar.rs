@@ -154,7 +154,7 @@ impl SonarClient {
         if let Some(apps) = json.as_array() {
             for app in apps {
                 if let Some(name) = app.get("name").and_then(|n| n.as_str()) {
-                    if name.contains("sonar") || name.contains("Sonar") {
+                    if name.to_lowercase().contains("sonar") {
                         if let Some(port) = app.get("port").and_then(|p| p.as_u64()) {
                             return Ok(port as u16);
                         }
