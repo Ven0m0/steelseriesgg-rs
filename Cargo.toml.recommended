@@ -1,0 +1,68 @@
+# Recommended Cargo.toml with updated dependencies
+# Created: 2026-01-08
+# See DEPENDENCY_AUDIT_REPORT.md for details
+
+[package]
+name = "steelseries-gg-linux"
+version = "0.1.0"
+description = "A complete open-source SteelSeries GG replacement for Linux - RGB lighting, audio mixer, and GameSense support"
+repository = "https://github.com/Ven0m0/steelseriesgg-rs"
+readme = "README.md"
+license = "MIT"
+edition = "2021"
+keywords = ["steelseries", "rgb", "gaming", "linux", "audio"]
+categories = ["hardware-support", "games"]
+
+[dependencies]
+hidapi = "=2.6.3" # Pinned to avoid build issues with 2.6.4 requiring libudev-dev
+
+# Async runtime - Updated to latest
+tokio = { version = "1.49", features = ["rt-multi-thread", "macros"] }
+
+# HTTP server for GameSense API - BREAKING CHANGE: Major version update
+axum = "0.8"
+tower-http = { version = "0.6", features = ["cors"] }
+
+# Serialization - Already latest
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Error handling - Updated thiserror to 2.0
+thiserror = "2.0"
+anyhow = "1.0"
+
+# Logging - Already latest
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Configuration - Updated to 0.9 for TOML 1.1.0 spec compliance
+directories = "6.0"
+toml = "0.9"
+
+# Audio (PipeWire/PulseAudio) - Already latest
+libpulse-binding = { version = "2.28", optional = true }
+
+# CLI - Already latest
+clap = { version = "4.5", features = ["derive"] }
+
+# Async utilities - Already latest
+futures = "0.3"
+
+# Optional: existing crate integrations (for compatibility)
+# NOTE: gamesense has an unmaintained transitive dependency (rustls-pemfile)
+# Consider deprecating this feature if not actively used
+gamesense = { version = "0.1.2", optional = true }
+steelseries-sonar = { version = "0.1.0", optional = true }
+
+[features]
+default = []
+audio = ["libpulse-binding"]
+compat = ["gamesense", "steelseries-sonar"]
+
+[[bin]]
+name = "ssgg"
+path = "src/main.rs"
+
+[lib]
+name = "steelseries_gg"
+path = "src/lib.rs"
