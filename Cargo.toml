@@ -60,7 +60,7 @@ strip = true           # Remove debug symbols
 lto = "fat"            # Full link-time optimization across all crates
 codegen-units = 1      # Single codegen unit for better optimization
 panic = "abort"        # Don't generate unwinding code
-opt-level = "3"        # Optimize for size instead of speed
+opt-level = 3          # Maximum optimization
 debug = 0              # No debug info
 overflow-checks = false # Disable integer overflow checks in release
 
