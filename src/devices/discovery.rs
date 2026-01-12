@@ -193,10 +193,7 @@ pub fn print_device_summary(manager: &DeviceManager) {
             device.product_id,
             device.serial_number.clone(),
         );
-        grouped
-            .entry(key)
-            .or_default()
-            .push(device.clone());
+        grouped.entry(key).or_default().push(device.clone());
     }
 
     // Convert to sorted vec

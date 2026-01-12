@@ -248,92 +248,49 @@ impl SonarClient {
 
     /// Set master volume (classic mode).
     pub async fn set_classic_master_volume(&self, volume: f32) -> Result<()> {
-        let volume = volume.clamp(0.0, 1.0);
-        let url = format!(
-            "{}/volumeSettings/classic/master/volume/{}",
-            self.base_url, volume
-        );
-        self.put(&url).await
+        self.set_volume("classic", "master", volume).await
     }
 
     /// Set game volume (classic mode).
     pub async fn set_classic_game_volume(&self, volume: f32) -> Result<()> {
-        let volume = volume.clamp(0.0, 1.0);
-        let url = format!(
-            "{}/volumeSettings/classic/game/volume/{}",
-            self.base_url, volume
-        );
-        self.put(&url).await
+        self.set_volume("classic", "game", volume).await
     }
 
     /// Set chat volume (classic mode).
     pub async fn set_classic_chat_volume(&self, volume: f32) -> Result<()> {
-        let volume = volume.clamp(0.0, 1.0);
-        let url = format!(
-            "{}/volumeSettings/classic/chat/volume/{}",
-            self.base_url, volume
-        );
-        self.put(&url).await
+        self.set_volume("classic", "chat", volume).await
     }
 
     /// Set media volume (classic mode).
     pub async fn set_classic_media_volume(&self, volume: f32) -> Result<()> {
-        let volume = volume.clamp(0.0, 1.0);
-        let url = format!(
-            "{}/volumeSettings/classic/media/volume/{}",
-            self.base_url, volume
-        );
-        self.put(&url).await
+        self.set_volume("classic", "media", volume).await
     }
 
     /// Set aux volume (classic mode).
     pub async fn set_classic_aux_volume(&self, volume: f32) -> Result<()> {
-        let volume = volume.clamp(0.0, 1.0);
-        let url = format!(
-            "{}/volumeSettings/classic/aux/volume/{}",
-            self.base_url, volume
-        );
-        self.put(&url).await
+        self.set_volume("classic", "aux", volume).await
     }
 
     /// Set monitoring master volume (streamer mode).
     pub async fn set_monitoring_master_volume(&self, volume: f32) -> Result<()> {
-        let volume = volume.clamp(0.0, 1.0);
-        let url = format!(
-            "{}/volumeSettings/streamer/monitoring/master/volume/{}",
-            self.base_url, volume
-        );
-        self.put(&url).await
+        self.set_volume("streamer/monitoring", "master", volume)
+            .await
     }
 
     /// Set monitoring game volume (streamer mode).
     pub async fn set_monitoring_game_volume(&self, volume: f32) -> Result<()> {
-        let volume = volume.clamp(0.0, 1.0);
-        let url = format!(
-            "{}/volumeSettings/streamer/monitoring/game/volume/{}",
-            self.base_url, volume
-        );
-        self.put(&url).await
+        self.set_volume("streamer/monitoring", "game", volume).await
     }
 
     /// Set monitoring chat volume (streamer mode).
     pub async fn set_monitoring_chat_volume(&self, volume: f32) -> Result<()> {
-        let volume = volume.clamp(0.0, 1.0);
-        let url = format!(
-            "{}/volumeSettings/streamer/monitoring/chat/volume/{}",
-            self.base_url, volume
-        );
-        self.put(&url).await
+        self.set_volume("streamer/monitoring", "chat", volume).await
     }
 
     /// Set streaming master volume (streamer mode).
     pub async fn set_streaming_master_volume(&self, volume: f32) -> Result<()> {
-        let volume = volume.clamp(0.0, 1.0);
-        let url = format!(
-            "{}/volumeSettings/streamer/streaming/master/volume/{}",
-            self.base_url, volume
-        );
-        self.put(&url).await
+        self.set_volume("streamer/streaming", "master", volume)
+            .await
     }
 
     /// Toggle stream redirection for a channel.
@@ -394,6 +351,18 @@ impl SonarClient {
         }
 
         Ok(())
+    }
+
+    /// Generic helper to set volume for a specific path.
+    ///
+    /// Clamps volume to [0.0, 1.0] and constructs the URL path.
+    async fn set_volume(&self, mode: &str, channel: &str, volume: f32) -> Result<()> {
+        let volume = volume.clamp(0.0, 1.0);
+        let url = format!(
+            "{}/volumeSettings/{}/{}/volume/{}",
+            self.base_url, mode, channel, volume
+        );
+        self.put(&url).await
     }
 
     /// Get the base URL for the Sonar API.

@@ -119,7 +119,7 @@ pub fn write_padded_report(
         "Writing HID report: len={}, offset={}, data={:02x?}",
         effective_len,
         offset,
-        &report[..effective_len.min(32)]  // Show first 32 bytes to avoid log spam
+        &report[..effective_len.min(32)] // Show first 32 bytes to avoid log spam
     );
 
     device.write(&report[..effective_len])?;

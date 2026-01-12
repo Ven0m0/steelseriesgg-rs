@@ -397,7 +397,10 @@ fn cmd_rgb(manager: &DeviceManager, action: RgbAction) -> anyhow::Result<()> {
             // Persist the effect to state store
             state_store.update_keyboard_effect(device_id, Effect::Static { color })?;
             println!("Done!");
-            println!("Note: LEDs should now display {} color. Device accepted the command.", color);
+            println!(
+                "Note: LEDs should now display {} color. Device accepted the command.",
+                color
+            );
         }
 
         RgbAction::Brightness { level } => {
