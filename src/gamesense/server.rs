@@ -1,10 +1,10 @@
 //! GameSense HTTP server implementation.
 
 use axum::{
+    Json, Router,
     extract::State,
     http::StatusCode,
     routing::{get, post},
-    Json, Router,
 };
 use std::collections::HashMap;
 use std::net::SocketAddr;

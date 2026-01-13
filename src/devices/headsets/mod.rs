@@ -1,6 +1,6 @@
 //! Headset device support (Arctis series).
 
-use super::{write_padded_report, Device, DeviceInfo, DeviceType};
+use super::{Device, DeviceInfo, DeviceType, write_padded_report};
 use crate::{Error, Result};
 use hidapi::HidDevice;
 use std::sync::{Arc, Mutex};

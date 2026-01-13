@@ -2,7 +2,7 @@
 
 pub mod apex;
 
-use super::{write_padded_report, zone_count_for_product_id, Device, DeviceInfo, DeviceType};
+use super::{Device, DeviceInfo, DeviceType, write_padded_report, zone_count_for_product_id};
 use crate::rgb::Color;
 use crate::{Error, Result};
 use hidapi::HidDevice;

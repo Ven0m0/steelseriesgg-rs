@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use tracing::{debug, info};
 
 use super::keyboards::{GenericKeyboard, Keyboard};
-use super::{device_name_from_product_id, device_type_from_product_id, DeviceInfo, DeviceType};
+use super::{DeviceInfo, DeviceType, device_name_from_product_id, device_type_from_product_id};
 use crate::{Error, Result, STEELSERIES_VENDOR_ID};
 
 /// Manages connected SteelSeries devices.

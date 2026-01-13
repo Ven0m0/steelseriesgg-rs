@@ -189,12 +189,11 @@ impl AudioMixer {
     pub fn set_chat_mix(&mut self, balance: f32) -> Result<()> {
         self.state.chat_mix = balance.clamp(-1.0, 1.0);
 
-        // Adjust game and chat volumes based on chat mix
-        let _game_factor = if balance < 0.0 { 1.0 } else { 1.0 - balance };
-        let _chat_factor = if balance > 0.0 { 1.0 } else { 1.0 + balance };
-
-        // Apply to actual audio system
-        // (Implementation would modify PulseAudio sink inputs)
+        // TODO: Apply to actual audio system
+        // Future implementation will:
+        // - Adjust game volume factor: if balance < 0.0 { 1.0 } else { 1.0 - balance }
+        // - Adjust chat volume factor: if balance > 0.0 { 1.0 } else { 1.0 + balance }
+        // - Modify PulseAudio sink inputs accordingly
 
         Ok(())
     }
@@ -202,6 +201,27 @@ impl AudioMixer {
     /// Get chat mix balance.
     pub fn chat_mix(&self) -> f32 {
         self.state.chat_mix
+    }
+
+    /// Populate a channel map from the source channels.
+    fn populate_channel_map(
+        source: &HashMap<Channel, ChannelState>,
+        target: &mut HashMap<Channel, ChannelState>,
+    ) {
+        const CHANNELS: &[Channel] = &[
+            Channel::Master,
+            Channel::Game,
+            Channel::Chat,
+            Channel::Media,
+            Channel::Aux,
+            Channel::Mic,
+        ];
+
+        for &channel in CHANNELS {
+            if let Some(channel_state) = source.get(&channel) {
+                target.insert(channel, channel_state.clone());
+            }
+        }
     }
 
     /// Enable or disable streamer mode.
@@ -213,32 +233,10 @@ impl AudioMixer {
             // Values will be populated on first access via or_default()
             // This avoids unnecessary HashMap cloning
             if self.state.streaming.is_empty() {
-                for &channel in &[
-                    Channel::Master,
-                    Channel::Game,
-                    Channel::Chat,
-                    Channel::Media,
-                    Channel::Aux,
-                    Channel::Mic,
-                ] {
-                    if let Some(channel_state) = self.state.channels.get(&channel) {
-                        self.state.streaming.insert(channel, channel_state.clone());
-                    }
-                }
+                Self::populate_channel_map(&self.state.channels, &mut self.state.streaming);
             }
             if self.state.monitoring.is_empty() {
-                for &channel in &[
-                    Channel::Master,
-                    Channel::Game,
-                    Channel::Chat,
-                    Channel::Media,
-                    Channel::Aux,
-                    Channel::Mic,
-                ] {
-                    if let Some(channel_state) = self.state.channels.get(&channel) {
-                        self.state.monitoring.insert(channel, channel_state.clone());
-                    }
-                }
+                Self::populate_channel_map(&self.state.channels, &mut self.state.monitoring);
             }
         } else {
             // When disabling streamer mode, clear streaming/monitoring state so that

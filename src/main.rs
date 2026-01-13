@@ -3,14 +3,14 @@
 //! A complete open-source replacement for SteelSeries GG on Linux.
 
 use clap::{Parser, Subcommand};
-use tracing::{info, Level};
+use tracing::{Level, info};
 use tracing_subscriber::FmtSubscriber;
 
 use steelseries_gg::config::Config;
 use steelseries_gg::device_state::{DeviceId, DeviceStateStore, KeyboardState};
 use steelseries_gg::devices::keyboards::Keyboard;
 use steelseries_gg::devices::{
-    discovery::print_device_summary, DeviceInfo, DeviceManager, DeviceType,
+    DeviceInfo, DeviceManager, DeviceType, discovery::print_device_summary,
 };
 use steelseries_gg::gamesense::GameSenseServer;
 use steelseries_gg::profiles::{KeyboardProfile, Profile, ProfileManager};
@@ -303,9 +303,48 @@ fn parse_channel(s: &str) -> Option<Channel> {
 }
 
 /// Convert a volume level (0-100) to a normalized float (0.0-1.0)
-#[cfg(feature = "sonar")]
 fn normalize_volume(level: u8) -> f32 {
     (level.min(100) as f32) / 100.0
+}
+
+/// Parse and validate a Sonar channel name
+#[cfg(feature = "sonar")]
+fn parse_sonar_channel<'a>(channel: &'a str, valid_channels: &[&str]) -> anyhow::Result<&'a str> {
+    let channel_lower = channel.to_ascii_lowercase();
+    if valid_channels.contains(&channel_lower.as_str()) {
+        Ok(channel)
+    } else {
+        Err(anyhow::anyhow!(
+            "Invalid channel: {}. Valid channels: {}",
+            channel,
+            valid_channels.join(", ")
+        ))
+    }
+}
+
+/// Parse a zone identifier (e.g., "zone1", "2", "all") into a zone index (0-based).
+/// Returns None for "all"/"keyboard" which should apply to all zones.
+fn parse_zone_number(zone: &str) -> Option<usize> {
+    let zone_lower = zone.to_ascii_lowercase();
+
+    // Check for "all" or "keyboard" which should apply to all zones
+    if zone_lower == "all" || zone_lower == "keyboard" {
+        return None;
+    }
+
+    // Try parsing as "zone<number>" or just "<number>"
+    zone_lower
+        .strip_prefix("zone")
+        .and_then(|rest| rest.parse::<usize>().ok())
+        .or_else(|| zone_lower.parse::<usize>().ok())
+        .and_then(|one_based| {
+            // Convert 1-based to 0-based index
+            if one_based > 0 {
+                Some(one_based - 1)
+            } else {
+                None
+            }
+        })
 }
 
 #[tokio::main]
@@ -563,7 +602,7 @@ fn cmd_profile(action: ProfileAction) -> anyhow::Result<()> {
 }
 
 fn cmd_pollrate(action: PollrateAction) -> anyhow::Result<()> {
-    use steelseries_gg::pollrate::{get_poll_rate, set_poll_rate, DeviceType, PollRate};
+    use steelseries_gg::pollrate::{DeviceType, PollRate, get_poll_rate, set_poll_rate};
 
     match action {
         PollrateAction::Mouse { rate, persistent } => {
@@ -661,7 +700,7 @@ fn cmd_audio(action: AudioAction) -> anyhow::Result<()> {
             let ch = parse_channel(&channel)
                 .ok_or_else(|| anyhow::anyhow!("Invalid channel: {}", channel))?;
 
-            let volume = (level.min(100) as f32) / 100.0;
+            let volume = normalize_volume(level);
             mixer.set_volume(ch, volume)?;
             println!("{} volume set to {}%", ch, level.min(100));
         }
@@ -749,6 +788,9 @@ async fn cmd_sonar(action: SonarAction) -> anyhow::Result<()> {
         }
 
         SonarAction::Volume { channel, level } => {
+            const VALID_CHANNELS: &[&str] = &["master", "game", "chat", "media", "aux"];
+            parse_sonar_channel(&channel, VALID_CHANNELS)?;
+
             let client = SonarClient::new().await?;
             let volume = normalize_volume(level);
             let channel_lower = channel.to_ascii_lowercase();
@@ -759,12 +801,7 @@ async fn cmd_sonar(action: SonarAction) -> anyhow::Result<()> {
                 "chat" => client.set_classic_chat_volume(volume).await?,
                 "media" => client.set_classic_media_volume(volume).await?,
                 "aux" => client.set_classic_aux_volume(volume).await?,
-                _ => {
-                    return Err(anyhow::anyhow!(
-                        "Invalid channel: {}. Use master, game, chat, media, or aux",
-                        channel
-                    ));
-                }
+                _ => unreachable!("Validated by parse_sonar_channel"),
             }
 
             println!("{} volume set to {}%", channel, level.min(100));
@@ -781,6 +818,9 @@ async fn cmd_sonar(action: SonarAction) -> anyhow::Result<()> {
 
             match action {
                 StreamerAction::Monitoring { channel, level } => {
+                    const VALID_CHANNELS: &[&str] = &["master", "game", "chat"];
+                    parse_sonar_channel(&channel, VALID_CHANNELS)?;
+
                     let volume = normalize_volume(level);
                     let channel_lower = channel.to_ascii_lowercase();
 
@@ -788,29 +828,22 @@ async fn cmd_sonar(action: SonarAction) -> anyhow::Result<()> {
                         "master" => client.set_monitoring_master_volume(volume).await?,
                         "game" => client.set_monitoring_game_volume(volume).await?,
                         "chat" => client.set_monitoring_chat_volume(volume).await?,
-                        _ => {
-                            return Err(anyhow::anyhow!(
-                                "Invalid channel: {}. Use master, game, or chat",
-                                channel
-                            ));
-                        }
+                        _ => unreachable!("Validated by parse_sonar_channel"),
                     }
 
                     println!("Monitoring {} volume set to {}%", channel, level.min(100));
                 }
 
                 StreamerAction::Streaming { channel, level } => {
+                    const VALID_CHANNELS: &[&str] = &["master"];
+                    parse_sonar_channel(&channel, VALID_CHANNELS)?;
+
                     let volume = normalize_volume(level);
                     let channel_lower = channel.to_ascii_lowercase();
 
                     match channel_lower.as_str() {
                         "master" => client.set_streaming_master_volume(volume).await?,
-                        _ => {
-                            return Err(anyhow::anyhow!(
-                                "Invalid channel: {}. Only master is currently supported",
-                                channel
-                            ));
-                        }
+                        _ => unreachable!("Validated by parse_sonar_channel"),
                     }
 
                     println!("Streaming {} volume set to {}%", channel, level.min(100));
@@ -865,7 +898,7 @@ async fn cmd_daemon(manager: DeviceManager) -> anyhow::Result<()> {
 
     // Apply saved polling rates
     {
-        use steelseries_gg::pollrate::{set_poll_rate, DeviceType, PollRate};
+        use steelseries_gg::pollrate::{DeviceType, PollRate, set_poll_rate};
 
         if let Some(mouse_hz) = config.poll_rate.mouse_hz {
             if let Ok(rate) = PollRate::from_hz(mouse_hz) {
@@ -1031,37 +1064,26 @@ async fn cmd_daemon(manager: DeviceManager) -> anyhow::Result<()> {
                 continue;
             }
 
-            let overlays: Vec<(String, (Color, std::time::Instant))> = state
-                .gamesense_overlays
-                .iter()
-                .map(|(zone, (color, expiry))| (zone.clone(), (*color, *expiry)))
-                .collect();
-
             for (serial, (keyboard, controller, _info)) in state.keyboards.iter_mut() {
                 let mut colors = controller.compute_colors();
 
                 // Apply GameSense overlays using simple zone mapping.
-                if !overlays.is_empty() {
+                if !state.gamesense_overlays.is_empty() {
                     let zone_count = colors.len();
-                    for (zone, (overlay_color, _)) in overlays.iter() {
-                        let zl = zone.to_ascii_lowercase();
-
-                        let apply_all = zl == "all" || zl == "keyboard";
-                        if apply_all {
-                            for c in colors.iter_mut() {
-                                *c = *overlay_color;
+                    for (zone, (overlay_color, _)) in state.gamesense_overlays.iter() {
+                        match parse_zone_number(zone) {
+                            None => {
+                                // Apply to all zones
+                                for c in colors.iter_mut() {
+                                    *c = *overlay_color;
+                                }
                             }
-                            continue;
-                        }
-
-                        let idx = zl
-                            .strip_prefix("zone")
-                            .and_then(|rest| rest.parse::<usize>().ok())
-                            .or_else(|| zl.parse::<usize>().ok());
-
-                        if let Some(one_based) = idx {
-                            if one_based >= 1 && one_based <= zone_count {
-                                colors[one_based - 1] = *overlay_color;
+                            Some(idx) if idx < zone_count => {
+                                // Apply to specific zone
+                                colors[idx] = *overlay_color;
+                            }
+                            Some(_) => {
+                                // Index out of bounds, ignore
                             }
                         }
                     }
@@ -1079,7 +1101,7 @@ async fn cmd_daemon(manager: DeviceManager) -> anyhow::Result<()> {
     // Set up graceful shutdown on SIGTERM (systemd stop) and SIGINT (Ctrl+C)
     #[cfg(unix)]
     {
-        use tokio::signal::unix::{signal, SignalKind};
+        use tokio::signal::unix::{SignalKind, signal};
 
         let mut sigterm = signal(SignalKind::terminate())?;
         let mut sigint = signal(SignalKind::interrupt())?;

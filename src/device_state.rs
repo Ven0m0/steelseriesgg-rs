@@ -6,8 +6,8 @@
 //! are missing to avoid collisions across multiple identical devices.
 
 use serde::{Deserialize, Serialize};
-use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
+use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
 
@@ -297,37 +297,38 @@ impl DeviceStateStore {
 
     /// Get mutable reference to device state.
     pub fn get_mut(&mut self, id: &DeviceId) -> Option<&mut DeviceState> {
-        if self.states.contains_key(id) {
-            return self.states.get_mut(id);
+        // Try exact match first (single lookup)
+        if let Some(state) = self.states.get_mut(id) {
+            return Some(state);
         }
 
+        // Fall back to loose matching
         let key = self
             .states
             .keys()
             .find(|existing| Self::id_loosely_matches(existing, id))
             .cloned();
 
-        if let Some(key) = key {
-            return self.states.get_mut(&key);
-        }
-
-        None
+        key.and_then(move |k| self.states.get_mut(&k))
     }
 
     /// Get or create device state.
     pub fn get_or_create(&mut self, id: DeviceId) -> &mut DeviceState {
-        // Prefer an exact match, but fall back to legacy identifiers (pre-path) to
-        // retain previously saved state.
-        if let Some(existing_key) = self
+        // Check if exact match exists
+        if self.states.contains_key(&id) {
+            return self.states.entry(id).or_default();
+        }
+
+        // Fall back to legacy identifiers (pre-path) to retain previously saved state
+        let existing_key = self
             .states
             .keys()
             .find(|existing| Self::id_loosely_matches(existing, &id))
-            .cloned()
-        {
-            return self
-                .states
-                .get_mut(&existing_key)
-                .expect("key just found exists");
+            .cloned();
+
+        if let Some(key) = existing_key {
+            // Safe unwrap: we just found this key exists
+            return self.states.get_mut(&key).unwrap();
         }
 
         self.states.entry(id).or_default()
@@ -406,6 +407,9 @@ impl DeviceStateStore {
 
     /// Compare device identifiers while tolerating missing path information to keep
     /// backward compatibility with previously persisted state.
+    ///
+    /// Interface number 0 is treated as a wildcard to support legacy state files that
+    /// were saved before interface numbers were properly tracked (pre-path era).
     fn id_loosely_matches(existing: &DeviceId, candidate: &DeviceId) -> bool {
         let interface_matches = existing.interface_number == 0
             || candidate.interface_number == 0
