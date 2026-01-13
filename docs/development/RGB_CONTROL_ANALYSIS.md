@@ -250,12 +250,15 @@ fn send_via_hidraw(path: &str, data: &[u8]) -> Result<()> {
 
 4. **Add Retry Logic** ⭐⭐
    ```rust
-   fn send_report_with_retry(&mut self, data: &[u8], retries: u32) -> Result<()> {
-       for attempt in 0..retries {
+   fn send_report_with_retry(&mut self, data: &[u8], attempts: u32) -> Result<()> {
+       if attempts == 0 {
+           return Err(Error::InvalidConfig("Number of attempts must be at least 1".to_string()));
+       }
+       for attempt in 0..attempts {
            match self.send_report(data) {
                Ok(_) => return Ok(()),
-               Err(e) if attempt < retries - 1 => {
-                   debug!("Retry {}/{}: {:?}", attempt + 1, retries, e);
+               Err(e) if attempt < attempts - 1 => {
+                   debug!("Attempt {}/{} failed, retrying: {:?}", attempt + 1, attempts, e);
                    std::thread::sleep(Duration::from_millis(50));
                }
                Err(e) => return Err(e),
