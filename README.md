@@ -96,6 +96,32 @@ cargo build --release
 
 Binary: `target/release/ssgg`.
 
+### Optional Build Optimizations
+
+The project includes optional build optimizations in `.cargo/config.toml`. These are **not required** but can improve build times:
+
+**sccache** (compilation cache):
+```bash
+cargo install sccache
+# Then uncomment the rustc-wrapper line in .cargo/config.toml
+```
+
+**lld** (faster linker):
+```bash
+# Debian/Ubuntu
+sudo apt install lld
+
+# Fedora
+sudo dnf install lld
+
+# Arch Linux
+sudo pacman -S lld
+
+# Then uncomment the lld line in .cargo/config.toml
+```
+
+These optimizations are experimental and optional. The project builds successfully without them.
+
 ### Device permissions (udev)
 
 ```bash

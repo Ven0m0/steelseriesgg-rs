@@ -9,10 +9,10 @@ use crate::Result;
 /// USB polling rate configuration.
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct PollRateConfig {
-    /// Mouse polling rate in Hz (125, 500, or 1000)
+    /// Mouse polling rate in Hz (125, 500, 1000, 2000, or 4000)
     pub mouse_hz: Option<u32>,
 
-    /// Keyboard polling rate in Hz (125, 500, or 1000)
+    /// Keyboard polling rate in Hz (125, 500, 1000, 2000, or 4000)
     pub keyboard_hz: Option<u32>,
 }
 
