@@ -316,7 +316,8 @@ impl DeviceStateStore {
     pub fn get_or_create(&mut self, id: DeviceId) -> &mut DeviceState {
         // Check if exact match exists
         if self.states.contains_key(&id) {
-            return self.states.entry(id).or_default();
+            // Safe to unwrap as we just checked for the key's existence.
+            return self.states.get_mut(&id).unwrap();
         }
 
         // Fall back to legacy identifiers (pre-path) to retain previously saved state
