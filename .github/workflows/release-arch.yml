@@ -21,7 +21,7 @@ jobs:
           pacman -Syu --noconfirm
           pacman -S --noconfirm git rust cargo hidapi systemd-libs
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
