@@ -65,7 +65,7 @@ thiserror = "2.0"
 
 # Terminal UI
 indicatif = "0.17"
-tabled = "0.16"
+tabled = "0.20"
 # Async runtime - only include needed features to reduce binary size
 tokio = { version = "1.49", default-features = false, features = [
     "rt-multi-thread",
