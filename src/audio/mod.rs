@@ -8,6 +8,9 @@
 #[cfg(feature = "sonar")]
 pub mod sonar;
 
+#[cfg(feature = "audio")]
+pub mod pulse;
+
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -15,6 +18,9 @@ use crate::{Error, Result};
 
 #[cfg(feature = "sonar")]
 pub use sonar::{SonarChannel, SonarClient};
+
+#[cfg(feature = "audio")]
+use self::pulse::PulseHandler;
 
 // Channel types are used by both audio and sonar features
 #[cfg(any(feature = "audio", feature = "sonar"))]
@@ -118,18 +124,26 @@ impl Default for MixerState {
 /// Audio mixer for controlling channel volumes.
 pub struct AudioMixer {
     state: MixerState,
-    // PulseAudio/PipeWire connection would go here
+    // PulseAudio/PipeWire connection
     #[cfg(feature = "audio")]
-    _pulse: Option<()>, // Placeholder for pulse connection
+    pulse: Option<PulseHandler>,
 }
 
 #[cfg(feature = "audio")]
 impl AudioMixer {
     /// Create a new audio mixer.
     pub fn new() -> Result<Self> {
+        let pulse = match PulseHandler::connect() {
+            Ok(p) => Some(p),
+            Err(e) => {
+                tracing::warn!("Failed to connect to PulseAudio: {}", e);
+                None
+            }
+        };
+
         Ok(Self {
             state: MixerState::default(),
-            _pulse: None,
+            pulse,
         })
     }
 
@@ -311,39 +325,44 @@ impl AudioMixer {
     }
 
     /// Apply channel settings to the audio system.
-    ///
-    /// Currently this is a no-op that always returns `Ok(())`. It is a placeholder
-    /// for future PulseAudio/PipeWire integration and does not yet interact with
-    /// the underlying audio system.
-    fn apply_channel(&self, channel: Channel) -> Result<()> {
+    fn apply_channel(&mut self, channel: Channel) -> Result<()> {
         // Validate channel state before potential audio system integration
-        let channel_state = self
-            .state
-            .channels
-            .get(&channel)
-            .ok_or_else(|| Error::Audio(format!("Channel {:?} not found", channel)))?;
+        let (volume, muted) = {
+            let channel_state = self
+                .state
+                .channels
+                .get(&channel)
+                .ok_or_else(|| Error::Audio(format!("Channel {:?} not found", channel)))?;
 
-        // TODO: Implement PulseAudio/PipeWire integration
-        // Implementation plan:
-        // 1. Connect to PulseAudio via libpulse-binding
-        // 2. Enumerate sink inputs and match by application name/PID
-        // 3. Set volume using pa_context_set_sink_input_volume
-        // 4. Handle audio system connection errors gracefully
-        // 5. Consider PipeWire compatibility via PulseAudio API
+            // Validate the volume is in acceptable range
+            if !(0.0..=1.0).contains(&channel_state.volume) {
+                return Err(Error::Audio(format!(
+                    "Invalid volume {:.2} for channel {:?} (must be 0.0-1.0)",
+                    channel_state.volume,
+                    channel
+                )));
+            }
+
+            (channel_state.volume, channel_state.muted)
+        };
 
         tracing::debug!(
-            "Would apply channel {:?}: volume={:.2}, mute={}",
+            "Applying channel {:?}: volume={:.2}, mute={}",
             channel,
-            channel_state.volume,
-            channel_state.muted
+            volume,
+            muted
         );
 
-        // For now, validate the volume is in acceptable range
-        if !(0.0..=1.0).contains(&channel_state.volume) {
-            return Err(Error::Audio(format!(
-                "Invalid volume {:.2} for channel {:?} (must be 0.0-1.0)",
-                channel_state.volume, channel
-            )));
+        if let Some(pulse) = &mut self.pulse {
+            let effective_volume = if muted { 0.0 } else { volume };
+
+            match channel {
+                Channel::Master => pulse.set_master_volume(effective_volume)?,
+                Channel::Mic => pulse.set_mic_volume(effective_volume)?,
+                // For other channels, we currently apply to all sink inputs as a placeholder
+                // until per-application routing is implemented
+                _ => pulse.set_all_sink_inputs_volume(effective_volume)?,
+            }
         }
 
         Ok(())

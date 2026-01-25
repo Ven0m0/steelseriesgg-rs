@@ -301,7 +301,7 @@ async fn remove_game(
     State(state): State<AppState>,
     Json(req): Json<RemoveGame>,
 ) -> (StatusCode, Json<ApiResponse>) {
-    let mut state = state.write().await;
+    let mut state = state.write();
 
     info!("Removing game: {}", req.game);
 
@@ -317,7 +317,7 @@ async fn remove_event(
     State(state): State<AppState>,
     Json(req): Json<RemoveEvent>,
 ) -> (StatusCode, Json<ApiResponse>) {
-    let mut state = state.write().await;
+    let mut state = state.write();
 
     debug!("Removing event: {}:{}", req.game, req.event);
 
