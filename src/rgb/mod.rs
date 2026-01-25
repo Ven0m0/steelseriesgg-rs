@@ -942,6 +942,7 @@ impl PerKeyEffectEngine {
 pub struct RgbController {
     engine: EffectEngine,
     brightness: f32,
+    scaled_colors: Vec<Color>,
 }
 
 /// Per-key RGB controller for managing individual key lighting.
@@ -949,24 +950,30 @@ pub struct PerKeyRgbController {
     engine: PerKeyEffectEngine,
     brightness: f32,
     performance_manager: Option<crate::performance::PerformanceManager>,
+    /// Buffer for scaled colors to avoid reallocations
+    scaled_key_colors: Vec<(KeyId, Color)>,
 }
 
 impl PerKeyRgbController {
     /// Create a new per-key RGB controller.
     pub fn new(key_mapping: KeyMapping) -> Self {
+        let key_count = key_mapping.get_all_keys().len();
         Self {
             engine: PerKeyEffectEngine::new(PerKeyEffect::default(), key_mapping),
             brightness: 1.0,
             performance_manager: None,
+            scaled_key_colors: Vec::with_capacity(key_count),
         }
     }
 
     /// Create a new per-key RGB controller with performance optimization enabled.
     pub fn new_with_performance(key_mapping: KeyMapping) -> Self {
+        let key_count = key_mapping.get_all_keys().len();
         Self {
             engine: PerKeyEffectEngine::new(PerKeyEffect::default(), key_mapping),
             brightness: 1.0,
             performance_manager: Some(crate::performance::PerformanceManager::new()),
+            scaled_key_colors: Vec::with_capacity(key_count),
         }
     }
 
@@ -1004,7 +1011,7 @@ impl PerKeyRgbController {
 
     /// Compute current colors for all keys with brightness applied.
     #[inline]
-    pub fn compute_key_colors(&mut self) -> Vec<(KeyId, Color)> {
+    pub fn compute_key_colors(&mut self) -> &[(KeyId, Color)] {
         let start_time = std::time::Instant::now();
 
         // Try to use cached computation if performance manager is enabled
@@ -1061,15 +1068,22 @@ impl PerKeyRgbController {
             perf_mgr.record_timing(computation_time, Duration::from_micros(0)); // No HID time here
         }
 
+        // Reuse internal buffer to avoid allocations
+        self.scaled_key_colors.clear();
+
         // Apply brightness scaling if needed
         if (self.brightness - 1.0).abs() < f32::EPSILON {
-            colors.iter().map(|(&key, &color)| (key, color)).collect()
+            self.scaled_key_colors
+                .extend(colors.iter().map(|(&key, &color)| (key, color)));
         } else {
-            colors
-                .iter()
-                .map(|(&key, &color)| (key, color.scale(self.brightness)))
-                .collect()
+            self.scaled_key_colors.extend(
+                colors
+                    .iter()
+                    .map(|(&key, &color)| (key, color.scale(self.brightness))),
+            );
         }
+
+        &self.scaled_key_colors
     }
 
     /// Get color for a specific key with brightness applied.
@@ -1119,6 +1133,7 @@ impl RgbController {
         Self {
             engine: EffectEngine::new(Effect::default(), zone_count),
             brightness: 1.0,
+            scaled_colors: Vec::with_capacity(zone_count),
         }
     }
 
@@ -1160,15 +1175,18 @@ impl RgbController {
     /// Compute current colors with brightness applied.
     /// This method reuses an internal buffer to avoid allocations.
     #[inline]
-    pub fn compute_colors(&mut self) -> Vec<Color> {
+    pub fn compute_colors(&mut self) -> &[Color] {
         let colors = self.engine.compute();
 
         // If brightness is 1.0, we can return the colors directly without scaling
         if (self.brightness - 1.0).abs() < f32::EPSILON {
-            return colors.to_vec();
+            return colors;
         }
 
-        // Apply brightness scaling and return new vector
-        colors.iter().map(|c| c.scale(self.brightness)).collect()
+        // Apply brightness scaling reusing internal buffer
+        self.scaled_colors.clear();
+        self.scaled_colors
+            .extend(colors.iter().map(|c| c.scale(self.brightness)));
+        &self.scaled_colors
     }
 }

@@ -14,7 +14,8 @@ use super::{Device, DeviceInfo, DeviceType, write_padded_report, zone_count_for_
 use crate::rgb::{Color, PerKeyEffect, PerKeyRgbController};
 use crate::{Error, Result};
 use hidapi::HidDevice;
-use std::sync::{Arc, Mutex};
+use parking_lot::Mutex;
+use std::sync::Arc;
 
 /// Trait for keyboard-specific functionality.
 pub trait Keyboard: Device {

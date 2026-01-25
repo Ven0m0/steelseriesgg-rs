@@ -41,7 +41,7 @@ chrono = { version = "0.4", features = ["serde"] }
 
 # CLI
 clap = { version = "4.5", features = ["derive"] }
-colored = "2.1"
+colored = "3.1"
 
 # Configuration
 directories = "6.0"
@@ -49,6 +49,7 @@ hidapi = "=2.6.4"
 libc = "0.2" # For root permission checks (geteuid)
 libpulse-binding = { version = "2.30.1", optional = true }
 nix = "0.30.1"
+parking_lot = "0.12"
 
 # HTTP client for Sonar API (optional, only needed for sonar feature)
 reqwest = { version = "0.13", features = ["json"], optional = true }

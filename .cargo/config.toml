@@ -13,6 +13,6 @@ rustflags = ["-Ctarget-cpu=native"]
 # rustc-wrapper = "sccache"
 
 [target.x86_64-unknown-linux-gnu]
-rustflags = ["-Ctarget-cpu=native"]
+# rustflags = ["-Ctarget-cpu=native"]
 # Replace the rustflags line above with this one if you have lld installed for faster linking (do not use both):
-# rustflags = ["-Ctarget-cpu=native", "-Clink-arg=-fuse-ld=lld"]
+rustflags = ["-Ctarget-cpu=native", "-Clink-arg=-fuse-ld=lld"]

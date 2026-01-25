@@ -11,9 +11,10 @@
 //! - Smart invalidation strategies
 
 use crate::rgb::{Color, Effect, PerKeyEffect};
+use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 /// RGB timing metrics for performance monitoring as required by the performance foundation plan.
@@ -541,6 +542,35 @@ struct EffectCacheEntry {
     access_count: u32,
 }
 
+/// Simple FNV-1a 64-bit hasher for performance.
+struct FnvHasher {
+    state: u64,
+}
+
+impl FnvHasher {
+    const OFFSET_BASIS: u64 = 0xcbf29ce484222325;
+    const PRIME: u64 = 0x100000001b3;
+
+    fn new() -> Self {
+        Self {
+            state: Self::OFFSET_BASIS,
+        }
+    }
+}
+
+impl std::hash::Hasher for FnvHasher {
+    fn write(&mut self, bytes: &[u8]) {
+        for &byte in bytes {
+            self.state ^= byte as u64;
+            self.state = self.state.wrapping_mul(Self::PRIME);
+        }
+    }
+
+    fn finish(&self) -> u64 {
+        self.state
+    }
+}
+
 impl EffectComputationCache {
     /// Create a new effect computation cache.
     pub fn new(max_size: usize, max_age: Duration) -> Self {
@@ -629,10 +659,9 @@ impl EffectComputationCache {
 
     /// Hash an effect for caching.
     fn hash_effect(&self, effect: &PerKeyEffect) -> u64 {
-        use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
 
-        let mut hasher = DefaultHasher::new();
+        let mut hasher = FnvHasher::new();
 
         // Hash effect type and key parameters
         match effect {
