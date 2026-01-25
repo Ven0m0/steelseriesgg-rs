@@ -65,7 +65,7 @@ sysinfo = "0.33"
 thiserror = "2.0"
 
 # Terminal UI
-indicatif = "0.17"
+indicatif = "0.18"
 tabled = "0.20"
 # Async runtime - only include needed features to reduce binary size
 tokio = { version = "1.49", default-features = false, features = [
