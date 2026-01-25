@@ -243,9 +243,7 @@ impl GenericKeyboard {
         let device = self.device.as_ref().ok_or(Error::DeviceCommunication(
             "Device not connected".to_string(),
         ))?;
-        let device = device
-            .lock()
-            .map_err(|e| Error::DeviceCommunication(format!("Device lock poisoned: {}", e)))?;
+        let device = device.lock();
 
         // Record the operation with timing analysis
         let result = if let Some(result) = with_global_diagnostics(|diag| {
@@ -305,9 +303,7 @@ impl Device for GenericKeyboard {
         let device = self.device.as_ref().ok_or(Error::DeviceCommunication(
             "Device not connected".to_string(),
         ))?;
-        let device = device
-            .lock()
-            .map_err(|e| Error::DeviceCommunication(format!("Device lock poisoned: {}", e)))?;
+        let device = device.lock();
 
         // Record the operation with timing analysis
         if let Some(result) = with_global_diagnostics(|diag| {
@@ -644,12 +640,17 @@ impl Keyboard for GenericKeyboard {
     }
 
     fn set_per_key_effect(&mut self, effect: PerKeyEffect) -> Result<()> {
-        if let Some(ref mut controller) = self.per_key_controller {
-            controller.set_effect(effect);
+        let key_colors = if let Some(ref mut controller) = self.per_key_controller {
+            controller.set_effect(effect.clone());
 
             // Apply the effect immediately by getting colors and sending to device
-            let key_colors = controller.compute_key_colors();
-            self.set_key_colors(&key_colors)?;
+            Some(controller.compute_key_colors().to_vec())
+        } else {
+            None
+        };
+
+        if let Some(colors) = key_colors {
+            self.set_key_colors(&colors)?;
             self.apply()
         } else {
             // Fallback: convert to zone-based effect if no per-key support
@@ -662,12 +663,17 @@ impl Keyboard for GenericKeyboard {
     }
 
     fn trigger_key_reactive(&mut self, keys: &[KeyId], duration: f32) -> Result<()> {
-        if let Some(ref mut controller) = self.per_key_controller {
+        let key_colors = if let Some(ref mut controller) = self.per_key_controller {
             controller.trigger_reactive(keys, duration);
 
             // Apply the updated reactive state
-            let key_colors = controller.compute_key_colors();
-            self.set_key_colors(&key_colors)?;
+            Some(controller.compute_key_colors().to_vec())
+        } else {
+            None
+        };
+
+        if let Some(colors) = key_colors {
+            self.set_key_colors(&colors)?;
             self.apply()
         } else {
             // Fallback: simulate reactive effect using zones
@@ -683,12 +689,17 @@ impl Keyboard for GenericKeyboard {
     }
 
     fn apply_per_key_effect_with_brightness(&mut self, brightness: f32) -> Result<()> {
-        if let Some(ref mut controller) = self.per_key_controller {
+        let key_colors = if let Some(ref mut controller) = self.per_key_controller {
             controller.set_brightness(brightness.clamp(0.0, 1.0));
 
             // Apply the effect with new brightness
-            let key_colors = controller.compute_key_colors();
-            self.set_key_colors(&key_colors)?;
+            Some(controller.compute_key_colors().to_vec())
+        } else {
+            None
+        };
+
+        if let Some(colors) = key_colors {
+            self.set_key_colors(&colors)?;
             self.apply()
         } else {
             // Fallback: apply brightness to zones
