@@ -250,6 +250,7 @@ pub trait Keyboard: Device {
 
     // Actuation (Apex Pro)
     fn set_actuation_point(&mut self, value: u8) -> Result<()>;
+    fn set_actuation_point_mm(&mut self, mm: f32) -> Result<()>;
     fn read_actuation_point(&mut self) -> Result<u8>;  // Placeholder
 }
 ```
