@@ -234,7 +234,7 @@ pub trait Keyboard: Device {
     fn get_key_mapping(&self) -> Option<&KeyMapping>;
     fn set_key_color(&mut self, key_id: KeyId, color: Color) -> Result<()>;
     fn set_key_colors(&mut self, key_colors: &[(KeyId, Color)]) -> Result<()>;
-    fn set_key_region(&mut self, ...) -> Result<()>;
+    fn set_key_region(&mut self, start_row: u8, start_col: u8, rows: u8, cols: u8, color: Color) -> Result<()>;
 
     // Zone-based Fallback
     fn get_zone_mapping(&self) -> Option<&ZoneMap>;
