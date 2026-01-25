@@ -238,7 +238,7 @@ pub trait Keyboard: Device {
 
     // Zone-based Fallback
     fn get_zone_mapping(&self) -> Option<&ZoneMap>;
-    fn simulate_per_key_with_zones(&mut self, ...) -> Result<()>;
+    fn simulate_per_key_with_zones(&mut self, key_colors: &[(KeyId, Color)]) -> Result<()>;
 
     // Per-Key Effects
     fn set_per_key_effect(&mut self, effect: PerKeyEffect) -> Result<()>;
