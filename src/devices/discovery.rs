@@ -380,9 +380,11 @@ impl DeviceManager {
             loop {
                 tokio::select! {
                     _ = interval.tick() => {
-                        if let Err(e) = Self::poll_devices(&mut api, &device_registry, &pending_events,
+                        let (new_api, result) = Self::poll_devices(api, &device_registry, &pending_events,
                                                          &callback, &config, &mut current_devices,
-                                                         &mut last_event_time).await {
+                                                         &mut last_event_time).await;
+                        api = new_api;
+                        if let Err(e) = result {
                             warn!("Error during device polling: {}", e);
                         }
                     }
@@ -399,27 +401,34 @@ impl DeviceManager {
 
     /// Poll for device changes (internal method for hot-plug monitoring)
     async fn poll_devices(
-        api: &mut HidApi,
+        mut api: HidApi,
         device_registry: &Arc<RwLock<HashMap<String, DeviceRegistryEntry>>>,
         pending_events: &Arc<RwLock<HashMap<DeviceFingerprint, Instant>>>,
         callback: &Option<Arc<HotPlugCallback>>,
         config: &HotPlugConfig,
         current_devices: &mut HashMap<DeviceFingerprint, DeviceInfo>,
         last_event_time: &mut Instant,
-    ) -> Result<()> {
+    ) -> (HidApi, Result<()>) {
         // Rate limiting
         let now = Instant::now();
         let time_since_last = now.duration_since(*last_event_time);
         let min_interval = Duration::from_millis(1000 / config.max_event_rate as u64);
 
         if time_since_last < min_interval {
-            return Ok(());
+            return (api, Ok(()));
         }
 
-        // Refresh device list
-        if let Err(e) = api.refresh_devices() {
+        // Refresh device list using blocking task to avoid stalling the runtime
+        let (api, refresh_result) = tokio::task::spawn_blocking(move || {
+            let res = api.refresh_devices();
+            (api, res)
+        })
+        .await
+        .unwrap_or_else(|e| panic!("Hot-plug monitoring task panicked: {}", e));
+
+        if let Err(e) = refresh_result {
             warn!("Failed to refresh HID device list: {}", e);
-            return Ok(());
+            return (api, Ok(()));
         }
 
         let mut new_devices: HashMap<DeviceFingerprint, DeviceInfo> = HashMap::new();
@@ -525,7 +534,7 @@ impl DeviceManager {
         // Clean up expired pending events
         Self::cleanup_pending_events(pending_events, config).await;
 
-        Ok(())
+        (api, Ok(()))
     }
 
     /// Check if an event should be debounced

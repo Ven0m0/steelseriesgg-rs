@@ -152,19 +152,18 @@ impl HidOptimizer {
 
     /// Check if report is a duplicate and should be skipped.
     pub fn is_duplicate_report(&self, data: &[u8]) -> bool {
-        if let Ok(cache) = self.report_cache.lock() {
-            if let Some(cached) = cache.get(data) {
-                return cached.last_sent.elapsed() < self.cache_timeout;
-            }
+        let cache = self.report_cache.lock();
+        if let Some(cached) = cache.get(data) {
+            return cached.last_sent.elapsed() < self.cache_timeout;
         }
         false
     }
 
     /// Mark report as sent in cache.
     pub fn mark_report_sent(&self, data: &[u8]) {
-        if let Ok(mut cache) = self.report_cache.lock() {
-            // Clean old entries periodically
-            if cache.len() > 100 {
+        let mut cache = self.report_cache.lock();
+        // Clean old entries periodically
+        if cache.len() > 100 {
                 let now = Instant::now();
                 cache.retain(|_, cached| {
                     now.duration_since(cached.last_sent) < self.cache_timeout * 2
@@ -178,16 +177,14 @@ impl HidOptimizer {
                     last_sent: Instant::now(),
                 },
             );
-        }
     }
 
     /// Check cached device connectivity status.
     pub fn is_device_connected(&self, device_path: &str) -> Option<bool> {
-        if let Ok(cache) = self.connectivity_cache.lock() {
-            if let Some((connected, timestamp)) = cache.get(device_path) {
-                if timestamp.elapsed() < Duration::from_secs(5) {
-                    return Some(*connected);
-                }
+        let cache = self.connectivity_cache.lock();
+        if let Some((connected, timestamp)) = cache.get(device_path) {
+            if timestamp.elapsed() < Duration::from_secs(5) {
+                return Some(*connected);
             }
         }
         None
@@ -195,9 +192,8 @@ impl HidOptimizer {
 
     /// Update device connectivity cache.
     pub fn update_connectivity_cache(&self, device_path: &str, connected: bool) {
-        if let Ok(mut cache) = self.connectivity_cache.lock() {
-            cache.insert(device_path.to_string(), (connected, Instant::now()));
-        }
+        let mut cache = self.connectivity_cache.lock();
+        cache.insert(device_path.to_string(), (connected, Instant::now()));
     }
 }
 
