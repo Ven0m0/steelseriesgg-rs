@@ -3,7 +3,8 @@
 use super::{Device, DeviceInfo, DeviceType, write_padded_report};
 use crate::{Error, Result};
 use hidapi::HidDevice;
-use std::sync::{Arc, Mutex};
+use parking_lot::Mutex;
+use std::sync::Arc;
 
 /// Trait for headset-specific functionality.
 pub trait Headset: Device {

@@ -6,10 +6,10 @@ use axum::{
     http::StatusCode,
     routing::{get, post},
 };
+use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use tokio::sync::RwLock;
 use tower_http::cors::CorsLayer;
 use tracing::{debug, info};
 
@@ -69,7 +69,7 @@ impl GameSenseServer {
     where
         F: Fn(&str, u8, u8, u8) + Send + Sync + 'static,
     {
-        let mut state = self.state.write().await;
+        let mut state = self.state.write();
         state.rgb_callback = Some(Box::new(callback));
     }
 
@@ -164,7 +164,7 @@ async fn register_game(
     State(state): State<AppState>,
     Json(metadata): Json<GameMetadata>,
 ) -> (StatusCode, Json<ApiResponse>) {
-    let mut state = state.write().await;
+    let mut state = state.write();
 
     info!(
         "Registering game: {} ({})",
@@ -181,7 +181,7 @@ async fn bind_event(
     State(state): State<AppState>,
     Json(binding): Json<EventBinding>,
 ) -> (StatusCode, Json<ApiResponse>) {
-    let mut state = state.write().await;
+    let mut state = state.write();
 
     debug!("Binding event: {}:{}", binding.game, binding.event);
 
@@ -197,7 +197,14 @@ async fn register_event(
     Json(binding): Json<EventBinding>,
 ) -> (StatusCode, Json<ApiResponse>) {
     // Same as bind for our purposes
-    bind_event(State(state), Json(binding)).await
+    let mut state = state.write();
+
+    debug!("Binding event: {}:{}", binding.game, binding.event);
+
+    let game_bindings = state.bindings.entry(binding.game.clone()).or_default();
+    game_bindings.insert(binding.event.clone(), binding);
+
+    (StatusCode::OK, Json(ApiResponse::success()))
 }
 
 /// Handle a game event.
@@ -212,7 +219,7 @@ async fn game_event(
 
     // Store the event value with write lock (brief critical section)
     {
-        let mut state_write = state.write().await;
+        let mut state_write = state.write();
         state_write
             .event_values
             .entry(event.game.clone())
@@ -221,7 +228,7 @@ async fn game_event(
     } // Write lock released here
 
     // Process handlers with read lock to allow concurrent event handling
-    let state_read = state.read().await;
+    let state_read = state.read();
     if let Some(game_bindings) = state_read.bindings.get(&event.game) {
         if let Some(binding) = game_bindings.get(&event.event) {
             // Process handlers

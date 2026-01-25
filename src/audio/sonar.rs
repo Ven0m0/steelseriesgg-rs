@@ -238,7 +238,7 @@ impl SonarClient {
                 .or_else(|| json.get("address"))
                 .and_then(|v| v.as_str())
             {
-                if let Some(port_str) = address.split(':').last() {
+                if let Some(port_str) = address.split(':').next_back() {
                     if let Ok(port) = port_str.parse::<u16>() {
                         return Ok(port);
                     }
