@@ -463,8 +463,8 @@ impl ColorVectorPool {
 
     /// Get a vector from the pool, or allocate a new one if needed.
     pub fn get(&self, size: usize) -> Vec<Color> {
-        let mut pool = self.pool.lock().unwrap();
-        let mut stats = self.stats.lock().unwrap();
+        let mut pool = self.pool.lock();
+        let mut stats = self.stats.lock();
 
         // Try to find a vector of suitable size
         for i in 0..pool.len() {
@@ -485,8 +485,8 @@ impl ColorVectorPool {
 
     /// Return a vector to the pool for reuse.
     pub fn return_vector(&self, mut vec: Vec<Color>) {
-        let mut pool = self.pool.lock().unwrap();
-        let mut stats = self.stats.lock().unwrap();
+        let mut pool = self.pool.lock();
+        let mut stats = self.stats.lock();
 
         // Only keep reasonably sized vectors
         if vec.len() <= 256 && pool.len() < 50 {
@@ -499,7 +499,7 @@ impl ColorVectorPool {
 
     /// Get pool utilization statistics.
     pub fn get_utilization(&self) -> f64 {
-        let stats = self.stats.lock().unwrap();
+        let stats = self.stats.lock();
         if stats.peak_utilization > 0 {
             stats.current_size as f64 / stats.peak_utilization as f64
         } else {
@@ -509,7 +509,7 @@ impl ColorVectorPool {
 
     /// Get number of allocations saved.
     pub fn allocations_saved(&self) -> u64 {
-        self.stats.lock().unwrap().allocations_saved
+        self.stats.lock().allocations_saved
     }
 }
 
