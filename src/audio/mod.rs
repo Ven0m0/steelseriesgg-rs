@@ -330,17 +330,30 @@ impl AudioMixer {
             }
         }
 
-        // Heuristic based on media role
+        // Heuristic based on media role. This is best-effort only; explicit
+        // routes always take precedence.
         if let Some(role) = &sink_input.media_role {
             match role.as_str() {
+                // Voice / communication
                 "phone" => return Channel::Chat,
+
+                // Media playback
                 "music" | "video" => return Channel::Media,
+
+                // Games
                 "game" => return Channel::Game,
+
+                // Content creation / recording pipelines
+                "production" | "record" => return Channel::Mic,
+
+                // System / UI sounds and auxiliary audio
+                "event" | "a11y" | "notification" | "test" => return Channel::Aux,
+
                 _ => {}
             }
         }
 
-        // Default to Game
+        // Default to Game when no better heuristic is available
         Channel::Game
     }
 
