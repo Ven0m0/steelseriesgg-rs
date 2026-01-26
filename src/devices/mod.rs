@@ -170,13 +170,13 @@ impl HidOptimizer {
                 });
             }
 
-        cache.insert(
-            data.to_vec(),
-            CachedReport {
-                data: data.to_vec(),
-                last_sent: Instant::now(),
-            },
-        );
+            cache.insert(
+                data.to_vec(),
+                CachedReport {
+                    data: data.to_vec(),
+                    last_sent: Instant::now(),
+                },
+            );
     }
 
     /// Check cached device connectivity status.
