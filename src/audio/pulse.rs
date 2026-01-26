@@ -71,7 +71,7 @@ impl PulseHandler {
 
         let introspector = self.context.introspect();
         let _op = introspector.get_sink_input_info_list(move |res| {
-             let tx = tx.lock().unwrap();
+             let tx = tx.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
              match res {
                  ListResult::Item(info) => {
                      let app_name = info.proplist.get_str("application.name")
