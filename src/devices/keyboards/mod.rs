@@ -641,12 +641,9 @@ impl Keyboard for GenericKeyboard {
 
     fn set_per_key_effect(&mut self, effect: PerKeyEffect) -> Result<()> {
         if self.per_key_controller.is_some() {
-            let key_colors = {
-                let controller = self.per_key_controller.as_mut().unwrap();
-                controller.set_effect(effect);
-                // Apply the effect immediately by getting colors and sending to device
-                controller.compute_key_colors().to_vec()
-            };
+            let controller = self.per_key_controller.as_mut().unwrap();
+            controller.set_effect(effect);
+            let key_colors = controller.compute_key_colors().to_vec();
             self.set_key_colors(&key_colors)?;
             self.apply()
         } else {
@@ -661,12 +658,9 @@ impl Keyboard for GenericKeyboard {
 
     fn trigger_key_reactive(&mut self, keys: &[KeyId], duration: f32) -> Result<()> {
         if self.per_key_controller.is_some() {
-            let key_colors = {
-                let controller = self.per_key_controller.as_mut().unwrap();
-                controller.trigger_reactive(keys, duration);
-                // Apply the updated reactive state
-                controller.compute_key_colors().to_vec()
-            };
+            let controller = self.per_key_controller.as_mut().unwrap();
+            controller.trigger_reactive(keys, duration);
+            let key_colors = controller.compute_key_colors().to_vec();
             self.set_key_colors(&key_colors)?;
             self.apply()
         } else {
@@ -684,12 +678,9 @@ impl Keyboard for GenericKeyboard {
 
     fn apply_per_key_effect_with_brightness(&mut self, brightness: f32) -> Result<()> {
         if self.per_key_controller.is_some() {
-            let key_colors = {
-                let controller = self.per_key_controller.as_mut().unwrap();
-                controller.set_brightness(brightness.clamp(0.0, 1.0));
-                // Apply the effect with new brightness
-                controller.compute_key_colors().to_vec()
-            };
+            let controller = self.per_key_controller.as_mut().unwrap();
+            controller.set_brightness(brightness.clamp(0.0, 1.0));
+            let key_colors = controller.compute_key_colors().to_vec();
             self.set_key_colors(&key_colors)?;
             self.apply()
         } else {

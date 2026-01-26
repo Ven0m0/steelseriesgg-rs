@@ -164,11 +164,11 @@ impl HidOptimizer {
         let mut cache = self.report_cache.lock();
         // Clean old entries periodically
         if cache.len() > 100 {
-            let now = Instant::now();
-            cache.retain(|_, cached| {
-                now.duration_since(cached.last_sent) < self.cache_timeout * 2
-            });
-        }
+                let now = Instant::now();
+                cache.retain(|_, cached| {
+                    now.duration_since(cached.last_sent) < self.cache_timeout * 2
+                });
+            }
 
         cache.insert(
             data.to_vec(),
