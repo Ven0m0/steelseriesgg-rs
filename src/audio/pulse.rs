@@ -6,13 +6,24 @@ use libpulse_binding::mainloop::threaded::Mainloop;
 use libpulse_binding::volume::{ChannelVolumes, Volume};
 use std::sync::mpsc;
 
+/// Describes a single PulseAudio sink input (an output audio stream routed to a sink).
+///
+/// A sink input typically corresponds to an application's playback stream, including
+/// identifying metadata and its current routing and volume state.
 pub struct SinkInput {
+    /// Index of the sink input as assigned by PulseAudio.
     pub index: u32,
+    /// Human-readable name of the stream (often set by the application).
     pub name: String,
+    /// Name of the application that owns this stream, if available.
     pub app_name: Option<String>,
+    /// Media role or category of the stream (e.g. "music", "game"), if provided.
     pub media_role: Option<String>,
+    /// Channel map describing the layout of the stream's audio channels.
     pub channel_map: ChannelMap,
+    /// Per-channel volume levels for this sink input.
     pub volume: ChannelVolumes,
+    /// Whether this sink input is currently muted.
     pub muted: bool,
 }
 
