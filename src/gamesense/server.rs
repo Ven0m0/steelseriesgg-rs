@@ -334,7 +334,7 @@ mod tests {
     use std::time::Instant;
 
     #[tokio::test]
-    async fn test_write_core_props_benchmark() -> anyhow::Result<()> {
+    async fn test_write_core_props_timing() -> anyhow::Result<()> {
         // Setup - use a random high port to avoid conflicts
         let server = GameSenseServer::new("127.0.0.1", 54321)?;
 
