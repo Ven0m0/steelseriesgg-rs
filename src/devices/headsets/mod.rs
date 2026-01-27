@@ -60,9 +60,7 @@ impl GenericHeadset {
         let device = self.device.as_ref().ok_or(Error::DeviceCommunication(
             "Device not connected".to_string(),
         ))?;
-        let device = device
-            .lock()
-            .map_err(|e| Error::DeviceCommunication(format!("Device lock poisoned: {}", e)))?;
+        let device = device.lock();
 
         // Headsets typically use 64-byte reports with no report ID prefix.
         write_padded_report(&device, data, 64, false)
@@ -73,9 +71,7 @@ impl GenericHeadset {
         let device = self.device.as_ref().ok_or(Error::DeviceCommunication(
             "Device not connected".to_string(),
         ))?;
-        let device = device
-            .lock()
-            .map_err(|e| Error::DeviceCommunication(format!("Device lock poisoned: {}", e)))?;
+        let device = device.lock();
 
         let len = device.read_timeout(buf, 1000)?;
         Ok(len)
