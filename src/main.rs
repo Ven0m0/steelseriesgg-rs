@@ -26,7 +26,6 @@ use std::io::IsTerminal;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
-use parking_lot::Mutex;
 
 use colored::Colorize;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
@@ -2239,7 +2238,8 @@ async fn cmd_server(port: u16) -> Result<()> {
 
 /// Daemon state for managing connected devices and RGB controllers.
 struct DaemonState {
-    keyboards: HashMap<String, (Arc<Mutex<Box<dyn Keyboard>>>, RgbController, DeviceInfo)>,
+    keyboards: HashMap<String, (Box<dyn Keyboard>, RgbController, DeviceInfo)>,
+    headsets: HashMap<String, (Box<dyn Headset>, DeviceInfo)>,
     gamesense_overlays: HashMap<String, (Color, std::time::Instant)>, // zone -> (color, expiry)
     /// Device fingerprints for tracking devices across reconnections
     device_fingerprints: HashMap<String, DeviceFingerprint>,
@@ -2377,7 +2377,7 @@ impl DaemonState {
 
                         // Store device information
                         self.keyboards
-                            .insert(serial.clone(), (Arc::new(Mutex::new(keyboard)), rgb_controller, info.clone()));
+                            .insert(serial.clone(), (keyboard, rgb_controller, info.clone()));
                         self.device_fingerprints.insert(serial, fingerprint.clone());
 
                         info!(
@@ -2809,7 +2809,7 @@ async fn cmd_daemon(mut manager: DeviceManager) -> Result<()> {
             let computation_start = Instant::now();
 
             // Split the work: read operations first, then write operations
-            let (keyboards_updates, overlays, _now) = {
+            let (keyboards_data, overlays, _now) = {
                 let mut state = daemon_state_anim.write().await;
 
                 // Clean up expired overlays while we have the lock
@@ -2818,14 +2818,13 @@ async fn cmd_daemon(mut manager: DeviceManager) -> Result<()> {
                     .gamesense_overlays
                     .retain(|_, (_, expiry)| *expiry > now);
 
-                // Collect data needed for RGB computation and device handle
-                let keyboards_updates: Vec<_> = state
+                // Collect data needed for RGB computation to minimize lock time
+                let keyboards_data: Vec<_> = state
                     .keyboards
                     .iter_mut()
-                    .map(|(serial, (keyboard_arc, controller, info))| {
+                    .map(|(serial, (_, controller, info))| {
                         (
                             serial.clone(),
-                            keyboard_arc.clone(),
                             controller.compute_colors().to_vec(),
                             info.clone(),
                         )
@@ -2839,11 +2838,11 @@ async fn cmd_daemon(mut manager: DeviceManager) -> Result<()> {
                     state.gamesense_overlays.clone()
                 };
 
-                (keyboards_updates, overlays, now)
+                (keyboards_data, overlays, now)
             };
 
             // Process RGB updates for each keyboard without holding the lock
-            for (serial, keyboard_arc, mut colors, _info) in keyboards_updates {
+            for (serial, mut colors, _info) in keyboards_data {
                 // Apply GameSense overlays using simple zone mapping
                 if !overlays.is_empty() {
                     let zone_count = colors.len();
@@ -2866,17 +2865,15 @@ async fn cmd_daemon(mut manager: DeviceManager) -> Result<()> {
                     }
                 }
 
-                // Apply colors to hardware using blocking task to avoid stalling the async runtime
-                let handle = tokio::task::spawn_blocking(move || {
-                    let mut keyboard = keyboard_arc.lock();
-                    if let Err(e) = keyboard.set_zone_colors(&colors) {
-                        tracing::warn!("Failed to update keyboard {}: {}", serial, e);
+                // Apply colors to hardware - get keyboard reference with minimal lock time
+                {
+                    let mut state = daemon_state_anim.write().await;
+                    if let Some((keyboard, _, _)) = state.keyboards.get_mut(&serial) {
+                        if let Err(e) = keyboard.set_zone_colors(&colors) {
+                            tracing::warn!("Failed to update keyboard {}: {}", serial, e);
+                        }
                     }
-                });
-
-                // Await the handle to ensure we don't overrun the device
-                if let Err(e) = handle.await {
-                    tracing::error!("Join error in animation loop: {}", e);
+                    // Lock is automatically dropped here
                 }
             }
 

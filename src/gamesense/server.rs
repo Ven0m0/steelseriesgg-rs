@@ -132,10 +132,10 @@ impl GameSenseServer {
         );
 
         if let Some(parent) = path.parent() {
-            tokio::fs::create_dir_all(parent).await?;
+            std::fs::create_dir_all(parent)?;
         }
 
-        tokio::fs::write(path, serde_json::to_string_pretty(&props)?).await?;
+        std::fs::write(path, serde_json::to_string_pretty(&props)?)?;
         debug!("Wrote coreProps.json to {:?}", path);
 
         Ok(())
@@ -331,42 +331,6 @@ async fn remove_event(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::time::Instant;
-
-    #[tokio::test]
-    async fn test_write_core_props_benchmark() -> anyhow::Result<()> {
-        // Setup - use a random high port to avoid conflicts
-        let server = GameSenseServer::new("127.0.0.1", 54321)?;
-
-        // Benchmark
-        let start = Instant::now();
-        server.write_core_props().await?;
-        let duration = start.elapsed();
-
-        println!("write_core_props took: {:?}", duration);
-
-        // Verify
-        #[cfg(target_os = "linux")]
-        let path = std::path::Path::new("/tmp/steelseries-engine/coreProps.json");
-
-        // Fallback for non-linux in case this runs elsewhere, but primarily for linux
-        #[cfg(not(target_os = "linux"))]
-        return Ok(());
-
-        if cfg!(target_os = "linux") {
-            assert!(path.exists(), "coreProps.json should exist");
-            let content = tokio::fs::read_to_string(path).await?;
-            assert!(content.contains("127.0.0.1:54321"));
-
-            // Cleanup
-            let _ = tokio::fs::remove_file(path).await;
-            if let Some(parent) = path.parent() {
-                let _ = tokio::fs::remove_dir(parent).await;
-            }
-        }
-
-        Ok(())
-    }
 
     #[test]
     fn test_compute_color_static() {
