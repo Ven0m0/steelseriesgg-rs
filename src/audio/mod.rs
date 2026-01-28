@@ -7,7 +7,6 @@
 
 #[cfg(feature = "sonar")]
 pub mod sonar;
-
 #[cfg(feature = "audio")]
 pub mod pulse;
 
@@ -18,9 +17,8 @@ use crate::{Error, Result};
 
 #[cfg(feature = "sonar")]
 pub use sonar::{SonarChannel, SonarClient};
-
 #[cfg(feature = "audio")]
-use self::pulse::PulseHandler;
+use pulse::PulseHandler;
 
 // Channel types are used by both audio and sonar features
 #[cfg(any(feature = "audio", feature = "sonar"))]
@@ -124,19 +122,20 @@ impl Default for MixerState {
 /// Audio mixer for controlling channel volumes.
 pub struct AudioMixer {
     state: MixerState,
-    // PulseAudio/PipeWire connection
     #[cfg(feature = "audio")]
     pulse: Option<PulseHandler>,
+    #[cfg(feature = "audio")]
+    router: AudioRouter,
 }
 
 #[cfg(feature = "audio")]
 impl AudioMixer {
     /// Create a new audio mixer.
     pub fn new() -> Result<Self> {
-        let pulse = match PulseHandler::connect() {
+        let pulse = match PulseHandler::new() {
             Ok(p) => Some(p),
             Err(e) => {
-                tracing::warn!("Failed to connect to PulseAudio: {}", e);
+                tracing::warn!("Failed to initialize PulseAudio: {}", e);
                 None
             }
         };
@@ -144,6 +143,7 @@ impl AudioMixer {
         Ok(Self {
             state: MixerState::default(),
             pulse,
+            router: AudioRouter::new(),
         })
     }
 
@@ -206,19 +206,16 @@ impl AudioMixer {
         // Calculate volume factors for game/chat balance
         let (game_factor, chat_factor) = self.calculate_balance_factors(balance);
 
-        // Store calculated factors for potential audio system integration
-        // TODO: Integrate with PulseAudio/PipeWire to actually apply these factors
-        // Implementation roadmap:
-        // 1. Use libpulse-binding to enumerate sink inputs by application
-        // 2. Apply game_factor to game audio sink inputs
-        // 3. Apply chat_factor to communication app sink inputs
-        // 4. Handle errors if audio system is unavailable
         tracing::debug!(
             "Chat mix set to {:.2}: game_factor={:.2}, chat_factor={:.2}",
             balance,
             game_factor,
             chat_factor
         );
+
+        // Update both Game and Chat channels
+        self.update_sink_inputs(Some(Channel::Game))?;
+        self.update_sink_inputs(Some(Channel::Chat))?;
 
         Ok(())
     }
@@ -324,46 +321,119 @@ impl AudioMixer {
         Ok(())
     }
 
+    /// Determine which channel a sink input belongs to.
+    fn determine_channel(&self, sink_input: &pulse::SinkInput) -> Channel {
+        // Check router first
+        if let Some(app_name) = &sink_input.app_name {
+            if let Some(route) = self.router.get_route(app_name) {
+                return route.channel;
+            }
+        }
+
+        // Heuristic based on media role. This is best-effort only; explicit
+        // routes always take precedence.
+        if let Some(role) = &sink_input.media_role {
+            match role.as_str() {
+                // Voice / communication
+                "phone" => return Channel::Chat,
+
+                // Media playback
+                "music" | "video" => return Channel::Media,
+
+                // Games
+                "game" => return Channel::Game,
+
+                // Content creation / recording pipelines
+                "production" | "record" => return Channel::Mic,
+
+                // System / UI sounds and auxiliary audio
+                "event" | "a11y" | "notification" | "test" => return Channel::Aux,
+
+                _ => {}
+            }
+        }
+
+        // Default to Game when no better heuristic is available
+        Channel::Game
+    }
+
+    /// Update sink inputs for a specific channel or all channels.
+    fn update_sink_inputs(&mut self, target_channel: Option<Channel>) -> Result<()> {
+        let mut pulse = match self.pulse.take() {
+            Some(p) => p,
+            None => return Ok(()),
+        };
+
+        let result = (|| -> Result<()> {
+            let inputs = pulse.get_sink_inputs()?;
+            let (game_factor, chat_factor) = self.calculate_balance_factors(self.state.chat_mix);
+
+            for input in inputs {
+                let channel = self.determine_channel(&input);
+
+                // If filtering by channel, skip if not matching
+                if let Some(target) = target_channel {
+                    if channel != target {
+                        continue;
+                    }
+                }
+
+                // Calculate target volume
+                let channel_state = match self.state.channels.get(&channel) {
+                    Some(s) => s,
+                    None => continue,
+                };
+
+                // Apply ChatMix factor
+                let mix_factor = match channel {
+                    Channel::Game => game_factor,
+                    Channel::Chat => chat_factor,
+                    _ => 1.0,
+                };
+
+                let target_volume = channel_state.volume * mix_factor;
+                let target_mute = channel_state.muted;
+
+                if let Err(e) = pulse.set_volume(input.index, target_volume, &input.channel_map) {
+                    tracing::warn!("Failed to set volume for sink input {}: {}", input.index, e);
+                }
+
+                if let Err(e) = pulse.set_mute(input.index, target_mute) {
+                    tracing::warn!("Failed to set mute for sink input {}: {}", input.index, e);
+                }
+            }
+            Ok(())
+        })();
+
+        self.pulse = Some(pulse);
+        result
+    }
+
     /// Apply channel settings to the audio system.
     fn apply_channel(&mut self, channel: Channel) -> Result<()> {
         // Validate channel state before potential audio system integration
-        let (volume, muted) = {
-            let channel_state = self
-                .state
-                .channels
-                .get(&channel)
-                .ok_or_else(|| Error::Audio(format!("Channel {:?} not found", channel)))?;
-
-            // Validate the volume is in acceptable range
-            if !(0.0..=1.0).contains(&channel_state.volume) {
-                return Err(Error::Audio(format!(
-                    "Invalid volume {:.2} for channel {:?} (must be 0.0-1.0)",
-                    channel_state.volume,
-                    channel
-                )));
-            }
-
-            (channel_state.volume, channel_state.muted)
-        };
+        let channel_state = self
+            .state
+            .channels
+            .get(&channel)
+            .ok_or_else(|| Error::Audio(format!("Channel {:?} not found", channel)))?;
 
         tracing::debug!(
             "Applying channel {:?}: volume={:.2}, mute={}",
             channel,
-            volume,
-            muted
+            channel_state.volume,
+            channel_state.muted
         );
 
-        if let Some(pulse) = &mut self.pulse {
-            let effective_volume = if muted { 0.0 } else { volume };
-
-            match channel {
-                Channel::Master => pulse.set_master_volume(effective_volume)?,
-                Channel::Mic => pulse.set_mic_volume(effective_volume)?,
-                // For other channels, we currently apply to all sink inputs as a placeholder
-                // until per-application routing is implemented
-                _ => pulse.set_all_sink_inputs_volume(effective_volume)?,
-            }
+        // Validate the volume is in acceptable range
+        if !(0.0..=1.0).contains(&channel_state.volume) {
+            return Err(Error::Audio(format!(
+                "Invalid volume {:.2} for channel {:?} (must be 0.0-1.0)",
+                channel_state.volume, channel
+            )));
         }
+
+        self.update_sink_inputs(Some(channel))?;
 
         Ok(())
     }

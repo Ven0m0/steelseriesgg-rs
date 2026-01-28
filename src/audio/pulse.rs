@@ -1,275 +1,167 @@
-#[cfg(feature = "audio")]
-use libpulse_binding as pulse;
-#[cfg(feature = "audio")]
-use pulse::context::{Context, FlagSet as ContextFlagSet};
-#[cfg(feature = "audio")]
-use pulse::mainloop::threaded::Mainloop;
-#[cfg(feature = "audio")]
-use pulse::volume::{ChannelVolumes, VolumeLinear};
-#[cfg(feature = "audio")]
-use parking_lot::Mutex;
-#[cfg(feature = "audio")]
-use std::sync::Arc;
-#[cfg(feature = "audio")]
-use std::time::Duration;
-
-#[cfg(feature = "audio")]
 use crate::{Error, Result};
+use libpulse_binding::callbacks::ListResult;
+use libpulse_binding::channelmap::Map as ChannelMap;
+use libpulse_binding::context::{Context, FlagSet as ContextFlagSet, State as ContextState};
+use libpulse_binding::mainloop::threaded::Mainloop;
+use libpulse_binding::volume::{ChannelVolumes, Volume};
+use std::sync::mpsc;
 
-#[cfg(feature = "audio")]
+/// Describes a single PulseAudio sink input (an output audio stream routed to a sink).
+///
+/// A sink input typically corresponds to an application's playback stream, including
+/// identifying metadata and its current routing and volume state.
+pub struct SinkInput {
+    /// Index of the sink input as assigned by PulseAudio.
+    pub index: u32,
+    /// Human-readable name of the stream (often set by the application).
+    pub name: String,
+    /// Name of the application that owns this stream, if available.
+    pub app_name: Option<String>,
+    /// Media role or category of the stream (e.g. "music", "game"), if provided.
+    pub media_role: Option<String>,
+    /// Channel map describing the layout of the stream's audio channels.
+    pub channel_map: ChannelMap,
+    /// Per-channel volume levels for this sink input.
+    pub volume: ChannelVolumes,
+    /// Whether this sink input is currently muted.
+    pub muted: bool,
+}
+
 pub struct PulseHandler {
     mainloop: Mainloop,
-    context: Arc<Mutex<Context>>,
+    context: Context,
 }
 
-#[cfg(feature = "audio")]
-enum ListMsg {
-    Item(u32, u8), // index, channels
-    End,
-}
-
-#[cfg(feature = "audio")]
 impl PulseHandler {
-    pub fn connect() -> Result<Self> {
-        let mut mainloop =
-            Mainloop::new().ok_or(Error::Audio("Failed to create mainloop".into()))?;
-        let mut context = Context::new(&mainloop, "SteelSeries GG Linux")
-            .ok_or(Error::Audio("Failed to create context".into()))?;
+    pub fn new() -> Result<Self> {
+        let mut mainloop = Mainloop::new().ok_or_else(|| Error::Audio("Failed to create mainloop".to_string()))?;
+        let mut context = Context::new(&mainloop, "SteelSeries GG")
+            .ok_or_else(|| Error::Audio("Failed to create context".to_string()))?;
 
-        context
-            .connect(None, ContextFlagSet::empty(), None)
+        context.connect(None, ContextFlagSet::NOFLAGS, None)
             .map_err(|e| Error::Audio(format!("Failed to connect context: {}", e)))?;
 
-        mainloop
-            .start()
-            .map_err(|e| Error::Audio(format!("Failed to start mainloop: {}", e)))?;
+        mainloop.start().map_err(|e| Error::Audio(format!("Failed to start mainloop: {}", e)))?;
 
-        // Wait for connection with timeout
-        let start = std::time::Instant::now();
-        loop {
+        // Wait for ready
+        mainloop.lock();
+        let result = loop {
             match context.get_state() {
-                pulse::context::State::Ready => break,
-                pulse::context::State::Failed | pulse::context::State::Terminated => {
-                    mainloop.stop();
-                    return Err(Error::Audio("Context connection failed".into()));
+                ContextState::Ready => break Ok(()),
+                ContextState::Failed | ContextState::Terminated => {
+                    break Err(Error::Audio("Context connection failed".to_string()));
                 }
                 _ => {
-                    if start.elapsed() > Duration::from_secs(5) {
-                        mainloop.stop();
-                        return Err(Error::Audio("Context connection timed out".into()));
-                    }
-                    std::thread::sleep(Duration::from_millis(10));
+                    mainloop.wait();
                 }
             }
-        }
+        };
+        mainloop.unlock();
 
-        Ok(Self {
-            mainloop,
-            context: Arc::new(Mutex::new(context)),
-        })
+        result?;
+
+        Ok(Self { mainloop, context })
     }
 
-    /// Set volume for the default sink (Master).
-    pub fn set_master_volume(&mut self, volume: f32) -> Result<()> {
-        let (tx, rx) = std::sync::mpsc::channel::<Option<String>>();
-        let tx = Arc::new(Mutex::new(tx));
+    pub fn get_sink_inputs(&mut self) -> Result<Vec<SinkInput>> {
+        let (tx, rx) = mpsc::channel();
+        let tx = std::sync::Mutex::new(tx);
 
         self.mainloop.lock();
-        {
-            let context_guard = self.context.lock();
-            let introspector = context_guard.introspect();
-            let tx_clone = tx.clone();
-            introspector.get_server_info(move |info| {
-                let default_sink = info.default_sink_name.as_ref().map(|s| s.to_string());
-                let _ = tx_clone.lock().send(default_sink);
-            });
-        }
-        self.mainloop.unlock();
 
-        let default_sink_name = rx
-            .recv_timeout(Duration::from_secs(2))
-            .map_err(|_| Error::Audio("Timeout getting server info".into()))?
-            .ok_or(Error::Audio("Failed to get server info".into()))?;
+        let introspector = self.context.introspect();
+        let _op = introspector.get_sink_input_info_list(move |res| {
+             let tx = tx.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+             match res {
+                 ListResult::Item(info) => {
+                     let app_name = info.proplist.get_str("application.name")
+                        .or_else(|| info.proplist.get_str("application.process.binary"))
+                        .map(|s| s.to_string());
 
-        // default_sink_name is String
-        self.set_sink_volume_by_name(&default_sink_name, volume)?;
+                     let media_role = info.proplist.get_str("media.role").map(|s| s.to_string());
 
-        Ok(())
-    }
+                     let input = SinkInput {
+                         index: info.index,
+                         name: info.name.as_ref().map(|s| s.to_string()).unwrap_or_default(),
+                         app_name,
+                         media_role,
+                         channel_map: info.channel_map,
+                         volume: info.volume,
+                         muted: info.mute,
+                     };
 
-    /// Set volume for a specific sink by name.
-    fn set_sink_volume_by_name(&mut self, sink_name: &str, volume: f32) -> Result<()> {
-        let (tx, rx) = std::sync::mpsc::channel::<Option<u8>>();
-        let tx = Arc::new(Mutex::new(tx));
+                     let _ = tx.send(Ok(Some(input)));
+                 },
+                 ListResult::End => {
+                     let _ = tx.send(Ok(None)); // End signal
+                 },
+                 ListResult::Error => {
+                     let _ = tx.send(Err(Error::Audio("Failed to list sink inputs".to_string())));
+                 }
+             }
+        });
 
-        self.mainloop.lock();
-        {
-            let context_guard = self.context.lock();
-            let introspector = context_guard.introspect();
-            let tx_clone = tx.clone();
-            introspector.get_sink_info_by_name(sink_name, move |info| {
-                match info {
-                    pulse::callbacks::ListResult::Item(item) => {
-                        let _ = tx_clone.lock().send(Some(item.channel_map.len()));
-                    }
-                    _ => {
-                        // If it's End without Item, we didn't find it?
-                        // get_by_name usually returns Item if found.
-                    }
-                }
-            });
-        }
-        self.mainloop.unlock();
-
-        // Note: we might receive nothing if not found.
-        let channels = rx
-            .recv_timeout(Duration::from_secs(2))
-            .map_err(|_| Error::Audio("Timeout getting sink info".into()))?
-            .ok_or(Error::Audio(format!("Sink {} not found", sink_name)))?;
-
-        let vol_linear = VolumeLinear(volume as f64);
-        let mut cv = ChannelVolumes::default();
-        cv.set_len(channels);
-        for i in 0..channels {
-            cv.set(i, vol_linear.into());
-        }
-
-        self.mainloop.lock();
-        {
-            let context_guard = self.context.lock();
-            let mut introspector = context_guard.introspect();
-            introspector.set_sink_volume_by_name(sink_name, &cv, None);
-        }
-        self.mainloop.unlock();
-
-        Ok(())
-    }
-
-    /// Set volume for default source (Mic).
-    pub fn set_mic_volume(&mut self, volume: f32) -> Result<()> {
-        let (tx, rx) = std::sync::mpsc::channel::<Option<String>>();
-        let tx = Arc::new(Mutex::new(tx));
-
-        self.mainloop.lock();
-        {
-            let context_guard = self.context.lock();
-            let introspector = context_guard.introspect();
-            let tx_clone = tx.clone();
-            introspector.get_server_info(move |info| {
-                let default_source = info.default_source_name.as_ref().map(|s| s.to_string());
-                let _ = tx_clone.lock().send(default_source);
-            });
-        }
-        self.mainloop.unlock();
-
-        let default_source_name = rx
-            .recv_timeout(Duration::from_secs(2))
-            .map_err(|_| Error::Audio("Timeout getting server info".into()))?
-            .ok_or(Error::Audio("Failed to get server info".into()))?;
-
-        self.set_source_volume_by_name(&default_source_name, volume)?;
-
-        Ok(())
-    }
-
-    fn set_source_volume_by_name(&mut self, source_name: &str, volume: f32) -> Result<()> {
-        let (tx, rx) = std::sync::mpsc::channel::<Option<u8>>();
-        let tx = Arc::new(Mutex::new(tx));
-
-        self.mainloop.lock();
-        {
-            let context_guard = self.context.lock();
-            let introspector = context_guard.introspect();
-            let tx_clone = tx.clone();
-            introspector.get_source_info_by_name(source_name, move |info| {
-                match info {
-                    pulse::callbacks::ListResult::Item(item) => {
-                        let _ = tx_clone.lock().send(Some(item.channel_map.len()));
-                    }
-                    _ => {}
-                }
-            });
-        }
-        self.mainloop.unlock();
-
-        let channels = rx
-            .recv_timeout(Duration::from_secs(2))
-            .map_err(|_| Error::Audio("Timeout getting source info".into()))?
-            .ok_or(Error::Audio(format!("Source {} not found", source_name)))?;
-
-        let vol_linear = VolumeLinear(volume as f64);
-        let mut cv = ChannelVolumes::default();
-        cv.set_len(channels);
-        for i in 0..channels {
-            cv.set(i, vol_linear.into());
-        }
-
-        self.mainloop.lock();
-        {
-            let context_guard = self.context.lock();
-            let mut introspector = context_guard.introspect();
-            introspector.set_source_volume_by_name(source_name, &cv, None);
-        }
-        self.mainloop.unlock();
-
-        Ok(())
-    }
-
-    /// Apply volume to all sink inputs.
-    pub fn set_all_sink_inputs_volume(&mut self, volume: f32) -> Result<()> {
-        let (tx, rx) = std::sync::mpsc::channel::<ListMsg>();
-        let tx = Arc::new(Mutex::new(tx));
-
-        self.mainloop.lock();
-        {
-            let context_guard = self.context.lock();
-            let introspector = context_guard.introspect();
-            let tx_clone = tx.clone();
-
-            introspector.get_sink_input_info_list(move |result| {
-                match result {
-                    pulse::callbacks::ListResult::Item(item) => {
-                        let _ = tx_clone.lock().send(ListMsg::Item(item.index, item.channel_map.len()));
-                    }
-                    pulse::callbacks::ListResult::End => {
-                        let _ = tx_clone.lock().send(ListMsg::End);
-                    }
-                    _ => {}
-                }
-            });
-        }
         self.mainloop.unlock();
 
         let mut inputs = Vec::new();
         loop {
-            match rx.recv_timeout(Duration::from_secs(1)) {
-                Ok(ListMsg::Item(index, channels)) => {
-                    inputs.push((index, channels));
-                }
-                Ok(ListMsg::End) => break,
-                Err(_) => break, // Timeout or disconnected
+            match rx.recv() {
+                Ok(Ok(Some(input))) => inputs.push(input),
+                Ok(Ok(None)) => break,
+                Ok(Err(e)) => return Err(e),
+                Err(_) => return Err(Error::Audio("Channel closed unexpectedly".to_string())),
             }
         }
 
-        if !inputs.is_empty() {
-            let vol_linear = VolumeLinear(volume as f64);
-            self.mainloop.lock();
-            {
-                let context_guard = self.context.lock();
-                let mut introspector = context_guard.introspect();
+        Ok(inputs)
+    }
 
-                for (index, channels) in inputs {
-                    let mut cv = ChannelVolumes::default();
-                    cv.set_len(channels);
-                    for i in 0..channels {
-                        cv.set(i, vol_linear.into());
-                    }
-                    introspector.set_sink_input_volume(index, &cv, None);
-                }
-            }
-            self.mainloop.unlock();
+    pub fn set_volume(&mut self, index: u32, volume: f32, channel_map: &ChannelMap) -> Result<()> {
+        let vol_linear = volume.clamp(0.0, 1.0);
+        // Assuming Volume is u32 wrapper and NORMAL is 0x10000 (65536)
+        let vol_val = Volume((vol_linear * 65536.0) as u32);
+
+        let mut cv = ChannelVolumes::default();
+        cv.set_len(channel_map.len());
+        for i in 0..channel_map.len() {
+            cv.set(i, vol_val);
         }
 
-        Ok(())
+        let (tx, rx) = mpsc::channel();
+
+        self.mainloop.lock();
+        let _op = self.context.introspect().set_sink_input_volume(index, &cv, Some(Box::new(move |success| {
+            let _ = tx.send(success);
+        })));
+        self.mainloop.unlock();
+
+        match rx.recv() {
+            Ok(true) => Ok(()),
+            Ok(false) => Err(Error::Audio("Failed to set sink input volume".to_string())),
+            Err(_) => Err(Error::Audio("Volume setting timed out or failed".to_string())),
+        }
+    }
+
+    pub fn set_mute(&mut self, index: u32, muted: bool) -> Result<()> {
+        let (tx, rx) = mpsc::channel();
+
+        self.mainloop.lock();
+        let _op = self.context.introspect().set_sink_input_mute(index, muted, Some(Box::new(move |success| {
+            let _ = tx.send(success);
+        })));
+        self.mainloop.unlock();
+
+        match rx.recv() {
+            Ok(true) => Ok(()),
+            Ok(false) => Err(Error::Audio("Failed to set sink input mute".to_string())),
+            Err(_) => Err(Error::Audio("Mute setting timed out or failed".to_string())),
+        }
+    }
+}
+
+impl Drop for PulseHandler {
+    fn drop(&mut self) {
+        self.context.disconnect();
+        self.mainloop.stop();
     }
 }
