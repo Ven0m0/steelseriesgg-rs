@@ -661,8 +661,9 @@ impl Keyboard for GenericKeyboard {
     }
 
     fn trigger_key_reactive(&mut self, keys: &[KeyId], duration: f32) -> Result<()> {
-        if let Some(controller) = self.per_key_controller.as_mut() {
+        if self.per_key_controller.is_some() {
             let key_colors = {
+                let controller = self.per_key_controller.as_mut().unwrap();
                 controller.trigger_reactive(keys, duration);
                 controller.compute_key_colors().to_vec()
             };
