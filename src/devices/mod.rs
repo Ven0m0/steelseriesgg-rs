@@ -165,9 +165,7 @@ impl HidOptimizer {
         // Clean old entries periodically
         if cache.len() > 100 {
             let now = Instant::now();
-            cache.retain(|_, cached| {
-                now.duration_since(cached.last_sent) < self.cache_timeout * 2
-            });
+            cache.retain(|_, cached| now.duration_since(cached.last_sent) < self.cache_timeout * 2);
         }
 
         cache.insert(

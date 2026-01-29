@@ -720,35 +720,33 @@ impl PerKeyEffectEngine {
             } => {
                 if colors.is_empty() {
                     *color = Color::BLACK;
+                } else if let Some((x, y)) = Self::get_key_position_static(key_mapping, key) {
+                    let wave_pos = match direction {
+                        KeyWaveDirection::LeftToRight => x,
+                        KeyWaveDirection::RightToLeft => 1.0 - x,
+                        KeyWaveDirection::TopToBottom => y,
+                        KeyWaveDirection::BottomToTop => 1.0 - y,
+                        KeyWaveDirection::Diagonal => (x + y) * 0.5,
+                        KeyWaveDirection::CenterOut => {
+                            let (cx, cy) = Self::get_keyboard_center_static();
+                            ((x - cx).powi(2) + (y - cy).powi(2)).sqrt()
+                        }
+                        KeyWaveDirection::OutCenter => {
+                            let (cx, cy) = Self::get_keyboard_center_static();
+                            1.0 - ((x - cx).powi(2) + (y - cy).powi(2)).sqrt()
+                        }
+                    };
+
+                    let phase = elapsed_secs * speed;
+                    let t = (phase + wave_pos) % 1.0;
+                    let color_pos = t * colors.len() as f32;
+                    let color_index = color_pos as usize % colors.len();
+                    let next_index = (color_index + 1) % colors.len();
+                    let blend_t = color_pos % 1.0;
+
+                    *color = Color::blend(colors[color_index], colors[next_index], blend_t);
                 } else {
-                    if let Some((x, y)) = Self::get_key_position_static(key_mapping, key) {
-                        let wave_pos = match direction {
-                            KeyWaveDirection::LeftToRight => x,
-                            KeyWaveDirection::RightToLeft => 1.0 - x,
-                            KeyWaveDirection::TopToBottom => y,
-                            KeyWaveDirection::BottomToTop => 1.0 - y,
-                            KeyWaveDirection::Diagonal => (x + y) * 0.5,
-                            KeyWaveDirection::CenterOut => {
-                                let (cx, cy) = Self::get_keyboard_center_static();
-                                ((x - cx).powi(2) + (y - cy).powi(2)).sqrt()
-                            }
-                            KeyWaveDirection::OutCenter => {
-                                let (cx, cy) = Self::get_keyboard_center_static();
-                                1.0 - ((x - cx).powi(2) + (y - cy).powi(2)).sqrt()
-                            }
-                        };
-
-                        let phase = elapsed_secs * speed;
-                        let t = (phase + wave_pos) % 1.0;
-                        let color_pos = t * colors.len() as f32;
-                        let color_index = color_pos as usize % colors.len();
-                        let next_index = (color_index + 1) % colors.len();
-                        let blend_t = color_pos % 1.0;
-
-                        *color = Color::blend(colors[color_index], colors[next_index], blend_t);
-                    } else {
-                        *color = Color::BLACK;
-                    }
+                    *color = Color::BLACK;
                 }
             }
 
@@ -875,10 +873,9 @@ impl PerKeyEffectEngine {
                     KeyId::W | KeyId::A | KeyId::S | KeyId::D => *wasd_color,
 
                     // Arrow keys
-                    KeyId::ArrowUp
-                    | KeyId::ArrowDown
-                    | KeyId::ArrowLeft
-                    | KeyId::ArrowRight => *arrow_keys_color,
+                    KeyId::ArrowUp | KeyId::ArrowDown | KeyId::ArrowLeft | KeyId::ArrowRight => {
+                        *arrow_keys_color
+                    }
 
                     // Function keys
                     KeyId::F1
