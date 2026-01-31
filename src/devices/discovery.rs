@@ -8,6 +8,7 @@ use tokio::sync::{RwLock, mpsc};
 use tracing::{debug, info, warn};
 
 use super::hid_reports::ConnectionHealth;
+use super::headsets::{GenericHeadset, Headset};
 use super::keyboards::apex::Apex3Tkl;
 use super::keyboards::apex_pro_tkl_2023::ApexProTkl2023;
 use super::keyboards::{GenericKeyboard, Keyboard};
@@ -329,6 +330,19 @@ impl DeviceManager {
             APEX_PRO_TKL_2023 => Ok(Box::new(ApexProTkl2023::new(generic_keyboard))),
             _ => Ok(Box::new(generic_keyboard)),
         }
+    }
+
+    /// Open a headset device and return a boxed Headset trait object.
+    pub fn open_headset(&self, info: &DeviceInfo) -> Result<Box<dyn Headset>> {
+        if info.device_type != DeviceType::Headset {
+            return Err(Error::DeviceCommunication(format!(
+                "Device {} is not a headset",
+                info.name
+            )));
+        }
+
+        let hid_device = self.open_device(info)?;
+        Ok(Box::new(GenericHeadset::new(info.clone(), hid_device)))
     }
 
     // === Hot-plug monitoring methods ===

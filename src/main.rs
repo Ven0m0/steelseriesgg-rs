@@ -8,6 +8,7 @@ use tracing_subscriber::FmtSubscriber;
 
 use steelseries_gg::config::Config;
 use steelseries_gg::device_state::{DeviceId, DeviceStateStore, KeyboardState};
+use steelseries_gg::devices::headsets::Headset;
 use steelseries_gg::devices::keyboards::Keyboard;
 use steelseries_gg::devices::{
     DeviceInfo, DeviceManager, DeviceType, KeyAddress, KeyId,
@@ -2238,6 +2239,7 @@ async fn cmd_server(port: u16) -> Result<()> {
 /// Daemon state for managing connected devices and RGB controllers.
 struct DaemonState {
     keyboards: HashMap<String, (Box<dyn Keyboard>, RgbController, DeviceInfo)>,
+    headsets: HashMap<String, (Box<dyn Headset>, DeviceInfo)>,
     gamesense_overlays: HashMap<String, (Color, std::time::Instant)>, // zone -> (color, expiry)
     /// Device fingerprints for tracking devices across reconnections
     device_fingerprints: HashMap<String, DeviceFingerprint>,
@@ -2254,6 +2256,7 @@ impl DaemonState {
 
         Ok(Self {
             keyboards: HashMap::new(),
+            headsets: HashMap::new(),
             gamesense_overlays: HashMap::new(),
             device_fingerprints: HashMap::new(),
             profile_manager,
@@ -2394,8 +2397,26 @@ impl DaemonState {
                     info.name,
                     fingerprint.to_id()
                 );
-                // TODO: Add headset support when headset implementation is ready
-                debug!("Headset support not yet implemented");
+
+                match device_manager.open_headset(info) {
+                    Ok(mut headset) => {
+                        // Initialize the device
+                        if let Err(e) = headset.initialize() {
+                            warn!("Failed to initialize headset {}: {}", info.name, e);
+                            return Err(e);
+                        }
+
+                        // Store device information
+                        self.headsets.insert(serial.clone(), (headset, info.clone()));
+                        self.device_fingerprints.insert(serial, fingerprint.clone());
+
+                        info!("Successfully added headset: {}", info.name);
+                    }
+                    Err(e) => {
+                        warn!("Failed to open headset {}: {}", info.name, e);
+                        return Err(e);
+                    }
+                }
             }
             DeviceType::Unknown => {
                 debug!("Hot-plug: Ignoring unknown device: {}", info.name);
@@ -2422,6 +2443,8 @@ impl DaemonState {
         }
 
         if let Some(serial) = device_to_remove {
+            let mut removed = false;
+
             if let Some((_keyboard, rgb_controller, info)) = self.keyboards.remove(&serial) {
                 info!(
                     "Hot-plug: Removing keyboard: {} ({})",
@@ -2442,15 +2465,35 @@ impl DaemonState {
                     debug!("Saved final state for {}", info.name);
                 }
 
-                // Clean up
-                self.device_fingerprints.remove(&serial);
-
+                removed = true;
                 let elapsed = std::time::Instant::now().duration_since(last_seen);
                 info!(
                     "Successfully removed keyboard: {} (was connected for {:.1}s)",
                     info.name,
                     elapsed.as_secs_f64()
                 );
+            }
+
+            if !removed {
+                if let Some((_headset, info)) = self.headsets.remove(&serial) {
+                    info!(
+                        "Hot-plug: Removing headset: {} ({})",
+                        info.name,
+                        fingerprint.to_id()
+                    );
+
+                    removed = true;
+                    let elapsed = std::time::Instant::now().duration_since(last_seen);
+                    info!(
+                        "Successfully removed headset: {} (was connected for {:.1}s)",
+                        info.name,
+                        elapsed.as_secs_f64()
+                    );
+                }
+            }
+
+            if removed {
+                self.device_fingerprints.remove(&serial);
             } else {
                 debug!(
                     "Hot-plug: Device {} was already removed or not found",
@@ -2469,15 +2512,19 @@ impl DaemonState {
 
     /// Get current device count for monitoring
     fn device_count(&self) -> usize {
-        self.keyboards.len()
+        self.keyboards.len() + self.headsets.len()
     }
 
     /// Get list of connected device names
     fn device_names(&self) -> Vec<String> {
-        self.keyboards
+        let mut names: Vec<String> = self
+            .keyboards
             .values()
             .map(|(_, _, info)| info.name.clone())
-            .collect()
+            .collect();
+
+        names.extend(self.headsets.values().map(|(_, info)| info.name.clone()));
+        names
     }
 }
 
@@ -2562,25 +2609,25 @@ async fn cmd_daemon(mut manager: DeviceManager) -> Result<()> {
     // Start hot-plug monitoring
     let hotplug_stop_tx = manager.start_hotplug_monitoring().await?;
 
-    // Discover and open keyboards initially
-    let keyboards_info = manager.keyboards();
-    if keyboards_info.is_empty() {
-        info!("No keyboards found initially");
+    // Discover and open devices initially
+    let devices_info = manager.devices();
+    if devices_info.is_empty() {
+        info!("No SteelSeries devices found initially");
     } else {
         let mut state = daemon_state.write().await;
-        for kb_info in keyboards_info {
-            let fingerprint = DeviceFingerprint::from_device_info(kb_info);
+        for info in devices_info {
+            let fingerprint = DeviceFingerprint::from_device_info(info);
             if let Err(e) = state
-                .handle_device_added(&manager, &fingerprint, kb_info)
+                .handle_device_added(&manager, &fingerprint, info)
                 .await
             {
-                warn!("Failed to add initial device {}: {}", kb_info.name, e);
+                warn!("Failed to add initial device {}: {}", info.name, e);
             }
         }
         let device_count = state.device_count();
         let device_names = state.device_names();
         info!(
-            "Initialized {} keyboard(s): {}",
+            "Initialized {} device(s): {}",
             device_count,
             device_names.join(", ")
         );
