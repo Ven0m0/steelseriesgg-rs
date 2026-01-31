@@ -441,8 +441,8 @@ pub fn with_global_diagnostics<F, R>(func: F) -> Option<R>
 where
     F: FnOnce(&mut HidDiagnostics) -> R,
 {
-    GLOBAL_DIAGNOSTICS.get().and_then(|mutex| {
+    GLOBAL_DIAGNOSTICS.get().map(|mutex| {
         let mut diag = mutex.lock();
-        Some(func(&mut diag))
+        func(&mut diag)
     })
 }

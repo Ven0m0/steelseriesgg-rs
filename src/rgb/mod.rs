@@ -603,27 +603,28 @@ impl PerKeyEffectEngine {
         });
     }
 
-    /// Get normalized position of a key (0.0 to 1.0 for both x and y).
-    fn get_key_position(&self, key_id: KeyId) -> Option<(f32, f32)> {
-        let address = self.key_mapping.get_key_address(key_id)?;
-        let x = address.col as f32 / (self.key_mapping.matrix_cols.saturating_sub(1).max(1)) as f32;
-        let y = address.row as f32 / (self.key_mapping.matrix_rows.saturating_sub(1).max(1)) as f32;
+    /// Static helper to get key position without borrowing self
+    fn get_key_position_static(key_mapping: &KeyMapping, key_id: KeyId) -> Option<(f32, f32)> {
+        let address = key_mapping.get_key_address(key_id)?;
+        let x = address.col as f32 / (key_mapping.matrix_cols.saturating_sub(1).max(1)) as f32;
+        let y = address.row as f32 / (key_mapping.matrix_rows.saturating_sub(1).max(1)) as f32;
         Some((x, y))
     }
 
-    /// Compute distance between two keys.
-    fn key_distance(&self, key1: KeyId, key2: KeyId) -> f32 {
-        if let (Some((x1, y1)), Some((x2, y2))) =
-            (self.get_key_position(key1), self.get_key_position(key2))
-        {
+    /// Static helper to get key distance without borrowing self
+    fn key_distance_static(key_mapping: &KeyMapping, key1: KeyId, key2: KeyId) -> f32 {
+        if let (Some((x1, y1)), Some((x2, y2))) = (
+            Self::get_key_position_static(key_mapping, key1),
+            Self::get_key_position_static(key_mapping, key2),
+        ) {
             ((x2 - x1).powi(2) + (y2 - y1).powi(2)).sqrt()
         } else {
             f32::INFINITY
         }
     }
 
-    /// Get the center position of the keyboard.
-    fn get_keyboard_center(&self) -> (f32, f32) {
+    /// Static helper to get keyboard center without borrowing self
+    fn get_keyboard_center_static() -> (f32, f32) {
         (0.5, 0.5) // Center of normalized coordinate space
     }
 
@@ -649,31 +650,67 @@ impl PerKeyEffectEngine {
         // Update reactive state
         self.update_reactive_state(delta_time);
 
-        // Clear cached colors for recomputation
-        self.cached_key_colors.clear();
-
-        match &self.effect {
-            PerKeyEffect::Static { color } => {
-                for key in self.key_mapping.get_all_keys() {
-                    self.cached_key_colors.insert(key, *color);
-                }
+        // Optimization: Handle both population (first run) and updates (subsequent runs)
+        // cleanly without clearing the map or duplicating logic.
+        if self.cached_key_colors.is_empty() {
+            // First run: Iterate all keys from mapping and populate
+            let mut new_colors = HashMap::with_capacity(self.key_mapping.total_keys);
+            for key in self.key_mapping.get_all_keys() {
+                let mut color = Color::BLACK;
+                Self::apply_effect_static(
+                    &self.effect,
+                    key,
+                    &mut color,
+                    &self.key_mapping,
+                    &self.reactive_state,
+                    elapsed_secs,
+                );
+                new_colors.insert(key, color);
             }
+            self.cached_key_colors = new_colors;
+        } else {
+            // Fast path: Update existing entries in place
+            // NOTE: This assumes the key set doesn't change, which is true for a fixed keyboard layout
+            for (key, color) in self.cached_key_colors.iter_mut() {
+                Self::apply_effect_static(
+                    &self.effect,
+                    *key,
+                    color,
+                    &self.key_mapping,
+                    &self.reactive_state,
+                    elapsed_secs,
+                );
+            }
+        }
 
-            PerKeyEffect::Breathing { color, speed } => {
+        // Update last compute time
+        self.last_compute_time = elapsed;
+
+        &self.cached_key_colors
+    }
+
+    /// Static helper to apply effect to a single key.
+    /// Used by both initial population and update loops to avoid code duplication.
+    fn apply_effect_static(
+        effect: &PerKeyEffect,
+        key: KeyId,
+        color: &mut Color,
+        key_mapping: &KeyMapping,
+        reactive_state: &HashMap<KeyId, f32>,
+        elapsed_secs: f32,
+    ) {
+        match effect {
+            PerKeyEffect::Static { color: c } => *color = *c,
+
+            PerKeyEffect::Breathing { color: c, speed } => {
                 let t = (elapsed_secs * speed * 2.0 * std::f32::consts::PI).sin();
                 let brightness = (t + 1.0) * 0.5;
-                let scaled_color = color.scale(brightness);
-                for key in self.key_mapping.get_all_keys() {
-                    self.cached_key_colors.insert(key, scaled_color);
-                }
+                *color = c.scale(brightness);
             }
 
             PerKeyEffect::Spectrum { speed } => {
                 let hue = (elapsed_secs * speed * 360.0) % 360.0;
-                let color = Color::from_hsv(hue, 1.0, 1.0);
-                for key in self.key_mapping.get_all_keys() {
-                    self.cached_key_colors.insert(key, color);
-                }
+                *color = Color::from_hsv(hue, 1.0, 1.0);
             }
 
             PerKeyEffect::Wave {
@@ -682,89 +719,71 @@ impl PerKeyEffectEngine {
                 direction,
             } => {
                 if colors.is_empty() {
-                    for key in self.key_mapping.get_all_keys() {
-                        self.cached_key_colors.insert(key, Color::BLACK);
-                    }
-                } else {
-                    let phase = elapsed_secs * speed;
-
-                    for key in self.key_mapping.get_all_keys() {
-                        if let Some((x, y)) = self.get_key_position(key) {
-                            let wave_pos = match direction {
-                                KeyWaveDirection::LeftToRight => x,
-                                KeyWaveDirection::RightToLeft => 1.0 - x,
-                                KeyWaveDirection::TopToBottom => y,
-                                KeyWaveDirection::BottomToTop => 1.0 - y,
-                                KeyWaveDirection::Diagonal => (x + y) * 0.5,
-                                KeyWaveDirection::CenterOut => {
-                                    let (cx, cy) = self.get_keyboard_center();
-                                    ((x - cx).powi(2) + (y - cy).powi(2)).sqrt()
-                                }
-                                KeyWaveDirection::OutCenter => {
-                                    let (cx, cy) = self.get_keyboard_center();
-                                    1.0 - ((x - cx).powi(2) + (y - cy).powi(2)).sqrt()
-                                }
-                            };
-
-                            let t = (phase + wave_pos) % 1.0;
-                            let color_pos = t * colors.len() as f32;
-                            let color_index = color_pos as usize % colors.len();
-                            let next_index = (color_index + 1) % colors.len();
-                            let blend_t = color_pos % 1.0;
-
-                            let color =
-                                Color::blend(colors[color_index], colors[next_index], blend_t);
-                            self.cached_key_colors.insert(key, color);
-                        } else {
-                            self.cached_key_colors.insert(key, Color::BLACK);
+                    *color = Color::BLACK;
+                } else if let Some((x, y)) = Self::get_key_position_static(key_mapping, key) {
+                    let wave_pos = match direction {
+                        KeyWaveDirection::LeftToRight => x,
+                        KeyWaveDirection::RightToLeft => 1.0 - x,
+                        KeyWaveDirection::TopToBottom => y,
+                        KeyWaveDirection::BottomToTop => 1.0 - y,
+                        KeyWaveDirection::Diagonal => (x + y) * 0.5,
+                        KeyWaveDirection::CenterOut => {
+                            let (cx, cy) = Self::get_keyboard_center_static();
+                            ((x - cx).powi(2) + (y - cy).powi(2)).sqrt()
                         }
-                    }
+                        KeyWaveDirection::OutCenter => {
+                            let (cx, cy) = Self::get_keyboard_center_static();
+                            1.0 - ((x - cx).powi(2) + (y - cy).powi(2)).sqrt()
+                        }
+                    };
+
+                    let phase = elapsed_secs * speed;
+                    let t = (phase + wave_pos) % 1.0;
+                    let color_pos = t * colors.len() as f32;
+                    let color_index = color_pos as usize % colors.len();
+                    let next_index = (color_index + 1) % colors.len();
+                    let blend_t = color_pos % 1.0;
+
+                    *color = Color::blend(colors[color_index], colors[next_index], blend_t);
+                } else {
+                    *color = Color::BLACK;
                 }
             }
 
             PerKeyEffect::Ripple {
-                color,
+                color: c,
                 speed,
                 center_keys,
             } => {
                 if center_keys.is_empty() {
-                    // Use keyboard center as default
-                    for key in self.key_mapping.get_all_keys() {
-                        if let Some((x, y)) = self.get_key_position(key) {
-                            let (cx, cy) = self.get_keyboard_center();
-                            let distance = ((x - cx).powi(2) + (y - cy).powi(2)).sqrt();
-                            let ripple_pos = (elapsed_secs * speed - distance * 3.0) % 2.0;
+                    if let Some((x, y)) = Self::get_key_position_static(key_mapping, key) {
+                        let (cx, cy) = Self::get_keyboard_center_static();
+                        let distance = ((x - cx).powi(2) + (y - cy).powi(2)).sqrt();
+                        let ripple_pos = (elapsed_secs * speed - distance * 3.0) % 2.0;
+                        let brightness = if ripple_pos > 0.0 && ripple_pos < 1.0 {
+                            (ripple_pos * std::f32::consts::PI).sin()
+                        } else {
+                            0.0
+                        };
+                        *color = c.scale(brightness);
+                    } else {
+                        *color = Color::BLACK;
+                    }
+                } else {
+                    let mut max_brightness = 0.0f32;
+                    for &center_key in center_keys {
+                        let distance = Self::key_distance_static(key_mapping, key, center_key);
+                        if distance != f32::INFINITY {
+                            let ripple_pos = (elapsed_secs * speed - distance * 5.0) % 2.0;
                             let brightness = if ripple_pos > 0.0 && ripple_pos < 1.0 {
                                 (ripple_pos * std::f32::consts::PI).sin()
                             } else {
                                 0.0
                             };
-                            self.cached_key_colors.insert(key, color.scale(brightness));
-                        } else {
-                            self.cached_key_colors.insert(key, Color::BLACK);
+                            max_brightness = max_brightness.max(brightness);
                         }
                     }
-                } else {
-                    // Ripple from specified center keys
-                    for key in self.key_mapping.get_all_keys() {
-                        let mut max_brightness = 0.0f32;
-
-                        for &center_key in center_keys {
-                            let distance = self.key_distance(key, center_key);
-                            if distance != f32::INFINITY {
-                                let ripple_pos = (elapsed_secs * speed - distance * 5.0) % 2.0;
-                                let brightness = if ripple_pos > 0.0 && ripple_pos < 1.0 {
-                                    (ripple_pos * std::f32::consts::PI).sin()
-                                } else {
-                                    0.0
-                                };
-                                max_brightness = max_brightness.max(brightness);
-                            }
-                        }
-
-                        self.cached_key_colors
-                            .insert(key, color.scale(max_brightness));
-                    }
+                    *color = c.scale(max_brightness);
                 }
             }
 
@@ -774,15 +793,11 @@ impl PerKeyEffectEngine {
                 duration: _,
                 active_keys,
             } => {
-                for key in self.key_mapping.get_all_keys() {
-                    let color =
-                        if active_keys.contains(&key) || self.reactive_state.contains_key(&key) {
-                            *highlight_color
-                        } else {
-                            *base_color
-                        };
-                    self.cached_key_colors.insert(key, color);
-                }
+                *color = if active_keys.contains(&key) || reactive_state.contains_key(&key) {
+                    *highlight_color
+                } else {
+                    *base_color
+                };
             }
 
             PerKeyEffect::Gradient {
@@ -790,30 +805,24 @@ impl PerKeyEffectEngine {
                 end,
                 direction,
             } => {
-                for key in self.key_mapping.get_all_keys() {
-                    if let Some((x, y)) = self.get_key_position(key) {
-                        let t = match direction {
-                            GradientDirection::Horizontal => x,
-                            GradientDirection::Vertical => y,
-                            GradientDirection::Diagonal => (x + y) * 0.5,
-                            GradientDirection::Radial => {
-                                let (cx, cy) = self.get_keyboard_center();
-                                ((x - cx).powi(2) + (y - cy).powi(2)).sqrt().min(1.0)
-                            }
-                        };
-                        let color = Color::blend(*start, *end, t);
-                        self.cached_key_colors.insert(key, color);
-                    } else {
-                        self.cached_key_colors.insert(key, Color::BLACK);
-                    }
+                if let Some((x, y)) = Self::get_key_position_static(key_mapping, key) {
+                    let t = match direction {
+                        GradientDirection::Horizontal => x,
+                        GradientDirection::Vertical => y,
+                        GradientDirection::Diagonal => (x + y) * 0.5,
+                        GradientDirection::Radial => {
+                            let (cx, cy) = Self::get_keyboard_center_static();
+                            ((x - cx).powi(2) + (y - cy).powi(2)).sqrt().min(1.0)
+                        }
+                    };
+                    *color = Color::blend(*start, *end, t);
+                } else {
+                    *color = Color::BLACK;
                 }
             }
 
             PerKeyEffect::Custom { key_colors } => {
-                for key in self.key_mapping.get_all_keys() {
-                    let color = key_colors.get(&key).copied().unwrap_or(Color::BLACK);
-                    self.cached_key_colors.insert(key, color);
-                }
+                *color = key_colors.get(&key).copied().unwrap_or(Color::BLACK);
             }
 
             PerKeyEffect::RowColumn {
@@ -821,38 +830,34 @@ impl PerKeyEffectEngine {
                 column_colors,
                 blend_mode,
             } => {
-                for key in self.key_mapping.get_all_keys() {
-                    if let Some(address) = self.key_mapping.get_key_address(key) {
-                        let row_color = row_colors
-                            .get(address.row as usize)
-                            .copied()
-                            .unwrap_or(Color::BLACK);
-                        let col_color = column_colors
-                            .get(address.col as usize)
-                            .copied()
-                            .unwrap_or(Color::BLACK);
+                if let Some(address) = key_mapping.get_key_address(key) {
+                    let row_color = row_colors
+                        .get(address.row as usize)
+                        .copied()
+                        .unwrap_or(Color::BLACK);
+                    let col_color = column_colors
+                        .get(address.col as usize)
+                        .copied()
+                        .unwrap_or(Color::BLACK);
 
-                        let final_color = match blend_mode {
-                            BlendMode::Average => Color::blend(row_color, col_color, 0.5),
-                            BlendMode::Add => {
-                                let r = (row_color.r as u16 + col_color.r as u16).min(255) as u8;
-                                let g = (row_color.g as u16 + col_color.g as u16).min(255) as u8;
-                                let b = (row_color.b as u16 + col_color.b as u16).min(255) as u8;
-                                Color::new(r, g, b)
-                            }
-                            BlendMode::Multiply => {
-                                let r = ((row_color.r as u16 * col_color.r as u16) / 255) as u8;
-                                let g = ((row_color.g as u16 * col_color.g as u16) / 255) as u8;
-                                let b = ((row_color.b as u16 * col_color.b as u16) / 255) as u8;
-                                Color::new(r, g, b)
-                            }
-                            BlendMode::Overlay => row_color, // Row dominates
-                        };
-
-                        self.cached_key_colors.insert(key, final_color);
-                    } else {
-                        self.cached_key_colors.insert(key, Color::BLACK);
-                    }
+                    *color = match blend_mode {
+                        BlendMode::Average => Color::blend(row_color, col_color, 0.5),
+                        BlendMode::Add => {
+                            let r = (row_color.r as u16 + col_color.r as u16).min(255) as u8;
+                            let g = (row_color.g as u16 + col_color.g as u16).min(255) as u8;
+                            let b = (row_color.b as u16 + col_color.b as u16).min(255) as u8;
+                            Color::new(r, g, b)
+                        }
+                        BlendMode::Multiply => {
+                            let r = ((row_color.r as u16 * col_color.r as u16) / 255) as u8;
+                            let g = ((row_color.g as u16 * col_color.g as u16) / 255) as u8;
+                            let b = ((row_color.b as u16 * col_color.b as u16) / 255) as u8;
+                            Color::new(r, g, b)
+                        }
+                        BlendMode::Overlay => row_color,
+                    };
+                } else {
+                    *color = Color::BLACK;
                 }
             }
 
@@ -863,61 +868,50 @@ impl PerKeyEffectEngine {
                 number_row_color,
                 default_color,
             } => {
-                for key in self.key_mapping.get_all_keys() {
-                    let color = match key {
-                        // WASD cluster
-                        KeyId::W | KeyId::A | KeyId::S | KeyId::D => *wasd_color,
+                *color = match key {
+                    // WASD cluster
+                    KeyId::W | KeyId::A | KeyId::S | KeyId::D => *wasd_color,
 
-                        // Arrow keys
-                        KeyId::ArrowUp
-                        | KeyId::ArrowDown
-                        | KeyId::ArrowLeft
-                        | KeyId::ArrowRight => *arrow_keys_color,
+                    // Arrow keys
+                    KeyId::ArrowUp | KeyId::ArrowDown | KeyId::ArrowLeft | KeyId::ArrowRight => {
+                        *arrow_keys_color
+                    }
 
-                        // Function keys
-                        KeyId::F1
-                        | KeyId::F2
-                        | KeyId::F3
-                        | KeyId::F4
-                        | KeyId::F5
-                        | KeyId::F6
-                        | KeyId::F7
-                        | KeyId::F8
-                        | KeyId::F9
-                        | KeyId::F10
-                        | KeyId::F11
-                        | KeyId::F12 => *function_keys_color,
+                    // Function keys
+                    KeyId::F1
+                    | KeyId::F2
+                    | KeyId::F3
+                    | KeyId::F4
+                    | KeyId::F5
+                    | KeyId::F6
+                    | KeyId::F7
+                    | KeyId::F8
+                    | KeyId::F9
+                    | KeyId::F10
+                    | KeyId::F11
+                    | KeyId::F12 => *function_keys_color,
 
-                        // Number row
-                        KeyId::Key1
-                        | KeyId::Key2
-                        | KeyId::Key3
-                        | KeyId::Key4
-                        | KeyId::Key5
-                        | KeyId::Key6
-                        | KeyId::Key7
-                        | KeyId::Key8
-                        | KeyId::Key9
-                        | KeyId::Key0 => *number_row_color,
+                    // Number row
+                    KeyId::Key1
+                    | KeyId::Key2
+                    | KeyId::Key3
+                    | KeyId::Key4
+                    | KeyId::Key5
+                    | KeyId::Key6
+                    | KeyId::Key7
+                    | KeyId::Key8
+                    | KeyId::Key9
+                    | KeyId::Key0 => *number_row_color,
 
-                        // Default for all other keys
-                        _ => *default_color,
-                    };
-                    self.cached_key_colors.insert(key, color);
-                }
+                    // Default for all other keys
+                    _ => *default_color,
+                };
             }
 
             PerKeyEffect::Off => {
-                for key in self.key_mapping.get_all_keys() {
-                    self.cached_key_colors.insert(key, Color::BLACK);
-                }
+                *color = Color::BLACK;
             }
         }
-
-        // Update last compute time
-        self.last_compute_time = elapsed;
-
-        &self.cached_key_colors
     }
 
     /// Reset the effect timer.
