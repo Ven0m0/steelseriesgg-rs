@@ -135,10 +135,10 @@ impl PulseHandler {
         })));
         self.mainloop.unlock();
 
-        match rx.recv() {
+        match rx.recv_timeout(std::time::Duration::from_secs(2)) {
             Ok(true) => Ok(()),
             Ok(false) => Err(Error::Audio("Failed to set sink input volume".to_string())),
-            Err(_) => Err(Error::Audio("Volume setting timed out or failed".to_string())),
+            Err(_) => Err(Error::Audio("Volume setting timed out or channel closed".to_string())),
         }
     }
 
