@@ -65,7 +65,7 @@ impl PulseHandler {
 
     pub fn get_sink_inputs(&mut self) -> Result<Vec<SinkInput>> {
         let (tx, rx) = mpsc::channel();
-        let tx = std::sync::Mutex::new(tx);
+        let tx = parking_lot::Mutex::new(tx);
 
         self.mainloop.lock();
 
