@@ -69,7 +69,7 @@ impl PulseHandler {
 
     pub fn get_sink_inputs(&mut self) -> Result<Vec<SinkInput>> {
         let (tx, rx) = mpsc::channel();
-        let tx = std::sync::Mutex::new(tx);
+        let tx = parking_lot::Mutex::new(tx);
 
         self.mainloop.lock();
 
@@ -149,12 +149,10 @@ impl PulseHandler {
         );
         self.mainloop.unlock();
 
-        match rx.recv() {
+        match rx.recv_timeout(std::time::Duration::from_secs(2)) {
             Ok(true) => Ok(()),
             Ok(false) => Err(Error::Audio("Failed to set sink input volume".to_string())),
-            Err(_) => Err(Error::Audio(
-                "Volume setting timed out or failed".to_string(),
-            )),
+            Err(_) => Err(Error::Audio("Volume setting timed out or channel closed".to_string())),
         }
     }
 
@@ -171,10 +169,10 @@ impl PulseHandler {
         );
         self.mainloop.unlock();
 
-        match rx.recv() {
+        match rx.recv_timeout(std::time::Duration::from_secs(2)) {
             Ok(true) => Ok(()),
             Ok(false) => Err(Error::Audio("Failed to set sink input mute".to_string())),
-            Err(_) => Err(Error::Audio("Mute setting timed out or failed".to_string())),
+            Err(_) => Err(Error::Audio("Mute setting timed out or channel closed".to_string())),
         }
     }
 }
