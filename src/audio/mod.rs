@@ -5,16 +5,17 @@
 //! - Per-application audio routing
 //! - Streamer mode with separate streaming/monitoring sliders
 
+#[cfg(feature = "audio")]
+pub mod pulse;
 #[cfg(feature = "sonar")]
 pub mod sonar;
 #[cfg(feature = "audio")]
 pub mod pulse;
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
-use crate::{Error, Result};
-
+#[cfg(feature = "audio")]
+use pulse::PulseHandler;
 #[cfg(feature = "sonar")]
 pub use sonar::{SonarChannel, SonarClient};
 #[cfg(feature = "audio")]

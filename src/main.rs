@@ -550,7 +550,7 @@ fn parse_channel(s: &str) -> Option<Channel> {
 }
 
 /// Convert a volume level (0-100) to a normalized float (0.0-1.0)
-#[cfg(feature = "audio")]
+#[cfg(any(feature = "audio", feature = "sonar"))]
 fn normalize_volume(level: u8) -> f32 {
     (level.min(100) as f32) / 100.0
 }
