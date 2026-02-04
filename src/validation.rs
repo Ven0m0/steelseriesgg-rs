@@ -742,7 +742,7 @@ impl RgbValidator {
     }
 
     /// Run complete validation suite on a keyboard device.
-    pub fn validate_keyboard(&self, keyboard: &mut dyn Keyboard) -> ValidationReport {
+    pub async fn validate_keyboard(&self, keyboard: &mut dyn Keyboard) -> ValidationReport {
         let start_time = Instant::now();
         let mut report = ValidationReport::new(keyboard.info().clone());
 
@@ -751,18 +751,18 @@ impl RgbValidator {
 
         // Zone-based RGB tests
         report.add_result(self.test_zone_rgb_basic(keyboard));
-        report.add_result(self.test_zone_rgb_effects(keyboard));
-        report.add_result(self.test_zone_reliability(keyboard));
+        report.add_result(self.test_zone_rgb_effects(keyboard).await);
+        report.add_result(self.test_zone_reliability(keyboard).await);
 
         // Per-key RGB tests (if supported)
         if keyboard.supports_per_key_rgb() {
             report.add_result(self.test_per_key_basic(keyboard));
-            report.add_result(self.test_per_key_effects(keyboard));
-            report.add_result(self.test_reactive_effects(keyboard));
+            report.add_result(self.test_per_key_effects(keyboard).await);
+            report.add_result(self.test_reactive_effects(keyboard).await);
         }
 
         // Fallback system tests
-        report.add_result(self.test_fallback_system(keyboard));
+        report.add_result(self.test_fallback_system(keyboard).await);
 
         // Performance tests
         if self.benchmark_mode {
@@ -853,11 +853,11 @@ impl RgbValidator {
     }
 
     /// Test zone reliability with retry mechanisms.
-    fn test_zone_reliability(&self, keyboard: &mut dyn Keyboard) -> ValidationResult {
+    async fn test_zone_reliability(&self, keyboard: &mut dyn Keyboard) -> ValidationResult {
         let start = Instant::now();
         let test_name = "Zone Reliability".to_string();
 
-        match keyboard.test_zone_reliability() {
+        match keyboard.test_zone_reliability().await {
             Ok(results) => {
                 let total_zones = results.len();
                 let working_zones = results.iter().filter(|&&working| working).count();
@@ -924,7 +924,7 @@ impl RgbValidator {
     }
 
     /// Test per-key RGB effects.
-    fn test_per_key_effects(&self, keyboard: &mut dyn Keyboard) -> ValidationResult {
+    async fn test_per_key_effects(&self, keyboard: &mut dyn Keyboard) -> ValidationResult {
         let start = Instant::now();
         let test_name = "Per-Key RGB Effects".to_string();
 
@@ -935,7 +935,7 @@ impl RgbValidator {
 
         // Test basic per-key effect
         let static_effect = PerKeyEffect::Static { color: Color::CYAN };
-        match keyboard.set_per_key_effect(static_effect) {
+        match keyboard.set_per_key_effect(static_effect).await {
             Ok(_) => ValidationResult::success(test_name, start.elapsed())
                 .with_note("Successfully applied per-key static effect"),
             Err(e) => ValidationResult::failure(
@@ -947,7 +947,7 @@ impl RgbValidator {
     }
 
     /// Test reactive effects (key press responses).
-    fn test_reactive_effects(&self, keyboard: &mut dyn Keyboard) -> ValidationResult {
+    async fn test_reactive_effects(&self, keyboard: &mut dyn Keyboard) -> ValidationResult {
         let start = Instant::now();
         let test_name = "Reactive Effects".to_string();
 
@@ -958,7 +958,7 @@ impl RgbValidator {
 
         // Test triggering reactive effect
         let test_keys = vec![KeyId::Enter, KeyId::Space];
-        match keyboard.trigger_key_reactive(&test_keys, 1.0) {
+        match keyboard.trigger_key_reactive(&test_keys, 1.0).await {
             Ok(_) => ValidationResult::success(test_name, start.elapsed())
                 .with_metric("reactive_keys", test_keys.len() as f64)
                 .with_note("Successfully triggered reactive effect on Enter and Space"),
@@ -971,7 +971,7 @@ impl RgbValidator {
     }
 
     /// Test fallback system (per-key to zone conversion).
-    fn test_fallback_system(&self, keyboard: &mut dyn Keyboard) -> ValidationResult {
+    async fn test_fallback_system(&self, keyboard: &mut dyn Keyboard) -> ValidationResult {
         let start = Instant::now();
         let test_name = "Fallback System".to_string();
 
@@ -982,7 +982,7 @@ impl RgbValidator {
             (KeyId::E, Color::BLUE),
         ];
 
-        match keyboard.simulate_per_key_with_zones(&test_key_colors) {
+        match keyboard.simulate_per_key_with_zones(&test_key_colors).await {
             Ok(_) => ValidationResult::success(test_name, start.elapsed())
                 .with_note("Successfully simulated per-key effect using zones"),
             Err(e) => ValidationResult::failure(

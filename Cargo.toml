@@ -81,6 +81,7 @@ tower-http = { version = "0.6", default-features = false, features = ["cors"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 anyhow = "1.0.100"
+async-trait = "0.1.89"
 
 # Future enhancement dependencies:
 # - parking_lot: High-performance synchronization primitives (performance optimization)

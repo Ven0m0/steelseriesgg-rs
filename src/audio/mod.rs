@@ -11,8 +11,9 @@ pub mod pulse;
 #[cfg(feature = "sonar")]
 pub mod sonar;
 
+#[cfg(feature = "audio")]
+use crate::{Error, Result};
 use serde::{Deserialize, Serialize};
-
 #[cfg(feature = "audio")]
 use pulse::PulseHandler;
 
