@@ -89,7 +89,7 @@ fn main() -> Result<()> {
             if dev.vendor_id() == args.vid {
                 println!(
                     "Found: {} [PID: 0x{:04X}] (Interface: {})",
-                    dev.product_string().unwrap_or("Unknown".to_string()),
+                    dev.product_string().unwrap_or("Unknown"),
                     dev.product_id(),
                     dev.interface_number()
                 );
