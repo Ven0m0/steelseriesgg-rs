@@ -5,7 +5,9 @@
 //! - Per-application audio routing
 //! - Streamer mode with separate streaming/monitoring sliders
 
+#[cfg(feature = "audio")]
 use crate::{Error, Result};
+#[cfg(feature = "audio")]
 use std::collections::HashMap;
 
 #[cfg(feature = "audio")]

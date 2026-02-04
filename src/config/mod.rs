@@ -131,10 +131,8 @@ impl Config {
             Ok(content) => {
                 let config: Config = toml::from_str(&content)?;
                 Ok(config)
-            },
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                Ok(Self::default())
-            },
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Self::default()),
             Err(e) => Err(e.into()),
         }
     }
