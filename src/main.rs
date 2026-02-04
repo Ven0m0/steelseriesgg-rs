@@ -2532,7 +2532,7 @@ impl DaemonState {
 async fn cmd_daemon(mut manager: DeviceManager) -> Result<()> {
     info!("Starting SteelSeries GG daemon");
 
-    let config = Config::load()?;
+    let config = Config::load_async().await?;
 
     // Apply saved polling rates
     {

@@ -9,8 +9,6 @@ use tracing::{debug, info, warn};
 
 use super::headsets::{GenericHeadset, Headset};
 use super::hid_reports::ConnectionHealth;
-use super::headsets::{GenericHeadset, Headset};
-use super::hid_reports::ConnectionHealth;
 use super::keyboards::apex::Apex3Tkl;
 use super::keyboards::apex_pro_tkl_2023::ApexProTkl2023;
 use super::keyboards::{GenericKeyboard, Keyboard};
