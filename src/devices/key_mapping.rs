@@ -307,6 +307,7 @@ pub struct KeyMapping {
     /// Key ID to HID address mapping
     pub key_map: HashMap<KeyId, KeyAddress>,
     /// Cached list of keys for stable iteration without allocation
+    #[serde(skip)]
     pub cached_keys: Vec<KeyId>,
     /// Matrix dimensions
     pub matrix_rows: u8,
