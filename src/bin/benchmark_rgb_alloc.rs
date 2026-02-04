@@ -7,7 +7,7 @@ fn main() {
     let zone_count = 104;
 
     // Create input data
-    let input_colors: Vec<Color> = (0..zone_count)
+    let input_colors: Vec<Color> = (0..zone_count / 2)
         .map(|i| Color::new((i % 255) as u8, 0, 0))
         .collect();
 
