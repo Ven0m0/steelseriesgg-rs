@@ -13,10 +13,10 @@ use super::zone_mapping::{ZoneEffect, ZoneFallback, ZoneMapping as ZoneMap};
 use super::{Device, DeviceInfo, DeviceType, write_padded_report, zone_count_for_product_id};
 use crate::rgb::{Color, PerKeyEffect, PerKeyRgbController};
 use crate::{Error, Result};
+use async_trait::async_trait;
 use hidapi::HidDevice;
 use parking_lot::Mutex;
 use std::sync::Arc;
-use async_trait::async_trait;
 
 /// Trait for keyboard-specific functionality.
 #[async_trait]
@@ -93,7 +93,11 @@ pub trait Keyboard: Device {
     async fn simulate_per_key_with_zones(&mut self, key_colors: &[(KeyId, Color)]) -> Result<()>;
 
     /// Enhanced zone-based RGB with retry logic.
-    async fn set_zone_colors_with_retry(&mut self, colors: &[Color], max_retries: usize) -> Result<()>;
+    async fn set_zone_colors_with_retry(
+        &mut self,
+        colors: &[Color],
+        max_retries: usize,
+    ) -> Result<()>;
 
     /// Test zone connectivity and reliability.
     async fn test_zone_reliability(&mut self) -> Result<Vec<bool>>;
@@ -568,7 +572,11 @@ impl Keyboard for GenericKeyboard {
         }
     }
 
-    async fn set_zone_colors_with_retry(&mut self, colors: &[Color], max_retries: usize) -> Result<()> {
+    async fn set_zone_colors_with_retry(
+        &mut self,
+        colors: &[Color],
+        max_retries: usize,
+    ) -> Result<()> {
         let mut last_error = None;
 
         for attempt in 0..max_retries {
@@ -684,7 +692,8 @@ impl Keyboard for GenericKeyboard {
                 // Use zone fallback to simulate reactive effect
                 self.simulate_per_key_with_zones(
                     &keys.iter().map(|&k| (k, Color::WHITE)).collect::<Vec<_>>(),
-                ).await
+                )
+                .await
             } else {
                 Ok(())
             }

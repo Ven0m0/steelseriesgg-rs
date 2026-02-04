@@ -9,8 +9,6 @@
 pub mod pulse;
 #[cfg(feature = "sonar")]
 pub mod sonar;
-use std::collections::HashMap;
-use crate::{Error, Result};
 use serde::{Deserialize, Serialize};
 
 #[cfg(feature = "audio")]
