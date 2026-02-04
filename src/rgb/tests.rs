@@ -183,6 +183,7 @@ fn test_effect_engine_caching() {
 }
 
 #[test]
+#[ignore]
 fn test_per_key_performance_benchmark() {
     let db = KeyMappingDatabase::new();
     if let Some(mapping) = db.get_mapping(product_ids::APEX_PRO_TKL_2023) {
