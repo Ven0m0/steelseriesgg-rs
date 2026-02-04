@@ -6,6 +6,7 @@ use crate::devices::key_mapping::{KeyAddress, KeyId, KeyMapping};
 use crate::devices::zone_mapping::{ZoneEffect, ZoneMapping};
 use crate::devices::{Device, DeviceInfo, DeviceType};
 use crate::rgb::{Color, PerKeyEffect};
+use async_trait::async_trait;
 
 /// Apex 3 TKL specific implementation.
 pub struct Apex3Tkl {
@@ -114,6 +115,7 @@ impl Device for Apex3Tkl {
 }
 
 // Delegate Keyboard trait
+#[async_trait]
 impl Keyboard for Apex3Tkl {
     fn set_color(&mut self, color: Color) -> Result<()> {
         self.inner.set_color(color)
@@ -179,44 +181,52 @@ impl Keyboard for Apex3Tkl {
         self.inner.get_zone_mapping()
     }
 
-    fn set_zone_effect(&mut self, effect: ZoneEffect) -> Result<()> {
-        self.inner.set_zone_effect(effect)
+    async fn set_zone_effect(&mut self, effect: ZoneEffect) -> Result<()> {
+        self.inner.set_zone_effect(effect).await
     }
 
-    fn simulate_per_key_with_zones(&mut self, key_colors: &[(KeyId, Color)]) -> Result<()> {
-        self.inner.simulate_per_key_with_zones(key_colors)
+    async fn simulate_per_key_with_zones(&mut self, key_colors: &[(KeyId, Color)]) -> Result<()> {
+        self.inner.simulate_per_key_with_zones(key_colors).await
     }
 
-    fn set_zone_colors_with_retry(&mut self, colors: &[Color], max_retries: usize) -> Result<()> {
-        self.inner.set_zone_colors_with_retry(colors, max_retries)
+    async fn set_zone_colors_with_retry(
+        &mut self,
+        colors: &[Color],
+        max_retries: usize,
+    ) -> Result<()> {
+        self.inner
+            .set_zone_colors_with_retry(colors, max_retries)
+            .await
     }
 
-    fn test_zone_reliability(&mut self) -> Result<Vec<bool>> {
-        self.inner.test_zone_reliability()
+    async fn test_zone_reliability(&mut self) -> Result<Vec<bool>> {
+        self.inner.test_zone_reliability().await
     }
 
     fn supports_per_key_effects(&self) -> bool {
         self.inner.supports_per_key_effects()
     }
 
-    fn set_per_key_effect(&mut self, effect: PerKeyEffect) -> Result<()> {
-        self.inner.set_per_key_effect(effect)
+    async fn set_per_key_effect(&mut self, effect: PerKeyEffect) -> Result<()> {
+        self.inner.set_per_key_effect(effect).await
     }
 
     fn get_per_key_effect(&self) -> Option<&PerKeyEffect> {
         self.inner.get_per_key_effect()
     }
 
-    fn trigger_key_reactive(&mut self, keys: &[KeyId], duration: f32) -> Result<()> {
-        self.inner.trigger_key_reactive(keys, duration)
+    async fn trigger_key_reactive(&mut self, keys: &[KeyId], duration: f32) -> Result<()> {
+        self.inner.trigger_key_reactive(keys, duration).await
     }
 
-    fn apply_per_key_effect_with_brightness(&mut self, brightness: f32) -> Result<()> {
-        self.inner.apply_per_key_effect_with_brightness(brightness)
+    async fn apply_per_key_effect_with_brightness(&mut self, brightness: f32) -> Result<()> {
+        self.inner
+            .apply_per_key_effect_with_brightness(brightness)
+            .await
     }
 
-    fn convert_per_key_to_zones(&mut self, effect: &PerKeyEffect) -> Result<()> {
-        self.inner.convert_per_key_to_zones(effect)
+    async fn convert_per_key_to_zones(&mut self, effect: &PerKeyEffect) -> Result<()> {
+        self.inner.convert_per_key_to_zones(effect).await
     }
 
     fn get_rgb_performance_stats(&self) -> Option<&crate::performance::PerformanceStats> {

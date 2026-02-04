@@ -13,11 +13,13 @@ use super::zone_mapping::{ZoneEffect, ZoneFallback, ZoneMapping as ZoneMap};
 use super::{Device, DeviceInfo, DeviceType, write_padded_report, zone_count_for_product_id};
 use crate::rgb::{Color, PerKeyEffect, PerKeyRgbController};
 use crate::{Error, Result};
+use async_trait::async_trait;
 use hidapi::HidDevice;
 use parking_lot::Mutex;
 use std::sync::Arc;
 
 /// Trait for keyboard-specific functionality.
+#[async_trait]
 pub trait Keyboard: Device {
     /// Set the entire keyboard to a single color.
     fn set_color(&mut self, color: Color) -> Result<()>;
@@ -85,16 +87,20 @@ pub trait Keyboard: Device {
     fn get_zone_mapping(&self) -> Option<&ZoneMap>;
 
     /// Set zone-based RGB effect as fallback.
-    fn set_zone_effect(&mut self, effect: ZoneEffect) -> Result<()>;
+    async fn set_zone_effect(&mut self, effect: ZoneEffect) -> Result<()>;
 
     /// Simulate per-key effect using zone-based fallback.
-    fn simulate_per_key_with_zones(&mut self, key_colors: &[(KeyId, Color)]) -> Result<()>;
+    async fn simulate_per_key_with_zones(&mut self, key_colors: &[(KeyId, Color)]) -> Result<()>;
 
     /// Enhanced zone-based RGB with retry logic.
-    fn set_zone_colors_with_retry(&mut self, colors: &[Color], max_retries: usize) -> Result<()>;
+    async fn set_zone_colors_with_retry(
+        &mut self,
+        colors: &[Color],
+        max_retries: usize,
+    ) -> Result<()>;
 
     /// Test zone connectivity and reliability.
-    fn test_zone_reliability(&mut self) -> Result<Vec<bool>>;
+    async fn test_zone_reliability(&mut self) -> Result<Vec<bool>>;
 
     // === Per-Key RGB Effect Support ===
 
@@ -102,19 +108,19 @@ pub trait Keyboard: Device {
     fn supports_per_key_effects(&self) -> bool;
 
     /// Set per-key RGB effect.
-    fn set_per_key_effect(&mut self, effect: PerKeyEffect) -> Result<()>;
+    async fn set_per_key_effect(&mut self, effect: PerKeyEffect) -> Result<()>;
 
     /// Get current per-key RGB effect (if available).
     fn get_per_key_effect(&self) -> Option<&PerKeyEffect>;
 
     /// Trigger reactive effect for specific keys.
-    fn trigger_key_reactive(&mut self, keys: &[KeyId], duration: f32) -> Result<()>;
+    async fn trigger_key_reactive(&mut self, keys: &[KeyId], duration: f32) -> Result<()>;
 
     /// Apply per-key effect with brightness control.
     fn apply_per_key_effect_with_brightness(&mut self, brightness: f32) -> Result<()>;
 
     /// Convert per-key effect to zone-based fallback.
-    fn convert_per_key_to_zones(&mut self, effect: &PerKeyEffect) -> Result<()>;
+    async fn convert_per_key_to_zones(&mut self, effect: &PerKeyEffect) -> Result<()>;
 
     // === Performance Optimization ===
 
@@ -354,6 +360,7 @@ impl GenericKeyboard {
     }
 }
 
+#[async_trait]
 impl Keyboard for GenericKeyboard {
     fn set_color(&mut self, color: Color) -> Result<()> {
         // Use internal buffer to avoid allocation
@@ -539,22 +546,22 @@ impl Keyboard for GenericKeyboard {
         self.zone_mapping.as_ref()
     }
 
-    fn set_zone_effect(&mut self, effect: ZoneEffect) -> Result<()> {
+    async fn set_zone_effect(&mut self, effect: ZoneEffect) -> Result<()> {
         // Set the effect in the fallback system for time-based effects
         self.zone_fallback.set_current_effect(effect.clone());
 
         // Apply the effect immediately
         let colors = effect.compute_colors(self.zone_count, 0.0);
-        self.set_zone_colors_with_retry(&colors, 3)
+        self.set_zone_colors_with_retry(&colors, 3).await
     }
 
-    fn simulate_per_key_with_zones(&mut self, key_colors: &[(KeyId, Color)]) -> Result<()> {
+    async fn simulate_per_key_with_zones(&mut self, key_colors: &[(KeyId, Color)]) -> Result<()> {
         // Use the zone fallback system to convert per-key colors to zone colors
         if let Some(zone_colors) = self
             .zone_fallback
             .simulate_per_key_effect(self.info.product_id, key_colors)
         {
-            self.set_zone_colors_with_retry(&zone_colors, 3)
+            self.set_zone_colors_with_retry(&zone_colors, 3).await
         } else {
             // Fallback to single color if no zone mapping available
             if !key_colors.is_empty() {
@@ -568,7 +575,11 @@ impl Keyboard for GenericKeyboard {
         }
     }
 
-    fn set_zone_colors_with_retry(&mut self, colors: &[Color], max_retries: usize) -> Result<()> {
+    async fn set_zone_colors_with_retry(
+        &mut self,
+        colors: &[Color],
+        max_retries: usize,
+    ) -> Result<()> {
         let mut last_error = None;
 
         for attempt in 0..max_retries {
@@ -588,7 +599,7 @@ impl Keyboard for GenericKeyboard {
                             last_error
                         );
                         // Small delay before retry
-                        std::thread::sleep(std::time::Duration::from_millis(50));
+                        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
                     }
                 }
             }
@@ -605,7 +616,7 @@ impl Keyboard for GenericKeyboard {
         }
     }
 
-    fn test_zone_reliability(&mut self) -> Result<Vec<bool>> {
+    async fn test_zone_reliability(&mut self) -> Result<Vec<bool>> {
         let mut results = Vec::new();
 
         // Test each zone individually
@@ -621,7 +632,7 @@ impl Keyboard for GenericKeyboard {
             }
 
             // Small delay between tests
-            std::thread::sleep(std::time::Duration::from_millis(100));
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
         }
 
         // Reset to all black after testing
@@ -642,7 +653,7 @@ impl Keyboard for GenericKeyboard {
         self.per_key_controller.is_some()
     }
 
-    fn set_per_key_effect(&mut self, effect: PerKeyEffect) -> Result<()> {
+    async fn set_per_key_effect(&mut self, effect: PerKeyEffect) -> Result<()> {
         let key_colors = if let Some(ref mut controller) = self.per_key_controller {
             controller.set_effect(effect.clone());
 
@@ -657,7 +668,7 @@ impl Keyboard for GenericKeyboard {
             self.apply()
         } else {
             // Fallback: convert to zone-based effect if no per-key support
-            self.convert_per_key_to_zones(&effect)
+            self.convert_per_key_to_zones(&effect).await
         }
     }
 
@@ -665,7 +676,7 @@ impl Keyboard for GenericKeyboard {
         self.per_key_controller.as_ref().map(|c| c.effect())
     }
 
-    fn trigger_key_reactive(&mut self, keys: &[KeyId], duration: f32) -> Result<()> {
+    async fn trigger_key_reactive(&mut self, keys: &[KeyId], duration: f32) -> Result<()> {
         let key_colors = if let Some(ref mut controller) = self.per_key_controller {
             controller.trigger_reactive(keys, duration);
 
@@ -685,13 +696,14 @@ impl Keyboard for GenericKeyboard {
                 self.simulate_per_key_with_zones(
                     &keys.iter().map(|&k| (k, Color::WHITE)).collect::<Vec<_>>(),
                 )
+                .await
             } else {
                 Ok(())
             }
         }
     }
 
-    fn apply_per_key_effect_with_brightness(&mut self, brightness: f32) -> Result<()> {
+    async fn apply_per_key_effect_with_brightness(&mut self, brightness: f32) -> Result<()> {
         let key_colors = if let Some(ref mut controller) = self.per_key_controller {
             controller.set_brightness(brightness.clamp(0.0, 1.0));
 
@@ -711,7 +723,7 @@ impl Keyboard for GenericKeyboard {
         }
     }
 
-    fn convert_per_key_to_zones(&mut self, effect: &PerKeyEffect) -> Result<()> {
+    async fn convert_per_key_to_zones(&mut self, effect: &PerKeyEffect) -> Result<()> {
         // Convert per-key effect to zone-based effect
         let zone_effect = match effect {
             PerKeyEffect::Static { color } => ZoneEffect::Solid(*color),
@@ -805,7 +817,7 @@ impl Keyboard for GenericKeyboard {
             _ => ZoneEffect::Solid(Color::WHITE),
         };
 
-        self.set_zone_effect(zone_effect)
+        self.set_zone_effect(zone_effect).await
     }
 
     // === Performance Optimization Implementation ===

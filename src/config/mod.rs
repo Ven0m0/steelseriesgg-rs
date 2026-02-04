@@ -120,6 +120,23 @@ impl Config {
         Self::config_dir().map(|dir| dir.join("config.toml"))
     }
 
+    /// Load configuration from file asynchronously, or return default if not found.
+    pub async fn load_async() -> Result<Self> {
+        let path = match Self::config_path() {
+            Some(p) => p,
+            None => return Ok(Self::default()),
+        };
+
+        match tokio::fs::read_to_string(&path).await {
+            Ok(content) => {
+                let config: Config = toml::from_str(&content)?;
+                Ok(config)
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Self::default()),
+            Err(e) => Err(e.into()),
+        }
+    }
+
     /// Load configuration from file, or return default if not found.
     pub fn load() -> Result<Self> {
         let path = match Self::config_path() {
