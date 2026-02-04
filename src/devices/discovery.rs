@@ -4,9 +4,6 @@ use hidapi::HidApi;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::{RwLock, mpsc};
-use tracing::{debug, info, warn};
-
 use super::headsets::{GenericHeadset, Headset};
 use super::hid_reports::ConnectionHealth;
 use super::keyboards::{GenericKeyboard, Keyboard};
