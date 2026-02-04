@@ -841,7 +841,7 @@ impl RgbValidator {
     }
 
     /// Test zone-based RGB effects.
-    async fn test_zone_rgb_effects(&self, _keyboard: &mut dyn Keyboard) -> ValidationResult {
+    fn test_zone_rgb_effects(&self, _keyboard: &mut dyn Keyboard) -> ValidationResult {
         let start = Instant::now();
         let test_name = "Zone RGB Effects".to_string();
 
