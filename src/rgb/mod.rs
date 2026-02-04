@@ -563,6 +563,11 @@ pub struct PerKeyEffectEngine {
 }
 
 impl PerKeyEffectEngine {
+    /// Get the current cached colors map.
+    pub fn get_cached_colors(&self) -> &HashMap<KeyId, Color> {
+        &self.cached_key_colors
+    }
+
     /// Create a new per-key effect engine.
     pub fn new(effect: PerKeyEffect, key_mapping: KeyMapping) -> Self {
         Self {
@@ -665,7 +670,7 @@ impl PerKeyEffectEngine {
                     &self.reactive_state,
                     elapsed_secs,
                 );
-                new_colors.insert(key, color);
+                new_colors.insert(*key, color);
             }
             self.cached_key_colors = new_colors;
         } else {
@@ -1046,11 +1051,17 @@ impl PerKeyRgbController {
                 }
             } else {
                 // Cache miss - compute and cache
-                let computed_map = engine.compute();
+
+                // 1. Force computation/update of internal cache
+                // We ignore the return value to drop the mutable borrow immediately
+                engine.compute();
+
                 let computation_time = start_time.elapsed();
 
-                // Now safe to borrow keys immutably
+                // 2. Now safe to borrow keys and cache immutably together
                 let keys = engine.key_mapping.get_all_keys();
+                let computed_map = engine.get_cached_colors(); // New getter
+
                 let mut colors_for_cache = Vec::with_capacity(keys.len());
 
                 for &key in keys {
@@ -1067,7 +1078,12 @@ impl PerKeyRgbController {
             }
         } else {
             // No performance optimizations
-            let computed_map = engine.compute();
+
+            // 1. Force computation
+            engine.compute();
+
+            // 2. Borrow immutably
+            let computed_map = engine.get_cached_colors();
             let keys = engine.key_mapping.get_all_keys();
 
             for &key in keys {

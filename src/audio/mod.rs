@@ -16,6 +16,10 @@ pub mod sonar;
 
 use serde::{Deserialize, Serialize};
 
+use std::collections::HashMap;
+use crate::Error;
+
+
 #[cfg(feature = "audio")]
 use pulse::PulseHandler;
 #[cfg(feature = "sonar")]
