@@ -7,6 +7,7 @@ use super::key_mapping::{KeyAddress, KeyId, KeyMapping};
 use crate::rgb::Color;
 use crate::{Error, Result};
 use serde::{Deserialize, Serialize};
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt;
 
@@ -97,18 +98,18 @@ pub trait HidCommand {
 
 /// RGB zone control command.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct RgbZoneCommand {
+pub struct RgbZoneCommand<'a> {
     /// Zone colors (up to MAX_RGB_ZONES)
-    pub colors: Vec<Color>,
+    pub colors: Cow<'a, [Color]>,
     /// Zone selector (0xFF for all zones)
     pub zone_selector: u8,
 }
 
-impl RgbZoneCommand {
+impl<'a> RgbZoneCommand<'a> {
     /// Create a new RGB zone command for all zones.
-    pub fn new_all_zones(colors: Vec<Color>) -> Self {
+    pub fn new_all_zones(colors: &'a [Color]) -> Self {
         Self {
-            colors,
+            colors: Cow::Borrowed(colors),
             zone_selector: 0xFF,
         }
     }
@@ -116,7 +117,7 @@ impl RgbZoneCommand {
     /// Create a new RGB zone command with a single color for all zones.
     pub fn new_single_color(color: Color, zone_count: usize) -> Self {
         Self {
-            colors: vec![color; zone_count],
+            colors: Cow::Owned(vec![color; zone_count]),
             zone_selector: 0xFF,
         }
     }
@@ -129,13 +130,13 @@ impl RgbZoneCommand {
         }
 
         Self {
-            colors,
+            colors: Cow::Owned(colors),
             zone_selector: zone_index,
         }
     }
 }
 
-impl HidCommand for RgbZoneCommand {
+impl<'a> HidCommand for RgbZoneCommand<'a> {
     fn command_code(&self) -> CommandCode {
         CommandCode::RgbControl
     }
@@ -1424,14 +1425,14 @@ mod tests {
 
         // Empty colors should fail
         let cmd = RgbZoneCommand {
-            colors: vec![],
+            colors: vec![].into(),
             zone_selector: 0xFF,
         };
         assert!(cmd.validate().is_err());
 
         // Too many colors should fail
         let cmd = RgbZoneCommand {
-            colors: vec![Color::RED; MAX_RGB_ZONES + 1],
+            colors: vec![Color::RED; MAX_RGB_ZONES + 1].into(),
             zone_selector: 0xFF,
         };
         assert!(cmd.validate().is_err());
