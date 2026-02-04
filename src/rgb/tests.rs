@@ -1,6 +1,8 @@
 //! Tests for RGB color and effect engine.
 
 use super::*;
+use crate::devices::key_mapping::KeyMappingDatabase;
+use crate::devices::product_ids;
 
 #[test]
 fn test_color_from_hex() {
@@ -177,5 +179,31 @@ fn test_effect_engine_caching() {
     assert_eq!(colors.len(), 5);
     for color in colors {
         assert_eq!(*color, Color::RED);
+    }
+}
+
+#[test]
+fn test_per_key_performance_benchmark() {
+    let db = KeyMappingDatabase::new();
+    if let Some(mapping) = db.get_mapping(product_ids::APEX_PRO_TKL_2023) {
+        let mut controller = PerKeyRgbController::new(mapping.clone());
+
+        // Set a complex effect
+        controller.set_effect(PerKeyEffect::Wave {
+            colors: vec![Color::RED, Color::BLUE],
+            speed: 1.0,
+            direction: KeyWaveDirection::LeftToRight,
+        });
+
+        let start = std::time::Instant::now();
+        let iterations = 10000;
+
+        for _ in 0..iterations {
+            let _ = controller.compute_key_colors();
+        }
+
+        let elapsed = start.elapsed();
+        println!("{} iterations took {:?}", iterations, elapsed);
+        println!("Average time per iteration: {:?}", elapsed / iterations);
     }
 }

@@ -306,6 +306,8 @@ pub struct KeyMapping {
     pub name: String,
     /// Key ID to HID address mapping
     pub key_map: HashMap<KeyId, KeyAddress>,
+    /// Cached list of keys for stable iteration without allocation
+    pub cached_keys: Vec<KeyId>,
     /// Matrix dimensions
     pub matrix_rows: u8,
     pub matrix_cols: u8,
@@ -327,6 +329,7 @@ impl KeyMapping {
             layout,
             name,
             key_map: HashMap::new(),
+            cached_keys: Vec::new(),
             matrix_rows,
             matrix_cols,
             total_keys: 0,
@@ -335,7 +338,9 @@ impl KeyMapping {
 
     /// Add a key mapping.
     pub fn add_key(&mut self, key_id: KeyId, address: KeyAddress) {
-        self.key_map.insert(key_id, address);
+        if self.key_map.insert(key_id, address).is_none() {
+            self.cached_keys.push(key_id);
+        }
         self.total_keys = self.key_map.len();
     }
 
@@ -345,8 +350,8 @@ impl KeyMapping {
     }
 
     /// Get all keys in this mapping.
-    pub fn get_all_keys(&self) -> Vec<KeyId> {
-        self.key_map.keys().copied().collect()
+    pub fn get_all_keys(&self) -> &[KeyId] {
+        &self.cached_keys
     }
 
     /// Check if a key is supported.

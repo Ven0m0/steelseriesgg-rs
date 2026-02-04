@@ -480,8 +480,8 @@ impl Keyboard for GenericKeyboard {
             // Set all keys in the mapping to black
             let black_keys: Vec<(KeyId, Color)> = mapping
                 .get_all_keys()
-                .into_iter()
-                .map(|key_id| (key_id, Color::BLACK))
+                .iter()
+                .map(|&key_id| (key_id, Color::BLACK))
                 .collect();
 
             if !black_keys.is_empty() {

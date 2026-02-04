@@ -659,7 +659,7 @@ impl PerKeyEffectEngine {
                 let mut color = Color::BLACK;
                 Self::apply_effect_static(
                     &self.effect,
-                    key,
+                    *key,
                     &mut color,
                     &self.key_mapping,
                     &self.reactive_state,
@@ -1008,76 +1008,75 @@ impl PerKeyRgbController {
     pub fn compute_key_colors(&mut self) -> &[(KeyId, Color)] {
         let start_time = std::time::Instant::now();
 
-        // Try to use cached computation if performance manager is enabled
-        let colors = if let Some(ref mut perf_mgr) = self.performance_manager {
-            let elapsed = self.engine.start_time.elapsed();
-            let key_count = self.engine.key_mapping.get_all_keys().len();
+        // Split borrows to avoid cloning the HashMap
+        let engine = &mut self.engine;
+        let perf_mgr_opt = &mut self.performance_manager;
+        let scaled_colors = &mut self.scaled_key_colors;
+        let brightness = self.brightness;
+
+        // Reset buffer
+        scaled_colors.clear();
+
+        // Helper to apply brightness
+        let apply_brightness = |color: Color, b: f32| -> Color {
+            if (b - 1.0).abs() < f32::EPSILON {
+                color
+            } else {
+                color.scale(b)
+            }
+        };
+
+        if let Some(perf_mgr) = perf_mgr_opt {
+            let elapsed = engine.start_time.elapsed();
+            // Get key count without holding a borrow to keys slice
+            let key_count = engine.key_mapping.total_keys;
 
             // Try cache first
             if let Some(cached_colors) =
-                perf_mgr.get_cached_effect(self.engine.effect(), elapsed, key_count)
+                perf_mgr.get_cached_effect(engine.effect(), elapsed, key_count)
             {
-                // Convert Vec<Color> back to HashMap<KeyId, Color> format
-                let mut color_map = HashMap::new();
-                for (i, key) in self
-                    .engine
-                    .key_mapping
-                    .get_all_keys()
-                    .into_iter()
-                    .enumerate()
-                {
+                // Cache hit - populate directly from cache
+                // keys and cached_colors should correspond 1:1 if cached_keys is stable
+                let keys = engine.key_mapping.get_all_keys();
+                for (i, &key) in keys.iter().enumerate() {
                     if i < cached_colors.len() {
-                        color_map.insert(key, cached_colors[i]);
+                        let color = cached_colors[i];
+                        scaled_colors.push((key, apply_brightness(color, brightness)));
                     }
                 }
-                color_map
             } else {
-                // Compute and cache
-                let computed_colors = self.engine.compute().clone();
+                // Cache miss - compute and cache
+                let computed_map = engine.compute();
                 let computation_time = start_time.elapsed();
 
-                // Extract colors for caching
-                let colors_vec: Vec<Color> = self
-                    .engine
-                    .key_mapping
-                    .get_all_keys()
-                    .into_iter()
-                    .map(|key| computed_colors.get(&key).copied().unwrap_or(Color::BLACK))
-                    .collect();
+                // Now safe to borrow keys immutably
+                let keys = engine.key_mapping.get_all_keys();
+                let mut colors_for_cache = Vec::with_capacity(keys.len());
+
+                for &key in keys {
+                    let color = computed_map.get(&key).copied().unwrap_or(Color::BLACK);
+                    colors_for_cache.push(color);
+                    scaled_colors.push((key, apply_brightness(color, brightness)));
+                }
 
                 // Cache the result
-                perf_mgr.cache_effect(self.engine.effect(), elapsed, colors_vec, computation_time);
+                perf_mgr.cache_effect(engine.effect(), elapsed, colors_for_cache, computation_time);
 
-                computed_colors
+                // Record timing
+                perf_mgr.record_timing(computation_time, Duration::from_micros(0));
             }
         } else {
-            // No performance optimizations, use regular computation
-            self.engine.compute().clone()
-        };
+            // No performance optimizations
+            let computed_map = engine.compute();
+            let keys = engine.key_mapping.get_all_keys();
 
-        let computation_time = start_time.elapsed();
-
-        // Record performance metrics
-        if let Some(ref mut perf_mgr) = self.performance_manager {
-            perf_mgr.record_timing(computation_time, Duration::from_micros(0)); // No HID time here
+            for &key in keys {
+                let color = computed_map.get(&key).copied().unwrap_or(Color::BLACK);
+                scaled_colors.push((key, apply_brightness(color, brightness)));
+            }
         }
 
-        // Reuse internal buffer to avoid allocations
-        self.scaled_key_colors.clear();
-
-        // Apply brightness scaling if needed
-        if (self.brightness - 1.0).abs() < f32::EPSILON {
-            self.scaled_key_colors
-                .extend(colors.iter().map(|(&key, &color)| (key, color)));
-        } else {
-            self.scaled_key_colors.extend(
-                colors
-                    .iter()
-                    .map(|(&key, &color)| (key, color.scale(self.brightness))),
-            );
-        }
-
-        &self.scaled_key_colors
+        scaled_colors
     }
 
     /// Get color for a specific key with brightness applied.
