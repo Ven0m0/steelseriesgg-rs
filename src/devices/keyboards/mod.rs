@@ -164,6 +164,7 @@ pub struct GenericKeyboard {
     zone_fallback: ZoneFallback,
     zone_mapping: Option<ZoneMap>,
     per_key_controller: Option<PerKeyRgbController>,
+    zone_color_buffer: Vec<Color>,
 }
 
 impl GenericKeyboard {
@@ -224,6 +225,7 @@ impl GenericKeyboard {
             zone_fallback,
             zone_mapping,
             per_key_controller,
+            zone_color_buffer: Vec::with_capacity(zone_count),
         }
     }
 
@@ -264,6 +266,11 @@ impl GenericKeyboard {
         }
 
         result
+    }
+    fn send_zone_buffer(&mut self) -> Result<()> {
+        let rgb_command = RgbZoneCommand::new_all_zones(&self.zone_color_buffer);
+        let data = self.report_builder.build_report(rgb_command)?;
+        self.send_report(&data)
     }
 }
 
@@ -349,28 +356,24 @@ impl GenericKeyboard {
 
 impl Keyboard for GenericKeyboard {
     fn set_color(&mut self, color: Color) -> Result<()> {
-        // Create color data for all zones
-        let colors = vec![color; self.zone_count];
-        self.set_zone_colors(&colors)
+        // Use internal buffer to avoid allocation
+        self.zone_color_buffer.clear();
+        self.zone_color_buffer.resize(self.zone_count, color);
+        self.send_zone_buffer()
     }
 
     fn set_zone_colors(&mut self, colors: &[Color]) -> Result<()> {
-        // Create structured RGB zone command
-        let mut zone_colors = colors
-            .iter()
-            .take(self.zone_count)
-            .copied()
-            .collect::<Vec<_>>();
+        // Reuse internal buffer to avoid allocation
+        self.zone_color_buffer.clear();
+        let len = colors.len().min(self.zone_count);
+        self.zone_color_buffer.extend_from_slice(&colors[..len]);
 
         // Pad remaining zones with black
-        while zone_colors.len() < self.zone_count {
-            zone_colors.push(Color::BLACK);
+        while self.zone_color_buffer.len() < self.zone_count {
+            self.zone_color_buffer.push(Color::BLACK);
         }
 
-        let rgb_command = RgbZoneCommand::new_all_zones(zone_colors);
-        let data = self.report_builder.build_report(rgb_command)?;
-
-        self.send_report(&data)
+        self.send_zone_buffer()
     }
 
     fn zone_count(&self) -> usize {
