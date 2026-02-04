@@ -667,16 +667,16 @@ async fn main() -> Result<()> {
 
         Commands::Rgb { action } => {
             let manager = DeviceManager::new()?;
-            cmd_rgb(&manager, action)?;
+            cmd_rgb(&manager, action).await?;
         }
 
         Commands::Actuation { action } => {
             let manager = DeviceManager::new()?;
-            cmd_actuation(&manager, action)?;
+            cmd_actuation(&manager, action).await?;
         }
 
         Commands::Profile { action } => {
-            cmd_profile(action)?;
+            cmd_profile(action).await?;
         }
 
         #[cfg(feature = "audio")]
@@ -690,7 +690,7 @@ async fn main() -> Result<()> {
         }
 
         Commands::Pollrate { action } => {
-            cmd_pollrate(action)?;
+            cmd_pollrate(action).await?;
         }
 
         Commands::Server { port } => {
@@ -704,12 +704,12 @@ async fn main() -> Result<()> {
             json,
         } => {
             let manager = DeviceManager::new()?;
-            cmd_validate(&manager, benchmark, timeout, output, json)?;
+            cmd_validate(&manager, benchmark, timeout, output, json).await?;
         }
 
         Commands::Performance { action } => {
             let manager = DeviceManager::new()?;
-            cmd_performance(&manager, action)?;
+            cmd_performance(&manager, action).await?;
         }
 
         Commands::BugReport {
@@ -740,7 +740,7 @@ async fn main() -> Result<()> {
             verbose,
         } => {
             let manager = DeviceManager::new()?;
-            cmd_test_device(&manager, &device, benchmark, verbose)?;
+            cmd_test_device(&manager, &device, benchmark, verbose).await?;
         }
 
         Commands::VerifyPerformance {
@@ -782,7 +782,7 @@ fn cmd_devices(manager: &DeviceManager) -> Result<()> {
     Ok(())
 }
 
-fn cmd_rgb(manager: &DeviceManager, action: RgbAction) -> Result<()> {
+async fn cmd_rgb(manager: &DeviceManager, action: RgbAction) -> Result<()> {
     // Find the first keyboard
     let keyboard_info = manager
         .first_device_of_type(DeviceType::Keyboard)
@@ -874,14 +874,14 @@ fn cmd_rgb(manager: &DeviceManager, action: RgbAction) -> Result<()> {
         }
 
         RgbAction::Perkey { action } => {
-            cmd_per_key_rgb(&mut keyboard, action)?;
+            cmd_per_key_rgb(&mut keyboard, action).await?;
         }
     }
 
     Ok(())
 }
 
-fn cmd_actuation(manager: &DeviceManager, action: ActuationAction) -> Result<()> {
+async fn cmd_actuation(manager: &DeviceManager, action: ActuationAction) -> Result<()> {
     // Find the first keyboard
     let keyboard_info = manager
         .first_device_of_type(DeviceType::Keyboard)
@@ -930,7 +930,7 @@ fn cmd_actuation(manager: &DeviceManager, action: ActuationAction) -> Result<()>
     Ok(())
 }
 
-fn cmd_per_key_rgb(keyboard: &mut Box<dyn Keyboard>, action: PerKeyAction) -> Result<()> {
+async fn cmd_per_key_rgb(keyboard: &mut Box<dyn Keyboard>, action: PerKeyAction) -> Result<()> {
     match action {
         PerKeyAction::SetKey { key, color } => {
             // Parse the key name to KeyId
@@ -1337,7 +1337,7 @@ fn parse_key_name(name: &str) -> Option<KeyId> {
     }
 }
 
-fn cmd_profile(action: ProfileAction) -> Result<()> {
+async fn cmd_profile(action: ProfileAction) -> Result<()> {
     let mut profile_manager = ProfileManager::new()?;
 
     match action {
@@ -1437,7 +1437,7 @@ fn cmd_profile(action: ProfileAction) -> Result<()> {
     Ok(())
 }
 
-fn cmd_pollrate(action: PollrateAction) -> Result<()> {
+async fn cmd_pollrate(action: PollrateAction) -> Result<()> {
     use steelseries_gg::pollrate::{DeviceType, PollRate, get_poll_rate, set_poll_rate};
 
     match action {
@@ -1702,7 +1702,7 @@ async fn cmd_sonar(action: SonarAction) -> Result<()> {
     Ok(())
 }
 
-fn cmd_validate(
+async fn cmd_validate(
     manager: &DeviceManager,
     benchmark: bool,
     timeout: u64,
@@ -1741,7 +1741,7 @@ fn cmd_validate(
 
         match manager.open_keyboard(device_info) {
             Ok(mut keyboard) => {
-                let report = validator.validate_keyboard(&mut *keyboard);
+                let report = validator.validate_keyboard(&mut *keyboard).await;
 
                 // Display summary
                 let status = if report.is_healthy() {
@@ -1878,7 +1878,7 @@ fn cmd_validate(
     Ok(())
 }
 
-fn cmd_performance(manager: &DeviceManager, action: PerformanceAction) -> Result<()> {
+async fn cmd_performance(manager: &DeviceManager, action: PerformanceAction) -> Result<()> {
     let keyboards: Vec<_> = manager
         .devices()
         .into_iter()
@@ -3228,7 +3228,7 @@ Final Summary:");
 }
 
 /// Run automated device tests to verify responsiveness.
-fn cmd_test_device(
+async fn cmd_test_device(
     manager: &DeviceManager,
     device: &str,
     benchmark: bool,
@@ -3261,7 +3261,7 @@ fn cmd_test_device(
     let report = match device_info.device_type {
         DeviceType::Keyboard => {
             let mut keyboard = manager.open_keyboard(device_info)?;
-            validator.validate_keyboard(&mut *keyboard)
+            validator.validate_keyboard(&mut *keyboard).await
         }
         _ => {
             return Err(Error::Other(format!(

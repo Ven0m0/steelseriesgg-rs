@@ -7,13 +7,11 @@ use std::time::{Duration, Instant};
 use tokio::sync::{RwLock, mpsc};
 use tracing::{debug, info, warn};
 
-use super::headsets::{GenericHeadset, Headset};
-use super::hid_reports::ConnectionHealth;
-use super::headsets::{GenericHeadset, Headset};
-use super::hid_reports::ConnectionHealth;
+use super::keyboards::{GenericKeyboard, Keyboard};
 use super::keyboards::apex::Apex3Tkl;
 use super::keyboards::apex_pro_tkl_2023::ApexProTkl2023;
-use super::keyboards::{GenericKeyboard, Keyboard};
+use super::headsets::{GenericHeadset, Headset};
+use super::hid_reports::ConnectionHealth;
 use super::product_ids::{APEX_3_TKL, APEX_PRO_TKL_2023};
 use super::{DeviceInfo, DeviceType, device_name_from_product_id, device_type_from_product_id};
 use crate::{Error, Result, STEELSERIES_VENDOR_ID};
