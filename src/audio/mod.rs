@@ -7,25 +7,32 @@
 
 #[cfg(feature = "audio")]
 pub mod pulse;
+#[cfg(feature = audio)]
+use pulse::PulseHandler;
+#[cfg(feature = audio)]
 #[cfg(feature = "sonar")]
 pub mod sonar;
 #[cfg(feature = "audio")]
 pub mod pulse;
+#[cfg(feature = audio)]
+use pulse::PulseHandler;
+#[cfg(feature = audio)]
 #[cfg(feature = "sonar")]
 pub mod sonar;
 
 use serde::{Deserialize, Serialize};
+use crate::{Error, Result};
 
 use std::collections::HashMap;
-use crate::Error;
+use crate::{Error, Result};
 
 
 #[cfg(feature = "audio")]
-use pulse::PulseHandler;
+
 #[cfg(feature = "sonar")]
 pub use sonar::{SonarChannel, SonarClient};
 #[cfg(feature = "audio")]
-use pulse::PulseHandler;
+
 #[cfg(feature = "sonar")]
 pub use sonar::{SonarChannel, SonarClient};
 
