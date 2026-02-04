@@ -10,6 +10,10 @@ pub mod pulse;
 #[cfg(feature = "sonar")]
 pub mod sonar;
 
+#[cfg(feature = "audio")]
+use crate::{Error, Result};
+#[cfg(feature = "audio")]
+use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 
 #[cfg(feature = "audio")]
