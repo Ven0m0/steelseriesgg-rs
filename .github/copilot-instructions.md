@@ -4,7 +4,7 @@ Comprehensive code generation guardrails for **steelseriesgg-rs** - an open-sour
 
 ## Project Context
 
-- **Language**: Rust 2021 (1.70+)
+- **Language**: Rust 2021 (Rust 1.82+ toolchain; rustfmt 2024 style_edition)
 - **Binary**: `ssgg` (CLI + daemon)
 - **Purpose**: RGB lighting control, GameSense server, audio management for SteelSeries devices
 - **Key Docs**: `CLAUDE.md` (comprehensive), `AGENTS.md` (quick ref), `README.md` (user docs)
