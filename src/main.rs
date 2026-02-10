@@ -502,21 +502,29 @@ enum PerformanceAction {
 }
 
 fn parse_color(s: &str) -> Option<Color> {
-    // Try named colors
-    let s_lower = s.to_ascii_lowercase();
-    match s_lower.as_str() {
-        "red" => return Some(Color::RED),
-        "green" => return Some(Color::GREEN),
-        "blue" => return Some(Color::BLUE),
-        "white" => return Some(Color::WHITE),
-        "black" | "off" => return Some(Color::BLACK),
-        "cyan" => return Some(Color::CYAN),
-        "magenta" => return Some(Color::MAGENTA),
-        "yellow" => return Some(Color::YELLOW),
-        "orange" => return Some(Color::ORANGE),
-        "purple" => return Some(Color::PURPLE),
-        "pink" => return Some(Color::PINK),
-        _ => {}
+    // Try named colors - use eq_ignore_ascii_case to avoid allocations
+    if s.eq_ignore_ascii_case("red") {
+        return Some(Color::RED);
+    } else if s.eq_ignore_ascii_case("green") {
+        return Some(Color::GREEN);
+    } else if s.eq_ignore_ascii_case("blue") {
+        return Some(Color::BLUE);
+    } else if s.eq_ignore_ascii_case("white") {
+        return Some(Color::WHITE);
+    } else if s.eq_ignore_ascii_case("black") || s.eq_ignore_ascii_case("off") {
+        return Some(Color::BLACK);
+    } else if s.eq_ignore_ascii_case("cyan") {
+        return Some(Color::CYAN);
+    } else if s.eq_ignore_ascii_case("magenta") {
+        return Some(Color::MAGENTA);
+    } else if s.eq_ignore_ascii_case("yellow") {
+        return Some(Color::YELLOW);
+    } else if s.eq_ignore_ascii_case("orange") {
+        return Some(Color::ORANGE);
+    } else if s.eq_ignore_ascii_case("purple") {
+        return Some(Color::PURPLE);
+    } else if s.eq_ignore_ascii_case("pink") {
+        return Some(Color::PINK);
     }
 
     // Try hex

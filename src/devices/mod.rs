@@ -115,18 +115,28 @@ pub trait Device: Send + Sync {
 
 /// Report cache entry for deduplication.
 #[derive(Debug, Clone)]
-struct CachedReport {
-    last_sent: Instant,
-}
-
 /// HID communication optimizer for reducing CPU usage.
 pub struct HidOptimizer {
-    /// Cache of recently sent reports to avoid duplicates
-    report_cache: Mutex<HashMap<Vec<u8>, CachedReport>>,
+    /// Cache of recently sent reports to avoid duplicates (hash -> timestamp)
+    report_cache: Mutex<HashMap<u64, Instant>>,
     /// Device connectivity cache
     connectivity_cache: Mutex<HashMap<String, (bool, Instant)>>,
     /// Cache timeout for reports (ms)
     cache_timeout: Duration,
+}
+
+/// Hash a HID report using FNV-1a algorithm for fast, collision-resistant hashing.
+#[inline]
+fn hash_report(data: &[u8]) -> u64 {
+    const FNV_OFFSET_BASIS: u64 = 0xcbf29ce484222325;
+    const FNV_PRIME: u64 = 0x100000001b3;
+
+    let mut hash = FNV_OFFSET_BASIS;
+    for &byte in data {
+        hash ^= byte as u64;
+        hash = hash.wrapping_mul(FNV_PRIME);
+    }
+    hash
 }
 
 impl Default for HidOptimizer {
@@ -147,28 +157,26 @@ impl HidOptimizer {
 
     /// Check if report is a duplicate and should be skipped.
     pub fn is_duplicate_report(&self, data: &[u8]) -> bool {
+        let hash = hash_report(data);
         let cache = self.report_cache.lock();
-        if let Some(cached) = cache.get(data) {
-            return cached.last_sent.elapsed() < self.cache_timeout;
+        if let Some(&timestamp) = cache.get(&hash) {
+            return timestamp.elapsed() < self.cache_timeout;
         }
         false
     }
 
     /// Mark report as sent in cache.
     pub fn mark_report_sent(&self, data: &[u8]) {
+        let hash = hash_report(data);
         let mut cache = self.report_cache.lock();
+        let now = Instant::now();
+
         // Clean old entries periodically
         if cache.len() > 100 {
-            let now = Instant::now();
-            cache.retain(|_, cached| now.duration_since(cached.last_sent) < self.cache_timeout * 2);
+            cache.retain(|_, &mut timestamp| now.duration_since(timestamp) < self.cache_timeout * 2);
         }
 
-        cache.insert(
-            data.to_vec(),
-            CachedReport {
-                last_sent: Instant::now(),
-            },
-        );
+        cache.insert(hash, now);
     }
 
     /// Check cached device connectivity status.

@@ -51,54 +51,6 @@ pub struct DeviceId {
     pub path: Option<String>,
 }
 
-fn effects_equal(a: &Effect, b: &Effect) -> bool {
-    use Effect::*;
-
-    match (a, b) {
-        (Static { color: c1 }, Static { color: c2 }) => c1 == c2,
-        (Breathing { color: c1, speed: s1 }, Breathing { color: c2, speed: s2 }) => c1 == c2 && s1 == s2,
-        (Spectrum { speed: s1 }, Spectrum { speed: s2 }) => s1 == s2,
-        (
-            Wave {
-                colors: c1,
-                speed: s1,
-                direction: d1,
-            },
-            Wave {
-                colors: c2,
-                speed: s2,
-                direction: d2,
-            },
-        ) => c1 == c2 && s1 == s2 && d1 == d2,
-        (
-            Reactive {
-                color: c1,
-                duration: d1,
-            },
-            Reactive {
-                color: c2,
-                duration: d2,
-            },
-        ) => c1 == c2 && d1 == d2,
-        (Gradient { start: s1, end: e1 }, Gradient { start: s2, end: e2 }) => s1 == s2 && e1 == e2,
-        (Custom { colors: c1 }, Custom { colors: c2 }) => c1 == c2,
-        (Off, Off) => true,
-        _ => false,
-    }
-}
-
-fn keyboard_states_equal(a: &KeyboardState, b: &KeyboardState) -> bool {
-    a.brightness == b.brightness && effects_equal(&a.effect, &b.effect)
-}
-
-fn headset_states_equal(a: &HeadsetState, b: &HeadsetState) -> bool {
-    a.sidetone == b.sidetone
-        && a.mic_volume == b.mic_volume
-        && a.mic_muted == b.mic_muted
-        && a.eq_preset == b.eq_preset
-        && a.auto_off_minutes == b.auto_off_minutes
-}
-
 impl DeviceId {
     /// Convert DeviceId to a stable string key for JSON serialization.
     ///
@@ -160,7 +112,7 @@ impl From<&DeviceInfo> for DeviceId {
 }
 
 /// Keyboard device state.
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 pub struct KeyboardState {
     /// Current RGB effect.
     pub effect: Effect,
@@ -180,7 +132,7 @@ impl Default for KeyboardState {
 }
 
 /// Headset device state.
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 pub struct HeadsetState {
     /// Sidetone level (0-100).
     pub sidetone: u8,
@@ -402,11 +354,6 @@ impl DeviceStateStore {
             .map(|(_, state)| state.clone())
     }
 
-    /// Get the state for a device (async version for compatibility).
-    pub async fn get_async(&self, id: &DeviceId) -> Option<DeviceState> {
-        self.get(id)
-    }
-
     /// Get or create device state.
     pub async fn get_or_create(&self, id: DeviceId) -> DeviceState {
         let mut states = self.states.write();
@@ -444,7 +391,7 @@ impl DeviceStateStore {
         if state
             .keyboard
             .as_ref()
-            .map(|existing| keyboard_states_equal(existing, &keyboard))
+            .map(|existing| existing == &keyboard)
             .unwrap_or(false)
         {
             return Ok(());
@@ -458,11 +405,6 @@ impl DeviceStateStore {
         Ok(())
     }
 
-    /// Update keyboard state for a device (async version for compatibility).
-    pub async fn update_keyboard_async(&self, id: DeviceId, keyboard: KeyboardState) -> Result<()> {
-        self.update_keyboard(id, keyboard)
-    }
-
     /// Update headset state for a device.
     pub fn update_headset(&self, id: DeviceId, headset: HeadsetState) -> Result<()> {
         let mut states = self.states.write();
@@ -472,7 +414,7 @@ impl DeviceStateStore {
         if state
             .headset
             .as_ref()
-            .map(|existing| headset_states_equal(existing, &headset))
+            .map(|existing| existing == &headset)
             .unwrap_or(false)
         {
             return Ok(());
@@ -485,11 +427,6 @@ impl DeviceStateStore {
         Ok(())
     }
 
-    /// Update headset state for a device (async version for compatibility).
-    pub async fn update_headset_async(&self, id: DeviceId, headset: HeadsetState) -> Result<()> {
-        self.update_headset(id, headset)
-    }
-
     /// Update keyboard effect for a device.
     pub fn update_keyboard_effect(&self, id: DeviceId, effect: Effect) -> Result<()> {
         let mut states = self.states.write();
@@ -497,7 +434,7 @@ impl DeviceStateStore {
         let state = states.entry(id).or_default();
 
         if let Some(ref mut keyboard) = state.keyboard {
-            if effects_equal(&keyboard.effect, &effect) {
+            if keyboard.effect == effect {
                 return Ok(());
             }
             keyboard.effect = effect;
@@ -511,11 +448,6 @@ impl DeviceStateStore {
         drop(states);
         self.mark_dirty();
         Ok(())
-    }
-
-    /// Update keyboard effect for a device (async version for compatibility).
-    pub async fn update_keyboard_effect_async(&self, id: DeviceId, effect: Effect) -> Result<()> {
-        self.update_keyboard_effect(id, effect)
     }
 
     /// Update keyboard brightness for a device.
@@ -541,20 +473,10 @@ impl DeviceStateStore {
         Ok(())
     }
 
-    /// Update keyboard brightness for a device (async version for compatibility).
-    pub async fn update_keyboard_brightness_async(&self, id: DeviceId, brightness: u8) -> Result<()> {
-        self.update_keyboard_brightness(id, brightness)
-    }
-
     /// List all devices with stored state.
     pub fn list_devices(&self) -> Vec<DeviceId> {
         let states = self.states.read();
         states.keys().cloned().collect()
-    }
-
-    /// List all devices with stored state (async version for compatibility).
-    pub async fn list_devices_async(&self) -> Vec<DeviceId> {
-        self.list_devices()
     }
 
     /// Shutdown the store and flush pending writes.

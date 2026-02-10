@@ -127,7 +127,7 @@ impl std::fmt::Display for Color {
 }
 
 /// RGB lighting effect types.
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 pub enum Effect {
     /// Static single color.
     Static { color: Color },
@@ -483,14 +483,9 @@ impl EffectEngine {
                         let next_index = (color_index + 1) % colors.len();
                         let blend_t = color_pos % 1.0;
 
-                        // Use unchecked indexing for performance (we know indices are valid)
-                        unsafe {
-                            self.cached_colors.push(Color::blend(
-                                *colors.get_unchecked(color_index),
-                                *colors.get_unchecked(next_index),
-                                blend_t,
-                            ));
-                        }
+                        // Safe indexing - indices are guaranteed valid by modulo operations
+                        self.cached_colors
+                            .push(Color::blend(colors[color_index], colors[next_index], blend_t));
                     }
                 }
             }

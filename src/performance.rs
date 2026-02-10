@@ -836,9 +836,9 @@ pub struct AdaptiveRefreshController {
     /// Maximum allowed refresh rate
     max_rate: f64,
     /// Recent computation times
-    computation_times: Vec<Duration>,
+    computation_times: VecDeque<Duration>,
     /// Recent HID communication times
-    hid_times: Vec<Duration>,
+    hid_times: VecDeque<Duration>,
     /// Number of adjustments made
     adjustments: u64,
     /// Last adjustment time
@@ -852,8 +852,8 @@ impl AdaptiveRefreshController {
             current_rate: initial_rate,
             min_rate,
             max_rate,
-            computation_times: Vec::with_capacity(10),
-            hid_times: Vec::with_capacity(10),
+            computation_times: VecDeque::with_capacity(10),
+            hid_times: VecDeque::with_capacity(10),
             adjustments: 0,
             last_adjustment: Instant::now(),
         }
@@ -866,10 +866,10 @@ impl AdaptiveRefreshController {
         self.hid_times.push(hid_time);
 
         if self.computation_times.len() > 10 {
-            self.computation_times.remove(0);
+            self.computation_times.pop_front();
         }
         if self.hid_times.len() > 10 {
-            self.hid_times.remove(0);
+            self.hid_times.pop_front();
         }
 
         // Don't adjust too frequently

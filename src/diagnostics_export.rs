@@ -164,7 +164,7 @@ async fn collect_device_states() -> Result<Vec<DeviceSnapshot>> {
     for device_info in devices {
         let device_id = DeviceId::from(device_info);
         let current_state = if let Ok(ref store) = state_store {
-            store.get_async(&device_id).await
+            store.get(&device_id)
         } else {
             None
         };

@@ -1007,18 +1007,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "nix"
-version = "0.31.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "225e7cfe711e0ba79a68baeddb2982723e4235247aefce1482f2f16c27865b66"
-dependencies = [
- "bitflags",
- "cfg-if",
- "cfg_aliases",
- "libc",
-]
-
-[[package]]
 name = "ntapi"
 version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1668,7 +1656,6 @@ dependencies = [
  "indicatif",
  "libc",
  "libpulse-binding",
- "nix",
  "parking_lot",
  "reqwest",
  "serde",
