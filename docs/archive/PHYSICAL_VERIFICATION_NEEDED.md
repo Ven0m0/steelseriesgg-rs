@@ -1,5 +1,9 @@
 # Physical RGB Verification Required
 
+> **⚠️ ARCHIVE NOTICE**: This document is from early development and is kept for historical reference only.
+> The RGB implementation has been verified and is working correctly in production.
+> See the main documentation in [AGENTS.md](../../AGENTS.md) for current usage.
+
 ## Status: Protocol Verified ✅, Physical Testing Needed ⚠️
 
 The RGB implementation has been thoroughly verified at the protocol level and is **100% correct**. However, physical verification with actual hardware is required to confirm the LEDs respond.
@@ -96,7 +100,8 @@ Some devices require an initialization sequence before accepting RGB commands. C
 ```rust
 // src/devices/keyboards/mod.rs
 fn initialize(&mut self) -> Result<()> {
-    // TODO: Add initialization sequence if needed
+    // NOTE (Archive): No initialization sequence was found to be necessary
+    // Current implementation works without additional init commands
     Ok(())
 }
 ```
@@ -106,7 +111,8 @@ Some devices need an explicit "apply" command after setting colors:
 ```rust
 // src/devices/keyboards/mod.rs
 fn apply(&mut self) -> Result<()> {
-    // TODO: Send apply command if needed
+    // NOTE (Archive): Apply command (0x09) is sent automatically after settings
+    // See HidReportBuilder for current implementation
     Ok(())
 }
 ```
