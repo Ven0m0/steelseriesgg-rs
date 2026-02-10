@@ -177,9 +177,7 @@ pub enum WaveDirection {
 
 impl Default for Effect {
     fn default() -> Self {
-        Effect::Static {
-            color: Color::WHITE,
-        }
+        Effect::Static { color: Color::WHITE }
     }
 }
 
@@ -284,9 +282,7 @@ pub enum BlendMode {
 
 impl Default for PerKeyEffect {
     fn default() -> Self {
-        PerKeyEffect::Static {
-            color: Color::WHITE,
-        }
+        PerKeyEffect::Static { color: Color::WHITE }
     }
 }
 
@@ -383,7 +379,7 @@ impl EffectEngine {
                 match complexity {
                     crate::performance::EffectComplexity::Simple => Duration::from_millis(33), // 30 FPS
                     crate::performance::EffectComplexity::Medium => Duration::from_millis(16), // 60 FPS
-                    crate::performance::EffectComplexity::High => Duration::from_millis(8), // 120 FPS
+                    crate::performance::EffectComplexity::High => Duration::from_millis(8),    // 120 FPS
                     crate::performance::EffectComplexity::Critical => Duration::from_millis(4), // 240 FPS
                 }
             }
@@ -392,8 +388,8 @@ impl EffectEngine {
                 let complexity = self.calculate_effect_complexity();
                 match complexity {
                     crate::performance::EffectComplexity::Simple => Duration::from_millis(12), // 83 FPS
-                    crate::performance::EffectComplexity::Medium => Duration::from_millis(8), // 120 FPS
-                    crate::performance::EffectComplexity::High => Duration::from_millis(4), // 240 FPS
+                    crate::performance::EffectComplexity::Medium => Duration::from_millis(8),  // 120 FPS
+                    crate::performance::EffectComplexity::High => Duration::from_millis(4),    // 240 FPS
                     crate::performance::EffectComplexity::Critical => Duration::from_millis(2), // 500 FPS
                 }
             }
@@ -436,8 +432,7 @@ impl EffectEngine {
         match &self.effect {
             Effect::Static { color } => {
                 // Use extend with repeat iterator for better performance than resize
-                self.cached_colors
-                    .extend(std::iter::repeat_n(*color, self.zone_count));
+                self.cached_colors.extend(std::iter::repeat_n(*color, self.zone_count));
             }
 
             Effect::Breathing { color, speed } => {
@@ -453,8 +448,7 @@ impl EffectEngine {
                 // Cycle through hue
                 let hue = (elapsed_secs * speed * 360.0) % 360.0;
                 let color = Color::from_hsv(hue, 1.0, 1.0);
-                self.cached_colors
-                    .extend(std::iter::repeat_n(color, self.zone_count));
+                self.cached_colors.extend(std::iter::repeat_n(color, self.zone_count));
             }
 
             Effect::Wave {
@@ -524,8 +518,7 @@ impl EffectEngine {
                 self.cached_colors.extend_from_slice(&colors[..copy_len]);
                 if self.zone_count > copy_len {
                     let remaining = self.zone_count - copy_len;
-                    self.cached_colors
-                        .extend(std::iter::repeat_n(Color::BLACK, remaining));
+                    self.cached_colors.extend(std::iter::repeat_n(Color::BLACK, remaining));
                 }
             }
 
@@ -805,11 +798,7 @@ impl PerKeyEffectEngine {
                 };
             }
 
-            PerKeyEffect::Gradient {
-                start,
-                end,
-                direction,
-            } => {
+            PerKeyEffect::Gradient { start, end, direction } => {
                 if let Some((x, y)) = Self::get_key_position_static(key_mapping, key) {
                     let t = match direction {
                         GradientDirection::Horizontal => x,
@@ -836,14 +825,8 @@ impl PerKeyEffectEngine {
                 blend_mode,
             } => {
                 if let Some(address) = key_mapping.get_key_address(key) {
-                    let row_color = row_colors
-                        .get(address.row as usize)
-                        .copied()
-                        .unwrap_or(Color::BLACK);
-                    let col_color = column_colors
-                        .get(address.col as usize)
-                        .copied()
-                        .unwrap_or(Color::BLACK);
+                    let row_color = row_colors.get(address.row as usize).copied().unwrap_or(Color::BLACK);
+                    let col_color = column_colors.get(address.col as usize).copied().unwrap_or(Color::BLACK);
 
                     *color = match blend_mode {
                         BlendMode::Average => Color::blend(row_color, col_color, 0.5),
@@ -878,9 +861,7 @@ impl PerKeyEffectEngine {
                     KeyId::W | KeyId::A | KeyId::S | KeyId::D => *wasd_color,
 
                     // Arrow keys
-                    KeyId::ArrowUp | KeyId::ArrowDown | KeyId::ArrowLeft | KeyId::ArrowRight => {
-                        *arrow_keys_color
-                    }
+                    KeyId::ArrowUp | KeyId::ArrowDown | KeyId::ArrowLeft | KeyId::ArrowRight => *arrow_keys_color,
 
                     // Function keys
                     KeyId::F1
@@ -1037,9 +1018,7 @@ impl PerKeyRgbController {
             let key_count = engine.key_mapping.total_keys;
 
             // Try cache first
-            if let Some(cached_colors) =
-                perf_mgr.get_cached_effect(engine.effect(), elapsed, key_count)
-            {
+            if let Some(cached_colors) = perf_mgr.get_cached_effect(engine.effect(), elapsed, key_count) {
                 // Cache hit - populate directly from cache
                 // keys and cached_colors should correspond 1:1 if cached_keys is stable
                 let keys = engine.key_mapping.get_all_keys();

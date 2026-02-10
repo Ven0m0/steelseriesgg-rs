@@ -589,20 +589,12 @@ fn parse_zone_number(zone: &str) -> Option<usize> {
 
     number_part.parse::<usize>().ok().and_then(|one_based| {
         // Convert 1-based to 0-based index
-        if one_based > 0 {
-            Some(one_based - 1)
-        } else {
-            None
-        }
+        if one_based > 0 { Some(one_based - 1) } else { None }
     })
 }
 
 /// Generate a comprehensive bug report with diagnostic information.
-async fn cmd_bug_report(
-    output: &str,
-    include_hid_logs: bool,
-    include_performance: bool,
-) -> Result<()> {
+async fn cmd_bug_report(output: &str, include_hid_logs: bool, include_performance: bool) -> Result<()> {
     use steelseries_gg::diagnostics_export::{collect_bug_report, export_bug_report};
 
     println!("Collecting diagnostic information...");
@@ -753,9 +745,7 @@ async fn main() -> Result<()> {
         }
 
         Commands::Fuzz { start, end, delay } => {
-            use steelseries_gg::devices::fuzz::{
-                FuzzParams, PayloadPattern, fuzz_keyboard_protocol,
-            };
+            use steelseries_gg::devices::fuzz::{FuzzParams, PayloadPattern, fuzz_keyboard_protocol};
 
             let manager = DeviceManager::new()?;
             let params = FuzzParams {
@@ -802,8 +792,7 @@ async fn cmd_rgb(manager: &DeviceManager, action: RgbAction) -> Result<()> {
 
     match action {
         RgbAction::Color { color } => {
-            let color = parse_color(&color)
-                .ok_or_else(|| Error::Other(format!("Invalid color: {}", color)))?;
+            let color = parse_color(&color).ok_or_else(|| Error::Other(format!("Invalid color: {}", color)))?;
 
             println!("Setting color to {}", color);
             keyboard.set_color(color)?;
@@ -850,9 +839,7 @@ async fn cmd_rgb(manager: &DeviceManager, action: RgbAction) -> Result<()> {
                     direction: WaveDirection::LeftToRight,
                 },
                 "off" => Effect::Off,
-                _ => Effect::Static {
-                    color: Color::WHITE,
-                },
+                _ => Effect::Static { color: Color::WHITE },
             };
 
             println!("Setting effect: {:?}", effect);
@@ -934,12 +921,10 @@ async fn cmd_per_key_rgb(keyboard: &mut Box<dyn Keyboard>, action: PerKeyAction)
     match action {
         PerKeyAction::SetKey { key, color } => {
             // Parse the key name to KeyId
-            let key_id = parse_key_name(&key)
-                .ok_or_else(|| Error::Other(format!("Unknown key: {}", key)))?;
+            let key_id = parse_key_name(&key).ok_or_else(|| Error::Other(format!("Unknown key: {}", key)))?;
 
             // Parse the color
-            let color = parse_color(&color)
-                .ok_or_else(|| Error::Other(format!("Invalid color: {}", color)))?;
+            let color = parse_color(&color).ok_or_else(|| Error::Other(format!("Invalid color: {}", color)))?;
 
             // Check if per-key RGB is supported
             if !keyboard.supports_per_key_rgb() {
@@ -969,11 +954,11 @@ async fn cmd_per_key_rgb(keyboard: &mut Box<dyn Keyboard>, action: PerKeyAction)
                 let key_name = parts[0].trim();
                 let color_name = parts[1].trim();
 
-                let key_id = parse_key_name(key_name)
-                    .ok_or_else(|| Error::Other(format!("Unknown key: {}", key_name)))?;
+                let key_id =
+                    parse_key_name(key_name).ok_or_else(|| Error::Other(format!("Unknown key: {}", key_name)))?;
 
-                let color = parse_color(color_name)
-                    .ok_or_else(|| Error::Other(format!("Invalid color: {}", color_name)))?;
+                let color =
+                    parse_color(color_name).ok_or_else(|| Error::Other(format!("Invalid color: {}", color_name)))?;
 
                 key_colors.push((key_id, color));
             }
@@ -991,10 +976,7 @@ async fn cmd_per_key_rgb(keyboard: &mut Box<dyn Keyboard>, action: PerKeyAction)
                 return Ok(());
             }
 
-            println!(
-                "Setting {} keys to their respective colors",
-                key_colors.len()
-            );
+            println!("Setting {} keys to their respective colors", key_colors.len());
             keyboard.set_key_colors(&key_colors)?;
             keyboard.apply()?;
             println!("Done!");
@@ -1007,8 +989,7 @@ async fn cmd_per_key_rgb(keyboard: &mut Box<dyn Keyboard>, action: PerKeyAction)
             cols,
             color,
         } => {
-            let color = parse_color(&color)
-                .ok_or_else(|| Error::Other(format!("Invalid color: {}", color)))?;
+            let color = parse_color(&color).ok_or_else(|| Error::Other(format!("Invalid color: {}", color)))?;
 
             println!(
                 "Setting region ({},{}) to ({},{}) to color {}",
@@ -1032,13 +1013,9 @@ async fn cmd_per_key_rgb(keyboard: &mut Box<dyn Keyboard>, action: PerKeyAction)
         }
 
         PerKeyAction::TestMatrix { row, col, color } => {
-            let color = parse_color(&color)
-                .ok_or_else(|| Error::Other(format!("Invalid color: {}", color)))?;
+            let color = parse_color(&color).ok_or_else(|| Error::Other(format!("Invalid color: {}", color)))?;
 
-            println!(
-                "Testing matrix position ({}, {}) with color {}",
-                row, col, color
-            );
+            println!("Testing matrix position ({}, {}) with color {}", row, col, color);
             let address = KeyAddress::new(row, col);
             keyboard.set_key_color_direct(address, color)?;
             keyboard.apply()?;
@@ -1079,23 +1056,13 @@ async fn cmd_per_key_rgb(keyboard: &mut Box<dyn Keyboard>, action: PerKeyAction)
             if let Some(mapping) = keyboard.get_key_mapping() {
                 println!("Key mapping for {}:", mapping.name);
                 println!("Layout: {:?}", mapping.layout);
-                println!(
-                    "Matrix dimensions: {}x{}",
-                    mapping.matrix_rows, mapping.matrix_cols
-                );
+                println!("Matrix dimensions: {}x{}", mapping.matrix_rows, mapping.matrix_cols);
 
                 let stats = mapping.get_stats();
                 println!("Statistics: {}", stats);
 
                 // Show some sample key mappings
-                let sample_keys = [
-                    KeyId::A,
-                    KeyId::S,
-                    KeyId::D,
-                    KeyId::Enter,
-                    KeyId::Space,
-                    KeyId::Escape,
-                ];
+                let sample_keys = [KeyId::A, KeyId::S, KeyId::D, KeyId::Enter, KeyId::Space, KeyId::Escape];
                 println!("\nSample key mappings:");
                 for key_id in sample_keys.iter() {
                     if let Some(address) = mapping.get_key_address(*key_id) {
@@ -1170,9 +1137,7 @@ fn test_rainbow_pattern(keyboard: &mut Box<dyn Keyboard>) -> Result<()> {
         }
     } else {
         // Fallback to zone-based rainbow
-        let zone_colors: Vec<Color> = (0..keyboard.zone_count())
-            .map(|i| colors[i % colors.len()])
-            .collect();
+        let zone_colors: Vec<Color> = (0..keyboard.zone_count()).map(|i| colors[i % colors.len()]).collect();
         keyboard.set_zone_colors(&zone_colors)?;
     }
 
@@ -1362,9 +1327,7 @@ async fn cmd_profile(action: ProfileAction) -> Result<()> {
 
                 // Apply keyboard settings if present
                 if let Some(ref keyboard_profile) = profile.keyboard {
-                    if let Some(keyboard_info) =
-                        device_manager.first_device_of_type(DeviceType::Keyboard)
-                    {
+                    if let Some(keyboard_info) = device_manager.first_device_of_type(DeviceType::Keyboard) {
                         let mut keyboard = device_manager.open_keyboard(keyboard_info)?;
                         let device_id = DeviceId::from(keyboard_info);
 
@@ -1446,10 +1409,7 @@ async fn cmd_pollrate(action: PollrateAction) -> Result<()> {
 
             // Warn about hardware requirements for high poll rates
             if poll_rate.requires_hardware_support() {
-                println!(
-                    "⚠ Warning: {} requires hardware support",
-                    poll_rate.description()
-                );
+                println!("⚠ Warning: {} requires hardware support", poll_rate.description());
                 println!("  Your mouse may not support this rate or may ignore the setting.");
                 println!();
             }
@@ -1470,10 +1430,7 @@ async fn cmd_pollrate(action: PollrateAction) -> Result<()> {
 
             // Warn about hardware requirements for high poll rates
             if poll_rate.requires_hardware_support() {
-                println!(
-                    "⚠ Warning: {} requires hardware support",
-                    poll_rate.description()
-                );
+                println!("⚠ Warning: {} requires hardware support", poll_rate.description());
                 println!("  Your keyboard may not support this rate or may ignore the setting.");
                 println!();
             }
@@ -1533,8 +1490,7 @@ fn cmd_audio(action: AudioAction) -> Result<()> {
         }
 
         AudioAction::Volume { channel, level } => {
-            let ch = parse_channel(&channel)
-                .ok_or_else(|| Error::Other(format!("Invalid channel: {}", channel)))?;
+            let ch = parse_channel(&channel).ok_or_else(|| Error::Other(format!("Invalid channel: {}", channel)))?;
 
             let volume = normalize_volume(level);
             mixer.set_volume(ch, volume)?;
@@ -1542,8 +1498,7 @@ fn cmd_audio(action: AudioAction) -> Result<()> {
         }
 
         AudioAction::Mute { channel, state } => {
-            let ch = parse_channel(&channel)
-                .ok_or_else(|| Error::Other(format!("Invalid channel: {}", channel)))?;
+            let ch = parse_channel(&channel).ok_or_else(|| Error::Other(format!("Invalid channel: {}", channel)))?;
 
             let muted = match state {
                 Some(s) => {
@@ -1758,10 +1713,7 @@ async fn cmd_validate(
                 );
 
                 if report.capabilities.per_key_rgb {
-                    println!(
-                        "   🎹 Per-key RGB: Supported ({} keys)",
-                        report.capabilities.key_count
-                    );
+                    println!("   🎹 Per-key RGB: Supported ({} keys)", report.capabilities.key_count);
                 } else {
                     println!("   🌈 Zone RGB: {} zones", report.capabilities.zone_count);
                 }
@@ -1769,8 +1721,7 @@ async fn cmd_validate(
                 if benchmark {
                     println!(
                         "   🚀 Performance: {:.1}ms avg, {:.0} fps effective",
-                        report.performance.avg_effect_compute_ms
-                            + report.performance.avg_hid_communication_ms,
+                        report.performance.avg_effect_compute_ms + report.performance.avg_hid_communication_ms,
                         report.performance.effective_refresh_rate
                     );
                 }
@@ -1802,9 +1753,8 @@ async fn cmd_validate(
 
         let export_content = if json {
             // Export as JSON
-            serde_json::to_string_pretty(&all_reports).map_err(|e| {
-                Error::DeviceCommunication(format!("JSON serialization failed: {}", e))
-            })?
+            serde_json::to_string_pretty(&all_reports)
+                .map_err(|e| Error::DeviceCommunication(format!("JSON serialization failed: {}", e)))?
         } else {
             // Export as human-readable text
             let mut content = String::new();
@@ -1813,15 +1763,8 @@ async fn cmd_validate(
             content.push_str(&format!("Total devices: {}\n\n", all_reports.len()));
 
             for (i, report) in all_reports.iter().enumerate() {
-                content.push_str(&format!(
-                    "## Device {} - {}\n",
-                    i + 1,
-                    report.device_info.name
-                ));
-                content.push_str(&format!(
-                    "- Product ID: 0x{:04x}\n",
-                    report.device_info.product_id
-                ));
+                content.push_str(&format!("## Device {} - {}\n", i + 1, report.device_info.name));
+                content.push_str(&format!("- Product ID: 0x{:04x}\n", report.device_info.product_id));
                 content.push_str(&format!("- Health Score: {:.1}%\n", report.health_score));
                 content.push_str(&format!(
                     "- Status: {}\n",
@@ -1835,10 +1778,7 @@ async fn cmd_validate(
                 content.push_str("\n### Test Results\n");
                 for result in &report.results {
                     let status = if result.passed { "✅" } else { "❌" };
-                    content.push_str(&format!(
-                        "- {} {} ({:.0}ms)\n",
-                        status, result.name, result.duration_ms
-                    ));
+                    content.push_str(&format!("- {} {} ({:.0}ms)\n", status, result.name, result.duration_ms));
 
                     if let Some(error) = &result.error {
                         content.push_str(&format!("  Error: {}\n", error));
@@ -1863,11 +1803,7 @@ async fn cmd_validate(
     let total_healthy = all_reports.iter().filter(|r| r.is_healthy()).count();
     println!("\n📊 Validation Summary:");
     println!("   Total devices: {}", all_reports.len());
-    println!(
-        "   Healthy devices: {}/{}",
-        total_healthy,
-        all_reports.len()
-    );
+    println!("   Healthy devices: {}/{}", total_healthy, all_reports.len());
 
     if total_healthy == all_reports.len() {
         println!("   🎉 All devices passed validation!");
@@ -1891,11 +1827,7 @@ async fn cmd_performance(manager: &DeviceManager, action: PerformanceAction) -> 
     }
 
     match action {
-        PerformanceAction::Stats {
-            monitor,
-            output,
-            json,
-        } => {
+        PerformanceAction::Stats { monitor, output, json } => {
             if let Some(interval_seconds) = monitor {
                 println!("🔄 Monitoring RGB performance (press Ctrl+C to stop)...");
                 loop {
@@ -1926,10 +1858,7 @@ async fn cmd_performance(manager: &DeviceManager, action: PerformanceAction) -> 
                     Ok(mut keyboard) => {
                         keyboard.set_performance_optimization(true);
                         enabled_count += 1;
-                        println!(
-                            "   ✅ {} - Performance optimizations enabled",
-                            device_info.name
-                        );
+                        println!("   ✅ {} - Performance optimizations enabled", device_info.name);
                     }
                     Err(e) => {
                         eprintln!("   ❌ {} - Failed to open: {}", device_info.name, e);
@@ -1953,10 +1882,7 @@ async fn cmd_performance(manager: &DeviceManager, action: PerformanceAction) -> 
                     Ok(mut keyboard) => {
                         keyboard.set_performance_optimization(false);
                         disabled_count += 1;
-                        println!(
-                            "   ✅ {} - Performance optimizations disabled",
-                            device_info.name
-                        );
+                        println!("   ✅ {} - Performance optimizations disabled", device_info.name);
                     }
                     Err(e) => {
                         eprintln!("   ❌ {} - Failed to open: {}", device_info.name, e);
@@ -1988,18 +1914,11 @@ async fn cmd_performance(manager: &DeviceManager, action: PerformanceAction) -> 
                 }
             }
 
-            println!(
-                "✅ Cleaned caches on {}/{} keyboards",
-                cleaned_count,
-                keyboards.len()
-            );
+            println!("✅ Cleaned caches on {}/{} keyboards", cleaned_count, keyboards.len());
         }
 
         PerformanceAction::Benchmark { duration, output } => {
-            println!(
-                "🏃 Running performance benchmark for {} seconds...",
-                duration
-            );
+            println!("🏃 Running performance benchmark for {} seconds...", duration);
 
             let start_time = Instant::now();
             let mut benchmark_results = HashMap::new();
@@ -2017,13 +1936,7 @@ async fn cmd_performance(manager: &DeviceManager, action: PerformanceAction) -> 
 
                         // Run rapid RGB operations for benchmark duration
                         while device_start.elapsed().as_secs() < duration {
-                            let colors = vec![
-                                Color::RED,
-                                Color::GREEN,
-                                Color::BLUE,
-                                Color::WHITE,
-                                Color::BLACK,
-                            ];
+                            let colors = vec![Color::RED, Color::GREEN, Color::BLUE, Color::WHITE, Color::BLACK];
 
                             for color in colors {
                                 let _ = keyboard.set_color(color);
@@ -2042,14 +1955,8 @@ async fn cmd_performance(manager: &DeviceManager, action: PerformanceAction) -> 
                         // Display performance stats if available
                         if let Some(stats) = keyboard.get_rgb_performance_stats() {
                             println!("      Cache hit rate: {:.1}%", stats.cache_hit_rate * 100.0);
-                            println!(
-                                "      Avg computation: {:.2}μs",
-                                stats.avg_computation_time_us
-                            );
-                            println!(
-                                "      Current refresh rate: {:.1} Hz",
-                                stats.current_refresh_rate
-                            );
+                            println!("      Avg computation: {:.2}μs", stats.avg_computation_time_us);
+                            println!("      Current refresh rate: {:.1} Hz", stats.current_refresh_rate);
                         }
                     }
                     Err(e) => {
@@ -2067,28 +1974,19 @@ async fn cmd_performance(manager: &DeviceManager, action: PerformanceAction) -> 
                 });
 
                 std::fs::write(&output_path, serde_json::to_string_pretty(&benchmark_data)?)
-                    .map_err(|e| {
-                        Error::DeviceCommunication(format!("Failed to write benchmark: {}", e))
-                    })?;
+                    .map_err(|e| Error::DeviceCommunication(format!("Failed to write benchmark: {}", e)))?;
 
                 println!("📄 Benchmark results exported to: {}", output_path);
             }
 
-            println!(
-                "✅ Benchmark completed in {:.1}s",
-                start_time.elapsed().as_secs_f64()
-            );
+            println!("✅ Benchmark completed in {:.1}s", start_time.elapsed().as_secs_f64());
         }
     }
 
     Ok(())
 }
 
-fn display_performance_stats(
-    manager: &DeviceManager,
-    keyboards: &[&DeviceInfo],
-    json: bool,
-) -> Result<()> {
+fn display_performance_stats(manager: &DeviceManager, keyboards: &[&DeviceInfo], json: bool) -> Result<()> {
     if json {
         let mut all_stats = HashMap::new();
 
@@ -2112,14 +2010,8 @@ fn display_performance_stats(
 
                     if let Some(stats) = keyboard.get_rgb_performance_stats() {
                         println!("   💾 Cache hit rate: {:.1}%", stats.cache_hit_rate * 100.0);
-                        println!(
-                            "   ⚡ Avg computation: {:.2}μs",
-                            stats.avg_computation_time_us
-                        );
-                        println!(
-                            "   🔄 Current refresh rate: {:.1} Hz",
-                            stats.current_refresh_rate
-                        );
+                        println!("   ⚡ Avg computation: {:.2}μs", stats.avg_computation_time_us);
+                        println!("   🔄 Current refresh rate: {:.1} Hz", stats.current_refresh_rate);
                         println!("   📈 Total computations: {}", stats.total_computations);
                         println!("   🔀 Operations batched: {}", stats.hid_operations_batched);
                         println!("   💽 Allocations saved: {}", stats.allocations_saved);
@@ -2174,10 +2066,7 @@ fn export_performance_stats(
     } else {
         let mut content = String::new();
         content.push_str("# RGB Performance Statistics Report\n\n");
-        content.push_str(&format!(
-            "Generated: {}\n\n",
-            chrono::Utc::now().to_rfc3339()
-        ));
+        content.push_str(&format!("Generated: {}\n\n", chrono::Utc::now().to_rfc3339()));
 
         for device_info in keyboards {
             if let Ok(keyboard) = manager.open_keyboard(device_info) {
@@ -2185,10 +2074,7 @@ fn export_performance_stats(
                 content.push_str(&format!("- Product ID: 0x{:04x}\n", device_info.product_id));
 
                 if let Some(stats) = keyboard.get_rgb_performance_stats() {
-                    content.push_str(&format!(
-                        "- Cache hit rate: {:.1}%\n",
-                        stats.cache_hit_rate * 100.0
-                    ));
+                    content.push_str(&format!("- Cache hit rate: {:.1}%\n", stats.cache_hit_rate * 100.0));
                     content.push_str(&format!(
                         "- Avg computation time: {:.2}μs\n",
                         stats.avg_computation_time_us
@@ -2197,18 +2083,9 @@ fn export_performance_stats(
                         "- Current refresh rate: {:.1} Hz\n",
                         stats.current_refresh_rate
                     ));
-                    content.push_str(&format!(
-                        "- Total computations: {}\n",
-                        stats.total_computations
-                    ));
-                    content.push_str(&format!(
-                        "- Operations batched: {}\n",
-                        stats.hid_operations_batched
-                    ));
-                    content.push_str(&format!(
-                        "- Allocations saved: {}\n",
-                        stats.allocations_saved
-                    ));
+                    content.push_str(&format!("- Total computations: {}\n", stats.total_computations));
+                    content.push_str(&format!("- Operations batched: {}\n", stats.hid_operations_batched));
+                    content.push_str(&format!("- Allocations saved: {}\n", stats.allocations_saved));
                     content.push_str(&format!(
                         "- Memory pool utilization: {:.1}%\n",
                         stats.memory_pool_utilization * 100.0
@@ -2271,18 +2148,11 @@ impl DaemonState {
         fingerprint: &DeviceFingerprint,
         info: &DeviceInfo,
     ) -> Result<()> {
-        let serial = info
-            .serial_number
-            .clone()
-            .unwrap_or_else(|| "unknown".to_string());
+        let serial = info.serial_number.clone().unwrap_or_else(|| "unknown".to_string());
 
         match info.device_type {
             DeviceType::Keyboard => {
-                info!(
-                    "Hot-plug: Adding keyboard: {} ({})",
-                    info.name,
-                    fingerprint.to_id()
-                );
+                info!("Hot-plug: Adding keyboard: {} ({})", info.name, fingerprint.to_id());
 
                 // Open the keyboard device
                 match device_manager.open_keyboard(info) {
@@ -2301,17 +2171,13 @@ impl DaemonState {
                         if let Some(device_state) = self.state_store.get(&device_id) {
                             if let Some(ref keyboard_state) = device_state.keyboard {
                                 rgb_controller.set_effect(keyboard_state.effect.clone());
-                                rgb_controller
-                                    .set_brightness(keyboard_state.brightness as f32 / 100.0);
+                                rgb_controller.set_brightness(keyboard_state.brightness as f32 / 100.0);
 
                                 // Apply the restored effect if it's static
                                 match &keyboard_state.effect {
                                     Effect::Static { color } => {
                                         if let Err(e) = keyboard.set_color(*color) {
-                                            warn!(
-                                                "Failed to apply restored color to {}: {}",
-                                                info.name, e
-                                            );
+                                            warn!("Failed to apply restored color to {}: {}", info.name, e);
                                         }
                                     }
                                     Effect::Off => {
@@ -2337,24 +2203,17 @@ impl DaemonState {
                             if let Some(default_profile) = profile_manager.get("default") {
                                 if let Some(ref keyboard_profile) = default_profile.keyboard {
                                     rgb_controller.set_effect(keyboard_profile.effect.clone());
-                                    rgb_controller
-                                        .set_brightness(keyboard_profile.brightness as f32 / 100.0);
+                                    rgb_controller.set_brightness(keyboard_profile.brightness as f32 / 100.0);
 
                                     match &keyboard_profile.effect {
                                         Effect::Static { color } => {
                                             if let Err(e) = keyboard.set_color(*color) {
-                                                warn!(
-                                                    "Failed to apply default profile color to {}: {}",
-                                                    info.name, e
-                                                );
+                                                warn!("Failed to apply default profile color to {}: {}", info.name, e);
                                             }
                                         }
                                         Effect::Off => {
                                             if let Err(e) = keyboard.set_color(Color::BLACK) {
-                                                warn!(
-                                                    "Failed to turn off {} (default profile): {}",
-                                                    info.name, e
-                                                );
+                                                warn!("Failed to turn off {} (default profile): {}", info.name, e);
                                             }
                                         }
                                         _ => {
@@ -2367,9 +2226,7 @@ impl DaemonState {
 
                                     info!(
                                         "Applied default profile to {}: brightness={}%, effect={:?}",
-                                        info.name,
-                                        keyboard_profile.brightness,
-                                        keyboard_profile.effect
+                                        info.name, keyboard_profile.brightness, keyboard_profile.effect
                                     );
                                 }
                             }
@@ -2380,10 +2237,7 @@ impl DaemonState {
                             .insert(serial.clone(), (keyboard, rgb_controller, info.clone()));
                         self.device_fingerprints.insert(serial, fingerprint.clone());
 
-                        info!(
-                            "Successfully added keyboard: {} (zones: {})",
-                            info.name, zone_count
-                        );
+                        info!("Successfully added keyboard: {} (zones: {})", info.name, zone_count);
                     }
                     Err(e) => {
                         warn!("Failed to open keyboard {}: {}", info.name, e);
@@ -2392,11 +2246,7 @@ impl DaemonState {
                 }
             }
             DeviceType::Headset => {
-                info!(
-                    "Hot-plug: Adding headset: {} ({})",
-                    info.name,
-                    fingerprint.to_id()
-                );
+                info!("Hot-plug: Adding headset: {} ({})", info.name, fingerprint.to_id());
 
                 match device_manager.open_headset(info) {
                     Ok(mut headset) => {
@@ -2407,8 +2257,7 @@ impl DaemonState {
                         }
 
                         // Store device information
-                        self.headsets
-                            .insert(serial.clone(), (headset, info.clone()));
+                        self.headsets.insert(serial.clone(), (headset, info.clone()));
                         self.device_fingerprints.insert(serial, fingerprint.clone());
 
                         info!("Successfully added headset: {}", info.name);
@@ -2447,11 +2296,7 @@ impl DaemonState {
             let mut removed = false;
 
             if let Some((_keyboard, rgb_controller, info)) = self.keyboards.remove(&serial) {
-                info!(
-                    "Hot-plug: Removing keyboard: {} ({})",
-                    info.name,
-                    fingerprint.to_id()
-                );
+                info!("Hot-plug: Removing keyboard: {} ({})", info.name, fingerprint.to_id());
 
                 // Save final state before removal
                 let device_id = DeviceId::from(&info);
@@ -2477,11 +2322,7 @@ impl DaemonState {
 
             if !removed {
                 if let Some((_headset, info)) = self.headsets.remove(&serial) {
-                    info!(
-                        "Hot-plug: Removing headset: {} ({})",
-                        info.name,
-                        fingerprint.to_id()
-                    );
+                    info!("Hot-plug: Removing headset: {} ({})", info.name, fingerprint.to_id());
 
                     removed = true;
                     let elapsed = std::time::Instant::now().duration_since(last_seen);
@@ -2502,10 +2343,7 @@ impl DaemonState {
                 );
             }
         } else {
-            debug!(
-                "Hot-plug: Could not find device to remove: {}",
-                fingerprint.to_id()
-            );
+            debug!("Hot-plug: Could not find device to remove: {}", fingerprint.to_id());
         }
 
         Ok(())
@@ -2518,11 +2356,7 @@ impl DaemonState {
 
     /// Get list of connected device names
     fn device_names(&self) -> Vec<String> {
-        let mut names: Vec<String> = self
-            .keyboards
-            .values()
-            .map(|(_, _, info)| info.name.clone())
-            .collect();
+        let mut names: Vec<String> = self.keyboards.values().map(|(_, _, info)| info.name.clone()).collect();
 
         names.extend(self.headsets.values().map(|(_, info)| info.name.clone()));
         names
@@ -2618,20 +2452,13 @@ async fn cmd_daemon(mut manager: DeviceManager) -> Result<()> {
         let mut state = daemon_state.write().await;
         for info in devices_info {
             let fingerprint = DeviceFingerprint::from_device_info(info);
-            if let Err(e) = state
-                .handle_device_added(&manager, &fingerprint, info)
-                .await
-            {
+            if let Err(e) = state.handle_device_added(&manager, &fingerprint, info).await {
                 warn!("Failed to add initial device {}: {}", info.name, e);
             }
         }
         let device_count = state.device_count();
         let device_names = state.device_names();
-        info!(
-            "Initialized {} device(s): {}",
-            device_count,
-            device_names.join(", ")
-        );
+        info!("Initialized {} device(s): {}", device_count, device_names.join(", "));
     }
 
     // Start GameSense server in background if enabled
@@ -2665,14 +2492,8 @@ async fn cmd_daemon(mut manager: DeviceManager) -> Result<()> {
                                 let zone_deferred = zone_owned.clone();
                                 tokio::spawn(async move {
                                     let mut state = state_clone.write().await;
-                                    state
-                                        .gamesense_overlays
-                                        .insert(zone_deferred.clone(), (color, expiry));
-                                    tracing::debug!(
-                                        "GameSense overlay (deferred): {} = {:?}",
-                                        zone_deferred,
-                                        color
-                                    );
+                                    state.gamesense_overlays.insert(zone_deferred.clone(), (color, expiry));
+                                    tracing::debug!("GameSense overlay (deferred): {} = {:?}", zone_deferred, color);
                                 });
                             }
                         })
@@ -2730,9 +2551,7 @@ async fn cmd_daemon(mut manager: DeviceManager) -> Result<()> {
                         let state = daemon_state.read().await;
                         for info in device_infos {
                             let device_id = DeviceId::from(&info);
-                            let _ = state
-                                .state_store
-                                .update_keyboard(device_id, keyboard_state.clone());
+                            let _ = state.state_store.update_keyboard(device_id, keyboard_state.clone());
                         }
                     }
                 }
@@ -2745,9 +2564,7 @@ async fn cmd_daemon(mut manager: DeviceManager) -> Result<()> {
     // Spawn RGB animation loop with adaptive timing and performance monitoring
     let daemon_state_anim = daemon_state.clone();
     let animation_task = tokio::spawn(async move {
-        use steelseries_gg::performance::{
-            PerformanceMonitor, calculate_effect_complexity, estimate_memory_usage,
-        };
+        use steelseries_gg::performance::{PerformanceMonitor, calculate_effect_complexity, estimate_memory_usage};
 
         // Initialize performance monitor for adaptive timing
         let mut performance_monitor = PerformanceMonitor::new();
@@ -2800,10 +2617,7 @@ async fn cmd_daemon(mut manager: DeviceManager) -> Result<()> {
                 // Log performance summary periodically
                 if frames_processed.is_multiple_of(300) {
                     // Every 5 seconds at 60fps
-                    tracing::debug!(
-                        "RGB Performance: {}",
-                        performance_monitor.performance_summary()
-                    );
+                    tracing::debug!("RGB Performance: {}", performance_monitor.performance_summary());
                 }
             }
 
@@ -2815,20 +2629,14 @@ async fn cmd_daemon(mut manager: DeviceManager) -> Result<()> {
 
                 // Clean up expired overlays while we have the lock
                 let now = std::time::Instant::now();
-                state
-                    .gamesense_overlays
-                    .retain(|_, (_, expiry)| *expiry > now);
+                state.gamesense_overlays.retain(|_, (_, expiry)| *expiry > now);
 
                 // Collect data needed for RGB computation to minimize lock time
                 let keyboards_data: Vec<_> = state
                     .keyboards
                     .iter_mut()
                     .map(|(serial, (_, controller, info))| {
-                        (
-                            serial.clone(),
-                            controller.compute_colors().to_vec(),
-                            info.clone(),
-                        )
+                        (serial.clone(), controller.compute_colors().to_vec(), info.clone())
                     })
                     .collect();
 
@@ -2979,11 +2787,7 @@ async fn cmd_daemon(mut manager: DeviceManager) -> Result<()> {
 }
 
 /// Show device status with optional live monitoring.
-async fn cmd_status(
-    _initial_manager: &DeviceManager,
-    device_filter: &str,
-    refresh_ms: u64,
-) -> Result<()> {
+async fn cmd_status(_initial_manager: &DeviceManager, device_filter: &str, refresh_ms: u64) -> Result<()> {
     #[derive(Tabled)]
     struct DeviceRow {
         #[tabled(rename = "Name")]
@@ -3021,9 +2825,8 @@ async fn cmd_status(
     if is_tty {
         // TTY mode: Real-time updates with progress bars
         let multi_progress = MultiProgress::new();
-        let spinner_style =
-            ProgressStyle::with_template("{spinner:.green} [{elapsed_precise}] {prefix}: {msg}")
-                .map_err(|e| Error::Other(format!("Template error: {}", e)))?;
+        let spinner_style = ProgressStyle::with_template("{spinner:.green} [{elapsed_precise}] {prefix}: {msg}")
+            .map_err(|e| Error::Other(format!("Template error: {}", e)))?;
 
         // Create progress bars for each device
         let mut progress_bars: Vec<(DeviceInfo, ProgressBar)> = Vec::new();
@@ -3054,10 +2857,7 @@ async fn cmd_status(
             return Ok(());
         }
 
-        println!(
-            "Monitoring {} device(s) - Press Ctrl+C to stop",
-            progress_bars.len()
-        );
+        println!("Monitoring {} device(s) - Press Ctrl+C to stop", progress_bars.len());
 
         // Create refresh interval
         let mut interval = tokio::time::interval(Duration::from_millis(refresh_ms));
@@ -3126,10 +2926,7 @@ async fn cmd_status(
             rows.push(DeviceRow {
                 name: device_info.name.clone(),
                 device_type: device_type_str.to_string(),
-                vid_pid: format!(
-                    "{:04X}:{:04X}",
-                    device_info.vendor_id, device_info.product_id
-                ),
+                vid_pid: format!("{:04X}:{:04X}", device_info.vendor_id, device_info.product_id),
                 path: device_info.path.clone(),
                 status: "Connected".to_string(),
             });
@@ -3228,12 +3025,7 @@ Final Summary:");
 }
 
 /// Run automated device tests to verify responsiveness.
-async fn cmd_test_device(
-    manager: &DeviceManager,
-    device: &str,
-    benchmark: bool,
-    verbose: bool,
-) -> Result<()> {
+async fn cmd_test_device(manager: &DeviceManager, device: &str, benchmark: bool, verbose: bool) -> Result<()> {
     use std::io::{self, IsTerminal};
     use steelseries_gg::validation::{RgbValidator, print_test_results};
 
@@ -3300,9 +3092,7 @@ async fn cmd_verify_performance(
         .keyboards()
         .first()
         .map(|&d| d.clone())
-        .ok_or_else(|| {
-            Error::Other("No keyboard device found. Connect a keyboard and try again.".to_string())
-        })?;
+        .ok_or_else(|| Error::Other("No keyboard device found. Connect a keyboard and try again.".to_string()))?;
 
     println!("\nMonitoring RGB performance for: {}", device_info.name);
     println!("Duration: {}s | Effect: {}\n", duration, effect_name);
@@ -3454,8 +3244,7 @@ async fn cmd_verify_performance(
         use std::fs;
         let json = serde_json::to_string_pretty(&metrics)
             .map_err(|e| Error::Other(format!("Failed to serialize metrics: {}", e)))?;
-        fs::write(&output_path, json)
-            .map_err(|e| Error::Other(format!("Failed to write {}: {}", output_path, e)))?;
+        fs::write(&output_path, json).map_err(|e| Error::Other(format!("Failed to write {}: {}", output_path, e)))?;
         println!("\nMetrics exported to: {}", output_path);
     }
 

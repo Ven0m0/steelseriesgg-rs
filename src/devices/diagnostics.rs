@@ -112,13 +112,7 @@ impl HidDiagnostics {
     }
 
     /// Record a HID operation for diagnostic analysis.
-    pub fn record_operation(
-        &mut self,
-        operation: HidOperation,
-        data: &[u8],
-        duration: Duration,
-        result: &Result<()>,
-    ) {
+    pub fn record_operation(&mut self, operation: HidOperation, data: &[u8], duration: Duration, result: &Result<()>) {
         if !self.enabled {
             return;
         }
@@ -177,12 +171,7 @@ impl HidDiagnostics {
     }
 
     /// Record a timed HID operation.
-    pub fn record_timed_operation<F, T>(
-        &mut self,
-        operation: HidOperation,
-        data: &[u8],
-        mut func: F,
-    ) -> Result<T>
+    pub fn record_timed_operation<F, T>(&mut self, operation: HidOperation, data: &[u8], mut func: F) -> Result<T>
     where
         F: FnMut() -> Result<T>,
     {
@@ -210,19 +199,13 @@ impl HidDiagnostics {
 
         // Check report length
         if data.len() != 65 {
-            issues.push(format!(
-                "Invalid report length: {} (expected 65)",
-                data.len()
-            ));
+            issues.push(format!("Invalid report length: {} (expected 65)", data.len()));
             valid = false;
         }
 
         // Check report ID (first byte should typically be 0x00)
         if !data.is_empty() && data[0] != 0x00 {
-            issues.push(format!(
-                "Unexpected report ID: 0x{:02x} (expected 0x00)",
-                data[0]
-            ));
+            issues.push(format!("Unexpected report ID: 0x{:02x} (expected 0x00)", data[0]));
         }
 
         // Check for valid command bytes (known SteelSeries commands)
@@ -270,15 +253,9 @@ impl HidDiagnostics {
                 .join(" ");
 
             if valid {
-                debug!(
-                    "HID report validation warnings: {:?} | Data: {}",
-                    issues, data_preview
-                );
+                debug!("HID report validation warnings: {:?} | Data: {}", issues, data_preview);
             } else {
-                warn!(
-                    "HID report validation failed: {:?} | Data: {}",
-                    issues, data_preview
-                );
+                warn!("HID report validation failed: {:?} | Data: {}", issues, data_preview);
             }
         }
 
@@ -300,9 +277,7 @@ impl HidDiagnostics {
         if data.len() < 2 {
             return 0;
         }
-        data.iter()
-            .take(data.len() - 1)
-            .fold(0u8, |acc, &x| acc ^ x)
+        data.iter().take(data.len() - 1).fold(0u8, |acc, &x| acc ^ x)
     }
 
     /// Validate checksum against common algorithms.
@@ -318,23 +293,15 @@ impl HidDiagnostics {
 
         // Heuristic: If last byte matches a calculated checksum, it's interesting.
         if last_byte == sum {
-            return Some(format!(
-                "Last byte (0x{:02x}) matches SUM checksum",
-                last_byte
-            ));
+            return Some(format!("Last byte (0x{:02x}) matches SUM checksum", last_byte));
         }
         if last_byte == xor {
-            return Some(format!(
-                "Last byte (0x{:02x}) matches XOR checksum",
-                last_byte
-            ));
+            return Some(format!("Last byte (0x{:02x}) matches XOR checksum", last_byte));
         }
 
         // If data is long and last byte is 0, but sum/xor are non-zero, it might be padding instead of checksum
         if last_byte == 0 && (sum != 0 || xor != 0) {
-            return Some(
-                "Last byte is 0x00 (likely padding), but non-zero checksums calculated".to_string(),
-            );
+            return Some("Last byte is 0x00 (likely padding), but non-zero checksums calculated".to_string());
         }
 
         None
@@ -421,8 +388,7 @@ fn average_duration(durations: &[Duration]) -> Duration {
 }
 
 /// Global diagnostic instance for easy access.
-static GLOBAL_DIAGNOSTICS: std::sync::OnceLock<parking_lot::Mutex<HidDiagnostics>> =
-    std::sync::OnceLock::new();
+static GLOBAL_DIAGNOSTICS: std::sync::OnceLock<parking_lot::Mutex<HidDiagnostics>> = std::sync::OnceLock::new();
 
 /// Initialize global diagnostics.
 pub fn init_global_diagnostics(enabled: bool) -> Result<()> {

@@ -166,8 +166,7 @@ impl PerformanceMonitor {
         // Calculate actual FPS every second
         let fps_window_duration = now.duration_since(self.fps_window_start);
         if fps_window_duration >= Duration::from_secs(1) {
-            self.metrics.actual_fps =
-                self.frames_in_window as f32 / fps_window_duration.as_secs_f32();
+            self.metrics.actual_fps = self.frames_in_window as f32 / fps_window_duration.as_secs_f32();
             self.frames_in_window = 0;
             self.fps_window_start = now;
         }
@@ -181,11 +180,9 @@ impl PerformanceMonitor {
             self.metrics.avg_computation_time_us = computation_time_us;
         } else {
             // Exponential moving average for smooth metrics
-            self.metrics.frame_time =
-                self.metrics.frame_time * (1.0 - self.ema_alpha) + frame_time_ms * self.ema_alpha;
-            self.metrics.avg_computation_time_us = self.metrics.avg_computation_time_us
-                * (1.0 - self.ema_alpha)
-                + computation_time_us * self.ema_alpha;
+            self.metrics.frame_time = self.metrics.frame_time * (1.0 - self.ema_alpha) + frame_time_ms * self.ema_alpha;
+            self.metrics.avg_computation_time_us =
+                self.metrics.avg_computation_time_us * (1.0 - self.ema_alpha) + computation_time_us * self.ema_alpha;
         }
 
         // Update target FPS based on current complexity
@@ -309,11 +306,9 @@ impl PerformanceMonitor {
             1.0
         };
 
-        let high_frame_time =
-            self.metrics.frame_time > self.current_complexity.frame_budget_ms() * 1.5;
+        let high_frame_time = self.metrics.frame_time > self.current_complexity.frame_budget_ms() * 1.5;
         let low_fps = fps_ratio < 0.8;
-        let high_cache_miss =
-            self.metrics.cache_hit_rate < 0.5 && (self.cache_hits + self.cache_misses) > 10;
+        let high_cache_miss = self.metrics.cache_hit_rate < 0.5 && (self.cache_hits + self.cache_misses) > 10;
 
         high_frame_time || low_fps || high_cache_miss
     }
@@ -584,12 +579,7 @@ impl EffectComputationCache {
     }
 
     /// Try to get cached effect computation.
-    pub fn get(
-        &mut self,
-        effect: &PerKeyEffect,
-        elapsed_time: Duration,
-        key_count: usize,
-    ) -> Option<Vec<Color>> {
+    pub fn get(&mut self, effect: &PerKeyEffect, elapsed_time: Duration, key_count: usize) -> Option<Vec<Color>> {
         let key = EffectCacheKey {
             effect_hash: self.hash_effect(effect),
             time_bucket: self.time_bucket(elapsed_time),
@@ -793,8 +783,7 @@ impl HidBatchProcessor {
     /// Check if any operation in the batch is urgent.
     fn has_urgent_operation(&self) -> bool {
         self.pending_operations.iter().any(|op| {
-            matches!(op.operation_type, HidOpType::Apply)
-                || op.timestamp.elapsed() > Duration::from_millis(50)
+            matches!(op.operation_type, HidOpType::Apply) || op.timestamp.elapsed() > Duration::from_millis(50)
         })
     }
 
@@ -890,8 +879,7 @@ impl AdaptiveRefreshController {
 
         // Calculate average total cycle time
         if self.computation_times.len() >= 5 {
-            let avg_computation = self.computation_times.iter().sum::<Duration>()
-                / self.computation_times.len() as u32;
+            let avg_computation = self.computation_times.iter().sum::<Duration>() / self.computation_times.len() as u32;
             let avg_hid = self.hid_times.iter().sum::<Duration>() / self.hid_times.len() as u32;
             let total_cycle_time = avg_computation + avg_hid;
 
@@ -958,12 +946,7 @@ impl PerformanceManager {
     }
 
     /// Create a performance manager with custom settings.
-    pub fn with_config(
-        pool_size: usize,
-        cache_size: usize,
-        batch_size: usize,
-        initial_refresh_rate: f64,
-    ) -> Self {
+    pub fn with_config(pool_size: usize, cache_size: usize, batch_size: usize, initial_refresh_rate: f64) -> Self {
         Self {
             color_pool: ColorVectorPool::new(pool_size),
             effect_cache: EffectComputationCache::new(cache_size, Duration::from_secs(5)),
@@ -1001,16 +984,12 @@ impl PerformanceManager {
         colors: Vec<Color>,
         computation_time: Duration,
     ) {
-        self.effect_cache
-            .put(effect, elapsed_time, colors, computation_time);
+        self.effect_cache.put(effect, elapsed_time, colors, computation_time);
     }
 
     /// Add HID operation to batch.
     pub fn add_hid_operation(&mut self, data: Vec<u8>) -> Option<Vec<Vec<u8>>> {
-        if self
-            .hid_batcher
-            .add_operation(HidOpType::SetZoneColors, data)
-        {
+        if self.hid_batcher.add_operation(HidOpType::SetZoneColors, data) {
             Some(self.hid_batcher.process_batch())
         } else {
             None
@@ -1031,8 +1010,7 @@ impl PerformanceManager {
         let comp_us = computation_time.as_micros() as f64;
         let hid_us = hid_time.as_micros() as f64;
 
-        self.stats.avg_computation_time_us =
-            self.stats.avg_computation_time_us * (1.0 - alpha) + comp_us * alpha;
+        self.stats.avg_computation_time_us = self.stats.avg_computation_time_us * (1.0 - alpha) + comp_us * alpha;
         self.stats.avg_hid_time_us = self.stats.avg_hid_time_us * (1.0 - alpha) + hid_us * alpha;
 
         // Update other stats
@@ -1041,9 +1019,7 @@ impl PerformanceManager {
         self.stats.allocations_saved = self.color_pool.allocations_saved();
         self.stats.memory_pool_utilization = self.color_pool.get_utilization();
 
-        let new_rate = self
-            .refresh_controller
-            .record_timing(computation_time, hid_time);
+        let new_rate = self.refresh_controller.record_timing(computation_time, hid_time);
         if new_rate != self.stats.current_refresh_rate {
             self.stats.refresh_rate_adjustments += 1;
             self.stats.current_refresh_rate = new_rate;

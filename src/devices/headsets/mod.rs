@@ -57,9 +57,10 @@ impl GenericHeadset {
 
     /// Send a HID report to the headset.
     fn send_report(&mut self, data: &[u8]) -> Result<()> {
-        let device = self.device.as_ref().ok_or(Error::DeviceCommunication(
-            "Device not connected".to_string(),
-        ))?;
+        let device = self
+            .device
+            .as_ref()
+            .ok_or(Error::DeviceCommunication("Device not connected".to_string()))?;
         let device = device.lock();
 
         // Headsets typically use 64-byte reports with no report ID prefix.
@@ -68,9 +69,10 @@ impl GenericHeadset {
 
     /// Receive a HID report from the headset.
     fn receive_report(&mut self, buf: &mut [u8]) -> Result<usize> {
-        let device = self.device.as_ref().ok_or(Error::DeviceCommunication(
-            "Device not connected".to_string(),
-        ))?;
+        let device = self
+            .device
+            .as_ref()
+            .ok_or(Error::DeviceCommunication("Device not connected".to_string()))?;
         let device = device.lock();
 
         let len = device.read_timeout(buf, 1000)?;

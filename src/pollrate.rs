@@ -84,12 +84,8 @@ impl PollRate {
             PollRate::Hz125 => "125 Hz (8ms) - Power saving".to_string(),
             PollRate::Hz500 => "500 Hz (2ms) - Standard".to_string(),
             PollRate::Hz1000 => "1000 Hz (1ms) - Gaming".to_string(),
-            PollRate::Hz2000 => {
-                "2000 Hz (0.5ms) - High-end gaming (requires hardware support)".to_string()
-            }
-            PollRate::Hz4000 => {
-                "4000 Hz (0.25ms) - Enthusiast (requires hardware support)".to_string()
-            }
+            PollRate::Hz2000 => "2000 Hz (0.5ms) - High-end gaming (requires hardware support)".to_string(),
+            PollRate::Hz4000 => "4000 Hz (0.25ms) - Enthusiast (requires hardware support)".to_string(),
         }
     }
 }

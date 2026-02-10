@@ -141,9 +141,6 @@ pub struct DeviceManager {
     hotplug_config: HotPlugConfig,
     /// Hot-plug event callback
     hotplug_callback: Option<Arc<HotPlugCallback>>,
-    /// Rate limiting for hot-plug events
-    #[allow(dead_code)]
-    last_event_time: Option<Instant>,
     /// Event debounce tracking
     pending_events: Arc<RwLock<HashMap<DeviceFingerprint, Instant>>>,
 }
@@ -164,7 +161,6 @@ impl DeviceManager {
             device_registry: Arc::new(RwLock::new(HashMap::new())),
             hotplug_config: config,
             hotplug_callback: None,
-            last_event_time: None,
             pending_events: Arc::new(RwLock::new(HashMap::new())),
         };
         manager.refresh()?;
@@ -213,11 +209,7 @@ impl DeviceManager {
             );
 
             // Cache the device path for fast lookup
-            let cache_key = (
-                device.vendor_id(),
-                device.product_id(),
-                device.interface_number(),
-            );
+            let cache_key = (device.vendor_id(), device.product_id(), device.interface_number());
             self.device_cache.insert(cache_key, path.clone());
 
             self.devices.insert(path, info);
@@ -234,10 +226,7 @@ impl DeviceManager {
 
     /// Get devices of a specific type.
     pub fn devices_by_type(&self, device_type: DeviceType) -> Vec<&DeviceInfo> {
-        self.devices
-            .values()
-            .filter(|d| d.device_type == device_type)
-            .collect()
+        self.devices.values().filter(|d| d.device_type == device_type).collect()
     }
 
     /// Get all keyboards.
@@ -569,8 +558,7 @@ impl DeviceManager {
         let now = Instant::now();
         let mut pending = pending_events.write().await;
 
-        pending
-            .retain(|_, &mut timestamp| now.duration_since(timestamp) < config.debounce_time * 2);
+        pending.retain(|_, &mut timestamp| now.duration_since(timestamp) < config.debounce_time * 2);
     }
 
     /// Update device registry when a device is added
@@ -626,10 +614,7 @@ impl DeviceManager {
     }
 
     /// Get registry entry for a specific device
-    pub async fn get_device_registry_entry(
-        &self,
-        fingerprint: &DeviceFingerprint,
-    ) -> Option<DeviceRegistryEntry> {
+    pub async fn get_device_registry_entry(&self, fingerprint: &DeviceFingerprint) -> Option<DeviceRegistryEntry> {
         let registry = self.device_registry.read().await;
         registry.get(&fingerprint.to_id()).cloned()
     }
@@ -650,15 +635,10 @@ pub fn print_device_summary(manager: &DeviceManager) {
     }
 
     // Group by (vendor_id, product_id, serial_number) - use pre-allocated HashMap
-    let mut grouped: HashMap<(u16, u16, Option<String>), Vec<DeviceInfo>> =
-        HashMap::with_capacity(devices.len());
+    let mut grouped: HashMap<(u16, u16, Option<String>), Vec<DeviceInfo>> = HashMap::with_capacity(devices.len());
 
     for device in devices {
-        let key = (
-            device.vendor_id,
-            device.product_id,
-            device.serial_number.clone(),
-        );
+        let key = (device.vendor_id, device.product_id, device.serial_number.clone());
         grouped.entry(key).or_default().push(device.clone());
     }
 

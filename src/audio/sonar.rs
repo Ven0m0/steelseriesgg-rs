@@ -146,9 +146,7 @@ impl SonarClient {
             .build()
             .map_err(|e| Error::Audio(format!("Failed to create HTTP client: {}", e)))?;
 
-        tracing::warn!(
-            "Sonar HTTP client accepts self-signed certificates (Sonar regenerates certs on restart)"
-        );
+        tracing::warn!("Sonar HTTP client accepts self-signed certificates (Sonar regenerates certs on restart)");
 
         Ok(client)
     }
@@ -216,19 +214,11 @@ impl SonarClient {
                 continue;
             }
 
-            let contents = fs::read_to_string(&path).map_err(|e| {
-                Error::Audio(format!(
-                    "Failed to read coreProps.json at {:?}: {}",
-                    path, e
-                ))
-            })?;
+            let contents = fs::read_to_string(&path)
+                .map_err(|e| Error::Audio(format!("Failed to read coreProps.json at {:?}: {}", path, e)))?;
 
-            let json: serde_json::Value = serde_json::from_str(&contents).map_err(|e| {
-                Error::Audio(format!(
-                    "Failed to parse coreProps.json at {:?}: {}",
-                    path, e
-                ))
-            })?;
+            let json: serde_json::Value = serde_json::from_str(&contents)
+                .map_err(|e| Error::Audio(format!("Failed to parse coreProps.json at {:?}: {}", path, e)))?;
 
             // Extract port from coreProps.json structure
             // Structure: { "ggEncryptedAddress": "https://127.0.0.1:PORT" }
@@ -246,9 +236,7 @@ impl SonarClient {
             }
         }
 
-        Err(Error::Audio(
-            "coreProps.json not found or invalid".to_string(),
-        ))
+        Err(Error::Audio("coreProps.json not found or invalid".to_string()))
     }
 
     /// Get platform-specific paths to coreProps.json.
@@ -314,9 +302,7 @@ impl SonarClient {
             }
         }
 
-        Err(Error::Audio(
-            "Sonar port not found in API response".to_string(),
-        ))
+        Err(Error::Audio("Sonar port not found in API response".to_string()))
     }
 
     /// Test if a port is the Sonar API port.
@@ -420,8 +406,7 @@ impl SonarClient {
 
     /// Set monitoring master volume (streamer mode).
     pub async fn set_monitoring_master_volume(&self, volume: f32) -> Result<()> {
-        self.set_volume("streamer/monitoring", "master", volume)
-            .await
+        self.set_volume("streamer/monitoring", "master", volume).await
     }
 
     /// Set monitoring game volume (streamer mode).
@@ -436,16 +421,12 @@ impl SonarClient {
 
     /// Set streaming master volume (streamer mode).
     pub async fn set_streaming_master_volume(&self, volume: f32) -> Result<()> {
-        self.set_volume("streamer/streaming", "master", volume)
-            .await
+        self.set_volume("streamer/streaming", "master", volume).await
     }
 
     /// Toggle stream redirection for a channel.
     pub async fn toggle_stream_redirection(&self, channel: &str, enabled: bool) -> Result<()> {
-        let url = format!(
-            "{}/streamRedirections/{}/toggle/{}",
-            self.base_url, channel, enabled
-        );
+        let url = format!("{}/streamRedirections/{}/toggle/{}", self.base_url, channel, enabled);
         self.put(&url).await
     }
 
@@ -461,11 +442,7 @@ impl SonarClient {
 
     /// Get volume for a specific channel (classic mode).
     pub async fn get_channel_volume(&self, channel: SonarChannel) -> Result<f32> {
-        let url = format!(
-            "{}/volumeSettings/classic/{}/volume",
-            self.base_url,
-            channel.as_str()
-        );
+        let url = format!("{}/volumeSettings/classic/{}/volume", self.base_url, channel.as_str());
         self.get(&url).await
     }
 
@@ -476,11 +453,7 @@ impl SonarClient {
 
     /// Get mute state for a specific channel (classic mode).
     pub async fn get_channel_mute(&self, channel: SonarChannel) -> Result<bool> {
-        let url = format!(
-            "{}/volumeSettings/classic/{}/mute",
-            self.base_url,
-            channel.as_str()
-        );
+        let url = format!("{}/volumeSettings/classic/{}/mute", self.base_url, channel.as_str());
         self.get(&url).await
     }
 
@@ -506,13 +479,8 @@ impl SonarClient {
     }
 
     /// Set volume for a specific channel (streamer monitoring).
-    pub async fn set_monitoring_channel_volume(
-        &self,
-        channel: SonarChannel,
-        volume: f32,
-    ) -> Result<()> {
-        self.set_volume("streamer/monitoring", channel.as_str(), volume)
-            .await
+    pub async fn set_monitoring_channel_volume(&self, channel: SonarChannel, volume: f32) -> Result<()> {
+        self.set_volume("streamer/monitoring", channel.as_str(), volume).await
     }
 
     /// Get volume for a specific channel (streamer streaming).
@@ -526,13 +494,8 @@ impl SonarClient {
     }
 
     /// Set volume for a specific channel (streamer streaming).
-    pub async fn set_streaming_channel_volume(
-        &self,
-        channel: SonarChannel,
-        volume: f32,
-    ) -> Result<()> {
-        self.set_volume("streamer/streaming", channel.as_str(), volume)
-            .await
+    pub async fn set_streaming_channel_volume(&self, channel: SonarChannel, volume: f32) -> Result<()> {
+        self.set_volume("streamer/streaming", channel.as_str(), volume).await
     }
 
     // ========================================================================
@@ -549,11 +512,7 @@ impl SonarClient {
 
         for attempt in 0..=MAX_RETRIES {
             if attempt > 0 {
-                tracing::debug!(
-                    "Retrying GET request (attempt {}/{})",
-                    attempt + 1,
-                    MAX_RETRIES + 1
-                );
+                tracing::debug!("Retrying GET request (attempt {}/{})", attempt + 1, MAX_RETRIES + 1);
                 tokio::time::sleep(Duration::from_millis(100 * attempt as u64)).await;
             }
 
@@ -598,11 +557,7 @@ impl SonarClient {
 
         for attempt in 0..=MAX_RETRIES {
             if attempt > 0 {
-                tracing::debug!(
-                    "Retrying PUT request (attempt {}/{})",
-                    attempt + 1,
-                    MAX_RETRIES + 1
-                );
+                tracing::debug!("Retrying PUT request (attempt {}/{})", attempt + 1, MAX_RETRIES + 1);
                 tokio::time::sleep(Duration::from_millis(100 * attempt as u64)).await;
             }
 

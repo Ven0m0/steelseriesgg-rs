@@ -249,10 +249,7 @@ async fn collect_hid_logs() -> Result<Option<Vec<String>>> {
 /// - System info collection uses spawn_blocking (CPU-intensive sysinfo operations)
 /// - Device state collection is async
 /// - File I/O for HID logs is async
-pub async fn collect_bug_report(
-    include_hid_logs: bool,
-    include_performance: bool,
-) -> Result<BugReport> {
+pub async fn collect_bug_report(include_hid_logs: bool, include_performance: bool) -> Result<BugReport> {
     debug!(
         "Collecting bug report (hid_logs={}, performance={})",
         include_hid_logs, include_performance

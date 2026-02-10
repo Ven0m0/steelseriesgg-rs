@@ -34,8 +34,7 @@ pub struct PulseHandler {
 
 impl PulseHandler {
     pub fn new() -> Result<Self> {
-        let mut mainloop =
-            Mainloop::new().ok_or_else(|| Error::Audio("Failed to create mainloop".to_string()))?;
+        let mut mainloop = Mainloop::new().ok_or_else(|| Error::Audio("Failed to create mainloop".to_string()))?;
         let mut context = Context::new(&mainloop, "SteelSeries GG")
             .ok_or_else(|| Error::Audio("Failed to create context".to_string()))?;
 
@@ -88,11 +87,7 @@ impl PulseHandler {
 
                     let input = SinkInput {
                         index: info.index,
-                        name: info
-                            .name
-                            .as_ref()
-                            .map(|s| s.to_string())
-                            .unwrap_or_default(),
+                        name: info.name.as_ref().map(|s| s.to_string()).unwrap_or_default(),
                         app_name,
                         media_role,
                         channel_map: info.channel_map,
@@ -152,9 +147,7 @@ impl PulseHandler {
         match rx.recv_timeout(std::time::Duration::from_secs(2)) {
             Ok(true) => Ok(()),
             Ok(false) => Err(Error::Audio("Failed to set sink input volume".to_string())),
-            Err(_) => Err(Error::Audio(
-                "Volume setting timed out or channel closed".to_string(),
-            )),
+            Err(_) => Err(Error::Audio("Volume setting timed out or channel closed".to_string())),
         }
     }
 
@@ -174,9 +167,7 @@ impl PulseHandler {
         match rx.recv_timeout(std::time::Duration::from_secs(2)) {
             Ok(true) => Ok(()),
             Ok(false) => Err(Error::Audio("Failed to set sink input mute".to_string())),
-            Err(_) => Err(Error::Audio(
-                "Mute setting timed out or channel closed".to_string(),
-            )),
+            Err(_) => Err(Error::Audio("Mute setting timed out or channel closed".to_string())),
         }
     }
 }

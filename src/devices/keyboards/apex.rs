@@ -165,16 +165,8 @@ impl Keyboard for Apex3Tkl {
         self.inner.clear_per_key_rgb()
     }
 
-    fn set_key_region(
-        &mut self,
-        start_row: u8,
-        start_col: u8,
-        rows: u8,
-        cols: u8,
-        color: Color,
-    ) -> Result<()> {
-        self.inner
-            .set_key_region(start_row, start_col, rows, cols, color)
+    fn set_key_region(&mut self, start_row: u8, start_col: u8, rows: u8, cols: u8, color: Color) -> Result<()> {
+        self.inner.set_key_region(start_row, start_col, rows, cols, color)
     }
 
     fn get_zone_mapping(&self) -> Option<&ZoneMapping> {
@@ -189,14 +181,8 @@ impl Keyboard for Apex3Tkl {
         self.inner.simulate_per_key_with_zones(key_colors).await
     }
 
-    async fn set_zone_colors_with_retry(
-        &mut self,
-        colors: &[Color],
-        max_retries: usize,
-    ) -> Result<()> {
-        self.inner
-            .set_zone_colors_with_retry(colors, max_retries)
-            .await
+    async fn set_zone_colors_with_retry(&mut self, colors: &[Color], max_retries: usize) -> Result<()> {
+        self.inner.set_zone_colors_with_retry(colors, max_retries).await
     }
 
     async fn test_zone_reliability(&mut self) -> Result<Vec<bool>> {
@@ -220,9 +206,7 @@ impl Keyboard for Apex3Tkl {
     }
 
     async fn apply_per_key_effect_with_brightness(&mut self, brightness: f32) -> Result<()> {
-        self.inner
-            .apply_per_key_effect_with_brightness(brightness)
-            .await
+        self.inner.apply_per_key_effect_with_brightness(brightness).await
     }
 
     async fn convert_per_key_to_zones(&mut self, effect: &PerKeyEffect) -> Result<()> {

@@ -458,10 +458,7 @@ impl PerKeyRgbCommand {
     }
 
     /// Create a command from logical key IDs using a key mapping.
-    pub fn from_logical_keys(
-        key_colors: HashMap<KeyId, Color>,
-        key_mapping: &KeyMapping,
-    ) -> Result<Self> {
+    pub fn from_logical_keys(key_colors: HashMap<KeyId, Color>, key_mapping: &KeyMapping) -> Result<Self> {
         let mut command = Self::new(PerKeyAddressingMode::Logical);
 
         for (key_id, color) in key_colors {
@@ -774,14 +771,7 @@ impl PerKeyRgbBuilder {
     }
 
     /// Set a region of keys to the same color.
-    pub fn set_region(
-        &mut self,
-        start_row: u8,
-        start_col: u8,
-        rows: u8,
-        cols: u8,
-        color: Color,
-    ) -> &mut Self {
+    pub fn set_region(&mut self, start_row: u8, start_col: u8, rows: u8, cols: u8, color: Color) -> &mut Self {
         for r in start_row..(start_row + rows) {
             for c in start_col..(start_col + cols) {
                 self.key_colors.insert(KeyAddress::new(r, c), color);
@@ -858,11 +848,7 @@ impl HidReportBuilder {
         }
 
         // Validate command code
-        let cmd_offset = if self.device_type.includes_report_id() {
-            1
-        } else {
-            0
-        };
+        let cmd_offset = if self.device_type.includes_report_id() { 1 } else { 0 };
         if data.len() > cmd_offset {
             let cmd_byte = data[cmd_offset];
             match cmd_byte {
@@ -876,11 +862,7 @@ impl HidReportBuilder {
 
     /// Parse a raw report to extract the command code.
     pub fn parse_command_code(&self, data: &[u8]) -> Option<CommandCode> {
-        let cmd_offset = if self.device_type.includes_report_id() {
-            1
-        } else {
-            0
-        };
+        let cmd_offset = if self.device_type.includes_report_id() { 1 } else { 0 };
 
         if data.len() <= cmd_offset {
             return None;
@@ -1120,11 +1102,7 @@ pub mod recovery {
         }
 
         /// Record a failed operation and determine error category
-        pub fn record_failure(
-            &mut self,
-            error: &HidError,
-            response_time: Duration,
-        ) -> ErrorCategory {
+        pub fn record_failure(&mut self, error: &HidError, response_time: Duration) -> ErrorCategory {
             self.health.record_operation(false, response_time);
 
             let category = self.categorize_error(error);
@@ -1139,11 +1117,7 @@ pub mod recovery {
         }
 
         /// Attempt to recover from an error with exponential backoff
-        pub async fn recover_from_error(
-            &mut self,
-            device: &HidDevice,
-            error: &HidError,
-        ) -> Result<()> {
+        pub async fn recover_from_error(&mut self, device: &HidDevice, error: &HidError) -> Result<()> {
             if self.circuit_breaker.is_open() {
                 return Err(Error::DeviceCommunication(
                     HidReportError::CircuitBreakerOpen(CIRCUIT_BREAKER_THRESHOLD).to_string(),
@@ -1188,15 +1162,9 @@ pub mod recovery {
             match error {
                 HidError::HidApiError { message } => {
                     let msg = message.to_lowercase();
-                    if msg.contains("no device")
-                        || msg.contains("disconnected")
-                        || msg.contains("not found")
-                    {
+                    if msg.contains("no device") || msg.contains("disconnected") || msg.contains("not found") {
                         ErrorCategory::Disconnected
-                    } else if msg.contains("timeout")
-                        || msg.contains("busy")
-                        || msg.contains("again")
-                    {
+                    } else if msg.contains("timeout") || msg.contains("busy") || msg.contains("again") {
                         ErrorCategory::Transient
                     } else {
                         ErrorCategory::Permanent
@@ -1284,20 +1252,14 @@ pub mod recovery {
             // Check maximum size (prevent buffer overflows)
             if report.len() > 65 {
                 return Err(Error::DeviceCommunication(
-                    HidReportError::InvalidReport(format!(
-                        "Report too large: {} bytes (max 65)",
-                        report.len()
-                    ))
-                    .to_string(),
+                    HidReportError::InvalidReport(format!("Report too large: {} bytes (max 65)", report.len()))
+                        .to_string(),
                 ));
             }
 
             // For SteelSeries devices, we expect exactly 65 bytes
             if report.len() != 65 {
-                warn!(
-                    "Unexpected report size: {} bytes (expected 65)",
-                    report.len()
-                );
+                warn!("Unexpected report size: {} bytes (expected 65)", report.len());
             }
 
             // Basic validation for RGB commands (if applicable)
@@ -1308,8 +1270,7 @@ pub mod recovery {
                         // RGB color command
                         if report.len() < 29 {
                             return Err(Error::DeviceCommunication(
-                                HidReportError::InvalidReport("RGB command too short".to_string())
-                                    .to_string(),
+                                HidReportError::InvalidReport("RGB command too short".to_string()).to_string(),
                             ));
                         }
                     }
@@ -1365,10 +1326,7 @@ pub mod recovery {
                     let response_time = start_time.elapsed();
                     recovery.record_success(response_time);
 
-                    debug!(
-                        "HID write successful: {} bytes in {:?}",
-                        bytes_written, response_time
-                    );
+                    debug!("HID write successful: {} bytes in {:?}", bytes_written, response_time);
                     return Ok(());
                 }
 
@@ -1376,17 +1334,11 @@ pub mod recovery {
                     let response_time = start_time.elapsed();
                     let error_category = recovery.record_failure(&hid_error, response_time);
 
-                    warn!(
-                        "HID write failed: {} (category: {:?})",
-                        hid_error, error_category
-                    );
+                    warn!("HID write failed: {} (category: {:?})", hid_error, error_category);
 
                     if !recovery.should_attempt_recovery() {
                         error!("Recovery not possible, giving up");
-                        return Err(Error::DeviceCommunication(format!(
-                            "HID write failed: {}",
-                            hid_error
-                        )));
+                        return Err(Error::DeviceCommunication(format!("HID write failed: {}", hid_error)));
                     }
 
                     // Attempt recovery
@@ -1408,8 +1360,7 @@ pub mod recovery {
 
 // Re-export recovery types for convenience
 pub use recovery::{
-    ConnectionHealth, ErrorCategory, HidErrorRecovery, HidReportError, ReportValidator,
-    write_report_with_recovery,
+    ConnectionHealth, ErrorCategory, HidErrorRecovery, HidReportError, ReportValidator, write_report_with_recovery,
 };
 
 #[cfg(test)]
@@ -1505,10 +1456,7 @@ mod tests {
         let builder = HidReportBuilder::new(HidDeviceType::Keyboard);
 
         let rgb_data = vec![0x00, 0x21, 0xFF, 255, 0, 0]; // RGB command
-        assert_eq!(
-            builder.parse_command_code(&rgb_data),
-            Some(CommandCode::RgbControl)
-        );
+        assert_eq!(builder.parse_command_code(&rgb_data), Some(CommandCode::RgbControl));
 
         let brightness_data = vec![0x00, 0x22, 50]; // Brightness command
         assert_eq!(
@@ -1517,19 +1465,13 @@ mod tests {
         );
 
         let apply_data = vec![0x00, 0x09]; // Apply command
-        assert_eq!(
-            builder.parse_command_code(&apply_data),
-            Some(CommandCode::Apply)
-        );
+        assert_eq!(builder.parse_command_code(&apply_data), Some(CommandCode::Apply));
 
         let unknown_data = vec![0x00, 0xFF]; // Unknown command
         assert_eq!(builder.parse_command_code(&unknown_data), None);
 
         let perkey_data = vec![0x00, 0x2A, 0x00, 0x01]; // Per-key command
-        assert_eq!(
-            builder.parse_command_code(&perkey_data),
-            Some(CommandCode::PerKeyRgb)
-        );
+        assert_eq!(builder.parse_command_code(&perkey_data), Some(CommandCode::PerKeyRgb));
     }
 
     #[test]
@@ -1593,11 +1535,7 @@ mod tests {
         assert!(!builder.is_empty());
 
         // Add batch
-        let addresses = vec![
-            KeyAddress::new(2, 1),
-            KeyAddress::new(2, 2),
-            KeyAddress::new(2, 3),
-        ];
+        let addresses = vec![KeyAddress::new(2, 1), KeyAddress::new(2, 2), KeyAddress::new(2, 3)];
         builder.add_keys_batch(&addresses, Color::WHITE);
         assert_eq!(builder.key_count(), 6);
 

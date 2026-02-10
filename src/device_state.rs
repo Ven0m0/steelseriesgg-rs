@@ -56,16 +56,7 @@ fn effects_equal(a: &Effect, b: &Effect) -> bool {
 
     match (a, b) {
         (Static { color: c1 }, Static { color: c2 }) => c1 == c2,
-        (
-            Breathing {
-                color: c1,
-                speed: s1,
-            },
-            Breathing {
-                color: c2,
-                speed: s2,
-            },
-        ) => c1 == c2 && s1 == s2,
+        (Breathing { color: c1, speed: s1 }, Breathing { color: c2, speed: s2 }) => c1 == c2 && s1 == s2,
         (Spectrum { speed: s1 }, Spectrum { speed: s2 }) => s1 == s2,
         (
             Wave {
@@ -229,10 +220,7 @@ struct SerializableStates(HashMap<String, DeviceState>);
 
 impl From<&HashMap<DeviceId, DeviceState>> for SerializableStates {
     fn from(states: &HashMap<DeviceId, DeviceState>) -> Self {
-        let map = states
-            .iter()
-            .map(|(id, state)| (id.to_key(), state.clone()))
-            .collect();
+        let map = states.iter().map(|(id, state)| (id.to_key(), state.clone())).collect();
         SerializableStates(map)
     }
 }
@@ -251,9 +239,7 @@ impl DeviceStateStore {
     /// Create a new device state store with async persistence.
     pub fn new() -> Result<Self> {
         let state_file = Config::config_dir()
-            .ok_or_else(|| {
-                Error::InvalidConfig("could not determine config directory".to_string())
-            })?
+            .ok_or_else(|| Error::InvalidConfig("could not determine config directory".to_string()))?
             .join("device_state.json");
 
         if let Some(parent) = state_file.parent() {
@@ -278,8 +264,7 @@ impl DeviceStateStore {
         }
 
         // Start the write-behind background task
-        let write_handle =
-            Self::start_write_behind_task(states, state_file, dirty_flag, last_write_time);
+        let write_handle = Self::start_write_behind_task(states, state_file, dirty_flag, last_write_time);
         store.write_behind_handle = Some(write_handle);
 
         debug!("DeviceStateStore initialized with async persistence");
@@ -348,9 +333,8 @@ impl DeviceStateStore {
             std::fs::write(&temp_file_clone, content)
                 .map_err(|e| Error::FileSystemError(format!("Failed to write temp file: {}", e)))?;
 
-            std::fs::rename(&temp_file_clone, &state_file_clone).map_err(|e| {
-                Error::FileSystemError(format!("Failed to rename temp file: {}", e))
-            })?;
+            std::fs::rename(&temp_file_clone, &state_file_clone)
+                .map_err(|e| Error::FileSystemError(format!("Failed to rename temp file: {}", e)))?;
 
             Ok(())
         })
@@ -365,19 +349,18 @@ impl DeviceStateStore {
         let content = std::fs::read_to_string(&self.state_file)?;
 
         // Try new format first (string-keyed map)
-        let loaded_states =
-            if let Ok(serializable) = serde_json::from_str::<SerializableStates>(&content) {
-                // Convert back to DeviceId-keyed map
-                serializable
-                    .0
-                    .into_iter()
-                    .filter_map(|(key, state)| DeviceId::from_key(&key).ok().map(|id| (id, state)))
-                    .collect()
-            } else {
-                // Try legacy format (direct HashMap<DeviceId, DeviceState>) for backward compat
-                // This will likely fail on current broken files, which is expected
-                serde_json::from_str(&content)?
-            };
+        let loaded_states = if let Ok(serializable) = serde_json::from_str::<SerializableStates>(&content) {
+            // Convert back to DeviceId-keyed map
+            serializable
+                .0
+                .into_iter()
+                .filter_map(|(key, state)| DeviceId::from_key(&key).ok().map(|id| (id, state)))
+                .collect()
+        } else {
+            // Try legacy format (direct HashMap<DeviceId, DeviceState>) for backward compat
+            // This will likely fail on current broken files, which is expected
+            serde_json::from_str(&content)?
+        };
 
         // Update the async states
         *self.states.write() = loaded_states;
@@ -559,11 +542,7 @@ impl DeviceStateStore {
     }
 
     /// Update keyboard brightness for a device (async version for compatibility).
-    pub async fn update_keyboard_brightness_async(
-        &self,
-        id: DeviceId,
-        brightness: u8,
-    ) -> Result<()> {
+    pub async fn update_keyboard_brightness_async(&self, id: DeviceId, brightness: u8) -> Result<()> {
         self.update_keyboard_brightness(id, brightness)
     }
 

@@ -167,11 +167,7 @@ impl AudioMixer {
 
     /// Get volume for a channel.
     pub fn get_volume(&self, channel: Channel) -> f32 {
-        self.state
-            .channels
-            .get(&channel)
-            .map(|s| s.volume)
-            .unwrap_or(1.0)
+        self.state.channels.get(&channel).map(|s| s.volume).unwrap_or(1.0)
     }
 
     /// Mute or unmute a channel.
@@ -186,11 +182,7 @@ impl AudioMixer {
 
     /// Check if a channel is muted.
     pub fn is_muted(&self, channel: Channel) -> bool {
-        self.state
-            .channels
-            .get(&channel)
-            .map(|s| s.muted)
-            .unwrap_or(false)
+        self.state.channels.get(&channel).map(|s| s.muted).unwrap_or(false)
     }
 
     /// Toggle mute for a channel.
@@ -249,10 +241,7 @@ impl AudioMixer {
     }
 
     /// Populate a channel map from the source channels.
-    fn populate_channel_map(
-        source: &HashMap<Channel, ChannelState>,
-        target: &mut HashMap<Channel, ChannelState>,
-    ) {
+    fn populate_channel_map(source: &HashMap<Channel, ChannelState>, target: &mut HashMap<Channel, ChannelState>) {
         const CHANNELS: &[Channel] = &[
             Channel::Master,
             Channel::Game,

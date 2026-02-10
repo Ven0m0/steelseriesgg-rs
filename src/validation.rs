@@ -50,17 +50,9 @@ impl MemorySample {
 
         for line in status_content.lines() {
             if line.starts_with("VmRSS:") {
-                rss_kb = line
-                    .split_whitespace()
-                    .nth(1)
-                    .and_then(|s| s.parse().ok())
-                    .unwrap_or(0);
+                rss_kb = line.split_whitespace().nth(1).and_then(|s| s.parse().ok()).unwrap_or(0);
             } else if line.starts_with("VmSize:") {
-                vm_size_kb = line
-                    .split_whitespace()
-                    .nth(1)
-                    .and_then(|s| s.parse().ok())
-                    .unwrap_or(0);
+                vm_size_kb = line.split_whitespace().nth(1).and_then(|s| s.parse().ok()).unwrap_or(0);
             }
         }
 
@@ -109,9 +101,6 @@ pub struct MemoryTracker {
     samples: VecDeque<MemorySample>,
     /// Maximum number of samples to keep
     max_samples: usize,
-    /// Start time for tracking
-    #[allow(dead_code)]
-    start_time: Instant,
     /// Baseline memory usage
     baseline_rss: Option<u64>,
 }
@@ -122,7 +111,6 @@ impl MemoryTracker {
         Self {
             samples: VecDeque::with_capacity(window_size),
             max_samples: window_size,
-            start_time: Instant::now(),
             baseline_rss: None,
         }
     }
@@ -163,9 +151,7 @@ impl MemoryTracker {
         let current_sample = self.samples.back().unwrap();
         let first_sample = self.samples.front().unwrap();
 
-        let time_span = current_sample
-            .timestamp
-            .saturating_sub(first_sample.timestamp);
+        let time_span = current_sample.timestamp.saturating_sub(first_sample.timestamp);
         let time_span_sec = time_span.as_secs_f64();
 
         let growth = current_sample.rss_kb as i64 - first_sample.rss_kb as i64;
@@ -183,11 +169,8 @@ impl MemoryTracker {
 
         // Leak detection: consistent growth over 30% of baseline for more than 10 samples
         let leak_detected = if let Some(baseline) = self.baseline_rss {
-            let current_growth_percent =
-                (current_sample.rss_kb as f64 - baseline as f64) / baseline as f64 * 100.0;
-            current_growth_percent > 30.0
-                && self.samples.len() >= 10
-                && matches!(trend, MemoryTrend::Increasing)
+            let current_growth_percent = (current_sample.rss_kb as f64 - baseline as f64) / baseline as f64 * 100.0;
+            current_growth_percent > 30.0 && self.samples.len() >= 10 && matches!(trend, MemoryTrend::Increasing)
         } else {
             false
         };
@@ -198,10 +181,7 @@ impl MemoryTracker {
         let warning_message = if leak_detected {
             Some("Potential memory leak detected - RSS increasing consistently".to_string())
         } else if growth_rate > 10.0 {
-            Some(format!(
-                "High memory growth rate: {:.1} KB/sec",
-                growth_rate
-            ))
+            Some(format!("High memory growth rate: {:.1} KB/sec", growth_rate))
         } else {
             None
         };
@@ -554,8 +534,7 @@ impl ValidationReport {
             let pass_rate = passed_tests / total_tests;
 
             // Weight the score based on test importance and performance
-            let avg_duration =
-                self.results.iter().map(|r| r.duration_ms).sum::<u64>() as f64 / total_tests;
+            let avg_duration = self.results.iter().map(|r| r.duration_ms).sum::<u64>() as f64 / total_tests;
 
             // Penalize slow performance (>100ms average per test is concerning)
             let performance_factor = if avg_duration > 100.0 {
@@ -675,13 +654,11 @@ impl PerformanceMetrics {
         }
 
         if !effect_times.is_empty() {
-            self.avg_effect_compute_ms =
-                effect_times.iter().sum::<f64>() / effect_times.len() as f64;
+            self.avg_effect_compute_ms = effect_times.iter().sum::<f64>() / effect_times.len() as f64;
         }
 
         if !communication_times.is_empty() {
-            self.avg_hid_communication_ms =
-                communication_times.iter().sum::<f64>() / communication_times.len() as f64;
+            self.avg_hid_communication_ms = communication_times.iter().sum::<f64>() / communication_times.len() as f64;
         }
 
         self.max_latency_ms = max_latency;
@@ -789,17 +766,9 @@ impl RgbValidator {
             Ok(_) => match keyboard.apply() {
                 Ok(_) => ValidationResult::success(test_name, start.elapsed())
                     .with_note("Device responds to basic RGB commands"),
-                Err(e) => ValidationResult::failure(
-                    test_name,
-                    start.elapsed(),
-                    format!("Apply command failed: {}", e),
-                ),
+                Err(e) => ValidationResult::failure(test_name, start.elapsed(), format!("Apply command failed: {}", e)),
             },
-            Err(e) => ValidationResult::failure(
-                test_name,
-                start.elapsed(),
-                format!("Set color command failed: {}", e),
-            ),
+            Err(e) => ValidationResult::failure(test_name, start.elapsed(), format!("Set color command failed: {}", e)),
         }
     }
 
@@ -834,10 +803,7 @@ impl RgbValidator {
 
         ValidationResult::success(test_name, start.elapsed())
             .with_metric("zone_count", zone_count as f64)
-            .with_note(&format!(
-                "Successfully tested {} zones with 3 colors",
-                zone_count
-            ))
+            .with_note(&format!("Successfully tested {} zones with 3 colors", zone_count))
     }
 
     /// Test zone-based RGB effects.
@@ -847,9 +813,8 @@ impl RgbValidator {
 
         // For now, this is a placeholder since we don't have direct access to EffectEngine
         // In a real implementation, this would test various effects
-        ValidationResult::success(test_name, start.elapsed()).with_note(
-            "Zone effects test placeholder - would test breathing, spectrum, wave effects",
-        )
+        ValidationResult::success(test_name, start.elapsed())
+            .with_note("Zone effects test placeholder - would test breathing, spectrum, wave effects")
     }
 
     /// Test zone reliability with retry mechanisms.
@@ -985,11 +950,7 @@ impl RgbValidator {
         match keyboard.simulate_per_key_with_zones(&test_key_colors).await {
             Ok(_) => ValidationResult::success(test_name, start.elapsed())
                 .with_note("Successfully simulated per-key effect using zones"),
-            Err(e) => ValidationResult::failure(
-                test_name,
-                start.elapsed(),
-                format!("Fallback system failed: {}", e),
-            ),
+            Err(e) => ValidationResult::failure(test_name, start.elapsed(), format!("Fallback system failed: {}", e)),
         }
     }
 
@@ -1004,10 +965,7 @@ impl RgbValidator {
 
         ValidationResult::success(test_name, start.elapsed())
             .with_metric("effect_compute_ms", simulated_time_ms)
-            .with_note(&format!(
-                "Average effect computation: {:.2}ms",
-                simulated_time_ms
-            ))
+            .with_note(&format!("Average effect computation: {:.2}ms", simulated_time_ms))
     }
 
     /// Benchmark HID communication speed.
@@ -1043,13 +1001,7 @@ impl RgbValidator {
         let start = Instant::now();
         let test_name = "RGB System Stress Test".to_string();
 
-        let colors = [
-            Color::RED,
-            Color::GREEN,
-            Color::BLUE,
-            Color::WHITE,
-            Color::BLACK,
-        ];
+        let colors = [Color::RED, Color::GREEN, Color::BLUE, Color::WHITE, Color::BLACK];
         let mut failures = 0;
 
         for i in 0..self.stress_iterations {
@@ -1059,8 +1011,7 @@ impl RgbValidator {
             }
         }
 
-        let success_rate =
-            (self.stress_iterations - failures) as f64 / self.stress_iterations as f64 * 100.0;
+        let success_rate = (self.stress_iterations - failures) as f64 / self.stress_iterations as f64 * 100.0;
 
         if failures == 0 {
             ValidationResult::success(test_name, start.elapsed())
@@ -1182,10 +1133,7 @@ pub fn print_test_results(report: &ValidationReport, verbose: bool, use_colors: 
             "✗".to_string()
         }
     );
-    println!(
-        "  Duration:     {:.2}s",
-        report.total_duration_ms as f64 / 1000.0
-    );
+    println!("  Duration:     {:.2}s", report.total_duration_ms as f64 / 1000.0);
 
     // Print health score with color coding
     let health_display = format!("{:.0}/100", report.health_score);
@@ -1206,24 +1154,12 @@ pub fn print_test_results(report: &ValidationReport, verbose: bool, use_colors: 
     println!("  Per-key RGB:  {}", report.capabilities.per_key_rgb);
     println!("  Zone RGB:     {}", report.capabilities.zone_rgb);
     println!("  Zone count:   {}", report.capabilities.zone_count);
-    println!(
-        "  Reliability:  {:.1}%",
-        report.capabilities.communication_reliability
-    );
+    println!("  Reliability:  {:.1}%", report.capabilities.communication_reliability);
 
     println!("\nPerformance Metrics:");
-    println!(
-        "  Effect compute: {:.2}ms",
-        report.performance.avg_effect_compute_ms
-    );
-    println!(
-        "  HID comms:      {:.2}ms",
-        report.performance.avg_hid_communication_ms
-    );
-    println!(
-        "  Refresh rate:   {:.1} Hz",
-        report.performance.effective_refresh_rate
-    );
+    println!("  Effect compute: {:.2}ms", report.performance.avg_effect_compute_ms);
+    println!("  HID comms:      {:.2}ms", report.performance.avg_hid_communication_ms);
+    println!("  Refresh rate:   {:.1} Hz", report.performance.effective_refresh_rate);
 
     println!();
 }

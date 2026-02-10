@@ -40,9 +40,7 @@ pub struct KeyboardProfile {
 impl Default for KeyboardProfile {
     fn default() -> Self {
         Self {
-            effect: Effect::Static {
-                color: Color::WHITE,
-            },
+            effect: Effect::Static { color: Color::WHITE },
             brightness: 100,
         }
     }

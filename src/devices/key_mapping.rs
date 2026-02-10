@@ -318,13 +318,7 @@ pub struct KeyMapping {
 
 impl KeyMapping {
     /// Create a new key mapping.
-    pub fn new(
-        product_id: u16,
-        layout: KeyboardLayout,
-        name: String,
-        matrix_rows: u8,
-        matrix_cols: u8,
-    ) -> Self {
+    pub fn new(product_id: u16, layout: KeyboardLayout, name: String, matrix_rows: u8, matrix_cols: u8) -> Self {
         Self {
             product_id,
             layout,
@@ -375,9 +369,7 @@ impl KeyMapping {
             actual_matrix_cols: max_col + 1,
             declared_matrix_rows: self.matrix_rows,
             declared_matrix_cols: self.matrix_cols,
-            utilization: (self.total_keys as f32
-                / (self.matrix_rows as f32 * self.matrix_cols as f32))
-                * 100.0,
+            utilization: (self.total_keys as f32 / (self.matrix_rows as f32 * self.matrix_cols as f32)) * 100.0,
         }
     }
 }
@@ -563,8 +555,7 @@ impl KeyMappingDatabase {
         // Special SteelSeries key (if present)
         mapping.add_key(KeyId::SteelSeriesKey, KeyAddress::new(5, 14));
 
-        self.mappings
-            .insert(product_ids::APEX_PRO_TKL_2023, mapping);
+        self.mappings.insert(product_ids::APEX_PRO_TKL_2023, mapping);
     }
 
     /// Add Apex Pro (full) key mapping (PLACEHOLDER).
@@ -669,10 +660,7 @@ mod tests {
         mapping.add_key(KeyId::A, KeyAddress::new(3, 1));
         assert_eq!(mapping.total_keys, 1);
         assert!(mapping.supports_key(KeyId::A));
-        assert_eq!(
-            mapping.get_key_address(KeyId::A),
-            Some(KeyAddress::new(3, 1))
-        );
+        assert_eq!(mapping.get_key_address(KeyId::A), Some(KeyAddress::new(3, 1)));
         assert_eq!(mapping.get_key_address(KeyId::B), None);
     }
 

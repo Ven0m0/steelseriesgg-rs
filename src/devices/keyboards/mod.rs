@@ -5,8 +5,8 @@ pub mod apex_pro_tkl_2023;
 
 use super::diagnostics::{HidOperation, with_global_diagnostics};
 use super::hid_reports::{
-    ApplyCommand, BrightnessCommand, HidDeviceType, HidReportBuilder, PerKeyRgbBuilder,
-    PerKeyRgbCommand, RgbZoneCommand,
+    ApplyCommand, BrightnessCommand, HidDeviceType, HidReportBuilder, PerKeyRgbBuilder, PerKeyRgbCommand,
+    RgbZoneCommand,
 };
 use super::key_mapping::{KeyAddress, KeyId, KeyMapping, KeyMappingDatabase};
 use super::zone_mapping::{ZoneEffect, ZoneFallback, ZoneMapping as ZoneMap};
@@ -72,14 +72,7 @@ pub trait Keyboard: Device {
     fn clear_per_key_rgb(&mut self) -> Result<()>;
 
     /// Set a region of keys to the same color using matrix coordinates.
-    fn set_key_region(
-        &mut self,
-        start_row: u8,
-        start_col: u8,
-        rows: u8,
-        cols: u8,
-        color: Color,
-    ) -> Result<()>;
+    fn set_key_region(&mut self, start_row: u8, start_col: u8, rows: u8, cols: u8, color: Color) -> Result<()>;
 
     // === Zone-based RGB Fallback ===
 
@@ -93,11 +86,7 @@ pub trait Keyboard: Device {
     async fn simulate_per_key_with_zones(&mut self, key_colors: &[(KeyId, Color)]) -> Result<()>;
 
     /// Enhanced zone-based RGB with retry logic.
-    async fn set_zone_colors_with_retry(
-        &mut self,
-        colors: &[Color],
-        max_retries: usize,
-    ) -> Result<()>;
+    async fn set_zone_colors_with_retry(&mut self, colors: &[Color], max_retries: usize) -> Result<()>;
 
     /// Test zone connectivity and reliability.
     async fn test_zone_reliability(&mut self) -> Result<Vec<bool>>;
@@ -184,10 +173,7 @@ impl GenericKeyboard {
         let key_mapping = key_mapping_db.get_mapping(info.product_id).cloned();
 
         if key_mapping.is_some() {
-            tracing::debug!(
-                "Loaded key mapping for product ID 0x{:04x}",
-                info.product_id
-            );
+            tracing::debug!("Loaded key mapping for product ID 0x{:04x}", info.product_id);
         } else {
             tracing::warn!(
                 "No key mapping available for product ID 0x{:04x} - per-key RGB disabled",
@@ -200,10 +186,7 @@ impl GenericKeyboard {
         let zone_mapping = zone_fallback.get_mapping(info.product_id).cloned();
 
         if zone_mapping.is_some() {
-            tracing::debug!(
-                "Loaded zone mapping for product ID 0x{:04x}",
-                info.product_id
-            );
+            tracing::debug!("Loaded zone mapping for product ID 0x{:04x}", info.product_id);
         } else {
             tracing::warn!(
                 "No zone mapping available for product ID 0x{:04x} - using basic zone fallback",
@@ -248,9 +231,10 @@ impl GenericKeyboard {
 
         debug!("Sending HID report ({} bytes): {:02x?}", data.len(), data);
 
-        let device = self.device.as_ref().ok_or(Error::DeviceCommunication(
-            "Device not connected".to_string(),
-        ))?;
+        let device = self
+            .device
+            .as_ref()
+            .ok_or(Error::DeviceCommunication("Device not connected".to_string()))?;
         let device = device.lock();
 
         // Record the operation with timing analysis
@@ -313,9 +297,10 @@ impl Device for GenericKeyboard {
     }
 
     fn receive_raw(&mut self, buf: &mut [u8]) -> Result<usize> {
-        let device = self.device.as_ref().ok_or(Error::DeviceCommunication(
-            "Device not connected".to_string(),
-        ))?;
+        let device = self
+            .device
+            .as_ref()
+            .ok_or(Error::DeviceCommunication("Device not connected".to_string()))?;
         let device = device.lock();
 
         // Record the operation with timing analysis
@@ -469,9 +454,7 @@ impl Keyboard for GenericKeyboard {
 
     fn set_key_colors_direct(&mut self, key_colors: &[(KeyAddress, Color)]) -> Result<()> {
         if key_colors.is_empty() {
-            return Err(Error::DeviceCommunication(
-                "No key colors provided".to_string(),
-            ));
+            return Err(Error::DeviceCommunication("No key colors provided".to_string()));
         }
 
         let mut builder = PerKeyRgbBuilder::new(super::hid_reports::PerKeyAddressingMode::Matrix);
@@ -502,8 +485,7 @@ impl Keyboard for GenericKeyboard {
         } else {
             // No key mapping available, use matrix approach to clear common positions
             // This is a fallback that clears the most common key matrix positions
-            let mut builder =
-                PerKeyRgbBuilder::new(super::hid_reports::PerKeyAddressingMode::Matrix);
+            let mut builder = PerKeyRgbBuilder::new(super::hid_reports::PerKeyAddressingMode::Matrix);
 
             // Clear typical keyboard matrix (6x17 for TKL, should cover most keys)
             for row in 0..6 {
@@ -518,14 +500,7 @@ impl Keyboard for GenericKeyboard {
         }
     }
 
-    fn set_key_region(
-        &mut self,
-        start_row: u8,
-        start_col: u8,
-        rows: u8,
-        cols: u8,
-        color: Color,
-    ) -> Result<()> {
+    fn set_key_region(&mut self, start_row: u8, start_col: u8, rows: u8, cols: u8, color: Color) -> Result<()> {
         let mut builder = PerKeyRgbBuilder::new(super::hid_reports::PerKeyAddressingMode::Matrix);
         builder.set_region(start_row, start_col, rows, cols, color);
 
@@ -575,11 +550,7 @@ impl Keyboard for GenericKeyboard {
         }
     }
 
-    async fn set_zone_colors_with_retry(
-        &mut self,
-        colors: &[Color],
-        max_retries: usize,
-    ) -> Result<()> {
+    async fn set_zone_colors_with_retry(&mut self, colors: &[Color], max_retries: usize) -> Result<()> {
         let mut last_error = None;
 
         for attempt in 0..max_retries {
@@ -593,11 +564,7 @@ impl Keyboard for GenericKeyboard {
                 Err(e) => {
                     last_error = Some(e);
                     if attempt < max_retries - 1 {
-                        tracing::warn!(
-                            "Zone RGB attempt {} failed, retrying: {:?}",
-                            attempt + 1,
-                            last_error
-                        );
+                        tracing::warn!("Zone RGB attempt {} failed, retrying: {:?}", attempt + 1, last_error);
                         // Small delay before retry
                         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
                     }
@@ -693,10 +660,8 @@ impl Keyboard for GenericKeyboard {
             // Fallback: simulate reactive effect using zones
             if !keys.is_empty() {
                 // Use zone fallback to simulate reactive effect
-                self.simulate_per_key_with_zones(
-                    &keys.iter().map(|&k| (k, Color::WHITE)).collect::<Vec<_>>(),
-                )
-                .await
+                self.simulate_per_key_with_zones(&keys.iter().map(|&k| (k, Color::WHITE)).collect::<Vec<_>>())
+                    .await
             } else {
                 Ok(())
             }
@@ -823,15 +788,11 @@ impl Keyboard for GenericKeyboard {
     // === Performance Optimization Implementation ===
 
     fn get_rgb_performance_stats(&self) -> Option<&crate::performance::PerformanceStats> {
-        self.per_key_controller
-            .as_ref()
-            .and_then(|c| c.get_performance_stats())
+        self.per_key_controller.as_ref().and_then(|c| c.get_performance_stats())
     }
 
     fn get_optimal_frame_time(&self) -> Option<std::time::Duration> {
-        self.per_key_controller
-            .as_ref()
-            .and_then(|c| c.get_frame_time())
+        self.per_key_controller.as_ref().and_then(|c| c.get_frame_time())
     }
 
     fn cleanup_rgb_caches(&mut self) {
@@ -861,8 +822,7 @@ impl Keyboard for GenericKeyboard {
         //
         // For now, return DeviceCommunication error
         Err(Error::DeviceCommunication(
-            "Reading actuation point not yet implemented - HID read command not discovered"
-                .to_string(),
+            "Reading actuation point not yet implemented - HID read command not discovered".to_string(),
         ))
     }
 

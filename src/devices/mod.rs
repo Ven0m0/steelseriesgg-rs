@@ -20,13 +20,10 @@ use hidapi::HidDevice;
 
 pub use discovery::DeviceManager;
 pub use hid_reports::{
-    ApplyCommand, BrightnessCommand, CommandCode, HEADSET_REPORT_SIZE, HidCommand, HidDeviceType,
-    HidReportBuilder, KEYBOARD_REPORT_SIZE, MAX_RGB_ZONES, PerKeyAddressingMode, PerKeyRgbBuilder,
-    PerKeyRgbCommand, RgbZoneCommand,
+    ApplyCommand, BrightnessCommand, CommandCode, HEADSET_REPORT_SIZE, HidCommand, HidDeviceType, HidReportBuilder,
+    KEYBOARD_REPORT_SIZE, MAX_RGB_ZONES, PerKeyAddressingMode, PerKeyRgbBuilder, PerKeyRgbCommand, RgbZoneCommand,
 };
-pub use key_mapping::{
-    KeyAddress, KeyId, KeyMapping, KeyMappingDatabase, KeyMappingStats, KeyboardLayout,
-};
+pub use key_mapping::{KeyAddress, KeyId, KeyMapping, KeyMappingDatabase, KeyMappingStats, KeyboardLayout};
 pub use zone_mapping::{ZoneEffect, ZoneFallback, ZoneInfo, ZoneMapping, ZonePosition};
 
 /// Type of SteelSeries device.
@@ -119,8 +116,6 @@ pub trait Device: Send + Sync {
 /// Report cache entry for deduplication.
 #[derive(Debug, Clone)]
 struct CachedReport {
-    #[allow(dead_code)]
-    data: Vec<u8>,
     last_sent: Instant,
 }
 
@@ -171,7 +166,6 @@ impl HidOptimizer {
         cache.insert(
             data.to_vec(),
             CachedReport {
-                data: data.to_vec(),
                 last_sent: Instant::now(),
             },
         );
@@ -207,12 +201,7 @@ fn get_hid_optimizer() -> &'static HidOptimizer {
 /// Write a padded HID report, handling the optional leading report ID byte and
 /// constraining to the standard 64/65 byte HID buffers.
 /// This is the optimized version that includes caching and deduplication.
-pub fn write_padded_report(
-    device: &HidDevice,
-    data: &[u8],
-    report_len: usize,
-    include_report_id: bool,
-) -> Result<()> {
+pub fn write_padded_report(device: &HidDevice, data: &[u8], report_len: usize, include_report_id: bool) -> Result<()> {
     use tracing::debug;
 
     if report_len == 0 || report_len > 65 {
@@ -473,8 +462,8 @@ pub fn zone_count_for_product_id(product_id: u16) -> usize {
     match product_id {
         APEX_3 => 10,                                                // Apex 3 - 10 zones
         APEX_3_TKL => 9,                                             // Apex 3 TKL - 9 zones
-        APEX_PRO_TKL_2023 => 9, // Apex Pro TKL (2023) - 9 zones
+        APEX_PRO_TKL_2023 => 9,                                      // Apex Pro TKL (2023) - 9 zones
         APEX_PRO | APEX_PRO_TKL | APEX_5 | APEX_7 | APEX_7_TKL => 1, // Single zone for now
-        _ => 1,                 // Default single zone
+        _ => 1,                                                      // Default single zone
     }
 }

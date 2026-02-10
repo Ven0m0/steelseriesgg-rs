@@ -45,14 +45,8 @@ pub fn fuzz_keyboard_protocol(manager: &DeviceManager, params: FuzzParams) -> Re
             .bold(),
         "Proceed with caution!".red()
     );
-    println!(
-        "Target: {} (PID: 0x{:04x})",
-        device_info.name, device_info.product_id
-    );
-    println!(
-        "Range: 0x{:02x} - 0x{:02x}",
-        params.start_cmd, params.end_cmd
-    );
+    println!("Target: {} (PID: 0x{:04x})", device_info.name, device_info.product_id);
+    println!("Range: 0x{:02x} - 0x{:02x}", params.start_cmd, params.end_cmd);
     println!("Delay: {}ms", params.delay_ms);
 
     // Open device

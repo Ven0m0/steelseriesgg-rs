@@ -52,7 +52,7 @@ nix = "0.31.1"
 parking_lot = "0.12"
 
 # HTTP client for Sonar API (optional, only needed for sonar feature)
-reqwest = { version = "0.13", features = ["json"], optional = true }
+reqwest = { version = "0.13.2", features = ["json"], optional = true }
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }

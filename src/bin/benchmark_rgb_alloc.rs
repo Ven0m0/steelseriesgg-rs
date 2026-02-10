@@ -7,20 +7,14 @@ fn main() {
     let zone_count = 104;
 
     // Create input data
-    let input_colors: Vec<Color> = (0..zone_count / 2)
-        .map(|i| Color::new((i % 255) as u8, 0, 0))
-        .collect();
+    let input_colors: Vec<Color> = (0..zone_count / 2).map(|i| Color::new((i % 255) as u8, 0, 0)).collect();
 
     // 1. Benchmark Allocation Strategy (Current)
     let start_alloc = Instant::now();
 
     for _ in 0..iterations {
         // Original logic
-        let mut zone_colors = input_colors
-            .iter()
-            .take(zone_count)
-            .copied()
-            .collect::<Vec<_>>();
+        let mut zone_colors = input_colors.iter().take(zone_count).copied().collect::<Vec<_>>();
 
         while zone_colors.len() < zone_count {
             zone_colors.push(Color::BLACK);

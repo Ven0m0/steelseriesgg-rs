@@ -68,9 +68,7 @@ fn main() -> Result<()> {
             "{}",
             "WARNING: This tool sends random HID commands to your device.".yellow()
         );
-        println!(
-            "While generally safe for queries, there is a non-zero risk of unintended side effects."
-        );
+        println!("While generally safe for queries, there is a non-zero risk of unintended side effects.");
         println!("Please run with --force to confirm you understand the risks.");
         return Ok(());
     }
@@ -114,16 +112,10 @@ fn main() -> Result<()> {
     let device_info = api
         .device_list()
         .into_iter()
-        .find(|d| {
-            d.vendor_id() == args.vid
-                && d.product_id() == pid
-                && d.interface_number() == args.interface
-        })
+        .find(|d| d.vendor_id() == args.vid && d.product_id() == pid && d.interface_number() == args.interface)
         .context("Device not found with specified VID/PID/Interface")?;
 
-    let device = api
-        .open_path(device_info.path())
-        .context("Failed to open device")?;
+    let device = api.open_path(device_info.path()).context("Failed to open device")?;
     println!("{}", "Device opened successfully.".green());
 
     run_discovery(&device, args.verbose)?;
@@ -137,10 +129,7 @@ fn run_discovery(device: &HidDevice, verbose: bool) -> Result<()> {
 
     // Phase 1: Set Baseline
     let baseline_val = 20; // 2.0mm
-    println!(
-        "Phase 1: Setting baseline actuation to {} (2.0mm)...",
-        baseline_val
-    );
+    println!("Phase 1: Setting baseline actuation to {} (2.0mm)...", baseline_val);
     set_actuation(device, baseline_val)?;
     thread::sleep(Duration::from_millis(500)); // Wait for settle
 
@@ -183,11 +172,7 @@ fn run_discovery(device: &HidDevice, verbose: bool) -> Result<()> {
         return Ok(());
     }
 
-    println!(
-        "\nFound {} candidates: {:02X?}",
-        candidates.len(),
-        candidates
-    );
+    println!("\nFound {} candidates: {:02X?}", candidates.len(), candidates);
 
     // Phase 3: Verify
     let verify_val = 35; // 3.5mm
@@ -239,10 +224,7 @@ fn run_discovery(device: &HidDevice, verbose: bool) -> Result<()> {
             println!("  - 0x{:02X}", cmd);
         }
     } else {
-        println!(
-            "{}",
-            "Discovery failed. No consistent read command found.".yellow()
-        );
+        println!("{}", "Discovery failed. No consistent read command found.".yellow());
     }
 
     Ok(())
@@ -254,9 +236,7 @@ fn set_actuation(device: &HidDevice, val: u8) -> Result<()> {
     data[1] = CMD_SET_ACTUATION;
     data[2] = val;
 
-    device
-        .write(&data)
-        .context("Failed to write actuation command")?;
+    device.write(&data).context("Failed to write actuation command")?;
     Ok(())
 }
 

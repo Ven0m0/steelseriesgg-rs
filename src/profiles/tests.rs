@@ -28,10 +28,7 @@ fn test_profile_serialization() {
     let deserialized: Profile = serde_json::from_str(&json).unwrap();
 
     assert_eq!(deserialized.name, "Gaming");
-    assert_eq!(
-        deserialized.description.as_deref(),
-        Some("My gaming profile")
-    );
+    assert_eq!(deserialized.description.as_deref(), Some("My gaming profile"));
     assert!(deserialized.keyboard.is_some());
     assert_eq!(deserialized.keyboard.as_ref().unwrap().brightness, 80);
 }

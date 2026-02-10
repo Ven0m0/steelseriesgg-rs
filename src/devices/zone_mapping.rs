@@ -68,13 +68,7 @@ pub struct ZoneInfo {
 
 impl ZoneInfo {
     /// Create a new zone info.
-    pub fn new(
-        index: usize,
-        position: ZonePosition,
-        name: String,
-        critical: bool,
-        led_count: usize,
-    ) -> Self {
+    pub fn new(index: usize, position: ZonePosition, name: String, critical: bool, led_count: usize) -> Self {
         Self {
             index,
             position,
@@ -113,13 +107,7 @@ impl ZoneMapping {
     }
 
     /// Add a zone to the mapping.
-    pub fn add_zone(
-        &mut self,
-        position: ZonePosition,
-        name: String,
-        critical: bool,
-        led_count: usize,
-    ) {
+    pub fn add_zone(&mut self, position: ZonePosition, name: String, critical: bool, led_count: usize) {
         let index = self.zones.len();
         let zone_info = ZoneInfo::new(index, position, name, critical, led_count);
         self.zone_positions.insert(index, position);
@@ -176,10 +164,7 @@ pub enum ZoneEffect {
     /// Wave pattern
     Wave { colors: Vec<Color>, offset: f32 },
     /// Breathing effect per zone
-    Breathing {
-        colors: Vec<Color>,
-        phase_offset: f32,
-    },
+    Breathing { colors: Vec<Color>, phase_offset: f32 },
     /// Reactive (highlight specific zones)
     Reactive {
         base: Color,
@@ -223,20 +208,15 @@ impl ZoneEffect {
                 } else {
                     (0..zone_count)
                         .map(|i| {
-                            let wave_pos =
-                                ((i as f32 / zone_count as f32) + *offset + time_secs * 0.5) % 1.0;
-                            let color_index =
-                                (wave_pos * colors.len() as f32) as usize % colors.len();
+                            let wave_pos = ((i as f32 / zone_count as f32) + *offset + time_secs * 0.5) % 1.0;
+                            let color_index = (wave_pos * colors.len() as f32) as usize % colors.len();
                             colors[color_index]
                         })
                         .collect()
                 }
             }
 
-            ZoneEffect::Breathing {
-                colors,
-                phase_offset,
-            } => {
+            ZoneEffect::Breathing { colors, phase_offset } => {
                 if colors.is_empty() {
                     vec![Color::BLACK; zone_count]
                 } else {
@@ -251,11 +231,7 @@ impl ZoneEffect {
                 }
             }
 
-            ZoneEffect::Reactive {
-                base,
-                highlight,
-                zones,
-            } => {
+            ZoneEffect::Reactive { base, highlight, zones } => {
                 let mut result = vec![*base; zone_count];
                 for &zone_index in zones {
                     if zone_index < zone_count {
@@ -280,9 +256,6 @@ impl ZoneEffect {
 pub struct ZoneFallback {
     /// Available zone mappings
     mappings: HashMap<u16, ZoneMapping>,
-    /// Fallback retry configuration
-    #[allow(dead_code)]
-    max_retries: usize,
     /// Current effect being rendered
     current_effect: Option<ZoneEffect>,
 }
@@ -292,7 +265,6 @@ impl ZoneFallback {
     pub fn new() -> Self {
         let mut fallback = Self {
             mappings: HashMap::new(),
-            max_retries: 3,
             current_effect: None,
         };
         fallback.initialize_known_mappings();
@@ -302,46 +274,13 @@ impl ZoneFallback {
     /// Initialize mappings for known keyboard models.
     fn initialize_known_mappings(&mut self) {
         // Apex Pro TKL 2023 - Enhanced 9-zone mapping
-        let mut apex_tkl_2023 = ZoneMapping::new(
-            product_ids::APEX_PRO_TKL_2023,
-            "Apex Pro TKL 2023".to_string(),
-        );
-        apex_tkl_2023.add_zone(
-            ZonePosition::FunctionRow,
-            "Function Keys".to_string(),
-            false,
-            13,
-        );
-        apex_tkl_2023.add_zone(
-            ZonePosition::MainKeys,
-            "Main Keys Left".to_string(),
-            true,
-            20,
-        );
-        apex_tkl_2023.add_zone(
-            ZonePosition::MainKeys,
-            "Main Keys Center".to_string(),
-            true,
-            25,
-        );
-        apex_tkl_2023.add_zone(
-            ZonePosition::MainKeys,
-            "Main Keys Right".to_string(),
-            true,
-            20,
-        );
-        apex_tkl_2023.add_zone(
-            ZonePosition::LeftModifiers,
-            "Left Modifiers".to_string(),
-            true,
-            4,
-        );
-        apex_tkl_2023.add_zone(
-            ZonePosition::RightModifiers,
-            "Right Modifiers".to_string(),
-            true,
-            4,
-        );
+        let mut apex_tkl_2023 = ZoneMapping::new(product_ids::APEX_PRO_TKL_2023, "Apex Pro TKL 2023".to_string());
+        apex_tkl_2023.add_zone(ZonePosition::FunctionRow, "Function Keys".to_string(), false, 13);
+        apex_tkl_2023.add_zone(ZonePosition::MainKeys, "Main Keys Left".to_string(), true, 20);
+        apex_tkl_2023.add_zone(ZonePosition::MainKeys, "Main Keys Center".to_string(), true, 25);
+        apex_tkl_2023.add_zone(ZonePosition::MainKeys, "Main Keys Right".to_string(), true, 20);
+        apex_tkl_2023.add_zone(ZonePosition::LeftModifiers, "Left Modifiers".to_string(), true, 4);
+        apex_tkl_2023.add_zone(ZonePosition::RightModifiers, "Right Modifiers".to_string(), true, 4);
         apex_tkl_2023.add_zone(
             ZonePosition::NavigationCluster,
             "Navigation Block".to_string(),
@@ -350,47 +289,16 @@ impl ZoneFallback {
         );
         apex_tkl_2023.add_zone(ZonePosition::ArrowKeys, "Arrow Keys".to_string(), false, 4);
         apex_tkl_2023.add_zone(ZonePosition::Logo, "SteelSeries Logo".to_string(), false, 1);
-        self.mappings
-            .insert(product_ids::APEX_PRO_TKL_2023, apex_tkl_2023);
+        self.mappings.insert(product_ids::APEX_PRO_TKL_2023, apex_tkl_2023);
 
         // Apex 3 - Enhanced 10-zone mapping
         let mut apex_3 = ZoneMapping::new(product_ids::APEX_3, "Apex 3".to_string());
-        apex_3.add_zone(
-            ZonePosition::FunctionRow,
-            "Function Keys".to_string(),
-            false,
-            13,
-        );
-        apex_3.add_zone(
-            ZonePosition::MainKeys,
-            "Main Keys Left".to_string(),
-            true,
-            15,
-        );
-        apex_3.add_zone(
-            ZonePosition::MainKeys,
-            "Main Keys Center".to_string(),
-            true,
-            20,
-        );
-        apex_3.add_zone(
-            ZonePosition::MainKeys,
-            "Main Keys Right".to_string(),
-            true,
-            15,
-        );
-        apex_3.add_zone(
-            ZonePosition::LeftModifiers,
-            "Left Modifiers".to_string(),
-            true,
-            3,
-        );
-        apex_3.add_zone(
-            ZonePosition::RightModifiers,
-            "Right Modifiers".to_string(),
-            true,
-            3,
-        );
+        apex_3.add_zone(ZonePosition::FunctionRow, "Function Keys".to_string(), false, 13);
+        apex_3.add_zone(ZonePosition::MainKeys, "Main Keys Left".to_string(), true, 15);
+        apex_3.add_zone(ZonePosition::MainKeys, "Main Keys Center".to_string(), true, 20);
+        apex_3.add_zone(ZonePosition::MainKeys, "Main Keys Right".to_string(), true, 15);
+        apex_3.add_zone(ZonePosition::LeftModifiers, "Left Modifiers".to_string(), true, 3);
+        apex_3.add_zone(ZonePosition::RightModifiers, "Right Modifiers".to_string(), true, 3);
         apex_3.add_zone(
             ZonePosition::NavigationCluster,
             "Navigation Block".to_string(),
@@ -404,42 +312,12 @@ impl ZoneFallback {
 
         // Apex 3 TKL - Enhanced 9-zone mapping
         let mut apex_3_tkl = ZoneMapping::new(product_ids::APEX_3_TKL, "Apex 3 TKL".to_string());
-        apex_3_tkl.add_zone(
-            ZonePosition::FunctionRow,
-            "Function Keys".to_string(),
-            false,
-            13,
-        );
-        apex_3_tkl.add_zone(
-            ZonePosition::MainKeys,
-            "Main Keys Left".to_string(),
-            true,
-            18,
-        );
-        apex_3_tkl.add_zone(
-            ZonePosition::MainKeys,
-            "Main Keys Center".to_string(),
-            true,
-            22,
-        );
-        apex_3_tkl.add_zone(
-            ZonePosition::MainKeys,
-            "Main Keys Right".to_string(),
-            true,
-            18,
-        );
-        apex_3_tkl.add_zone(
-            ZonePosition::LeftModifiers,
-            "Left Modifiers".to_string(),
-            true,
-            3,
-        );
-        apex_3_tkl.add_zone(
-            ZonePosition::RightModifiers,
-            "Right Modifiers".to_string(),
-            true,
-            3,
-        );
+        apex_3_tkl.add_zone(ZonePosition::FunctionRow, "Function Keys".to_string(), false, 13);
+        apex_3_tkl.add_zone(ZonePosition::MainKeys, "Main Keys Left".to_string(), true, 18);
+        apex_3_tkl.add_zone(ZonePosition::MainKeys, "Main Keys Center".to_string(), true, 22);
+        apex_3_tkl.add_zone(ZonePosition::MainKeys, "Main Keys Right".to_string(), true, 18);
+        apex_3_tkl.add_zone(ZonePosition::LeftModifiers, "Left Modifiers".to_string(), true, 3);
+        apex_3_tkl.add_zone(ZonePosition::RightModifiers, "Right Modifiers".to_string(), true, 3);
         apex_3_tkl.add_zone(
             ZonePosition::NavigationCluster,
             "Navigation Block".to_string(),
@@ -511,11 +389,7 @@ impl ZoneFallback {
     }
 
     /// Map a logical key to a zone index.
-    fn map_key_to_zone(
-        &self,
-        key_id: crate::devices::KeyId,
-        mapping: &ZoneMapping,
-    ) -> Option<usize> {
+    fn map_key_to_zone(&self, key_id: crate::devices::KeyId, mapping: &ZoneMapping) -> Option<usize> {
         use crate::devices::KeyId;
 
         // Map keys to logical zones based on keyboard layout
@@ -536,13 +410,9 @@ impl ZoneFallback {
             | KeyId::F12 => ZonePosition::FunctionRow,
 
             // Main letter/number keys
-            KeyId::A
-            | KeyId::Q
-            | KeyId::Z
-            | KeyId::Key1
-            | KeyId::Tab
-            | KeyId::CapsLock
-            | KeyId::LeftShift => ZonePosition::MainKeys, // Left side
+            KeyId::A | KeyId::Q | KeyId::Z | KeyId::Key1 | KeyId::Tab | KeyId::CapsLock | KeyId::LeftShift => {
+                ZonePosition::MainKeys
+            } // Left side
 
             KeyId::S
             | KeyId::W
@@ -594,22 +464,15 @@ impl ZoneFallback {
 
             // Modifiers
             KeyId::LeftCtrl | KeyId::LeftWin | KeyId::LeftAlt => ZonePosition::LeftModifiers,
-            KeyId::RightAlt | KeyId::RightWin | KeyId::Menu | KeyId::RightCtrl => {
-                ZonePosition::RightModifiers
-            }
+            KeyId::RightAlt | KeyId::RightWin | KeyId::Menu | KeyId::RightCtrl => ZonePosition::RightModifiers,
 
             // Arrow keys
-            KeyId::ArrowUp | KeyId::ArrowDown | KeyId::ArrowLeft | KeyId::ArrowRight => {
-                ZonePosition::ArrowKeys
-            }
+            KeyId::ArrowUp | KeyId::ArrowDown | KeyId::ArrowLeft | KeyId::ArrowRight => ZonePosition::ArrowKeys,
 
             // Navigation
-            KeyId::Insert
-            | KeyId::Delete
-            | KeyId::Home
-            | KeyId::End
-            | KeyId::PageUp
-            | KeyId::PageDown => ZonePosition::NavigationCluster,
+            KeyId::Insert | KeyId::Delete | KeyId::Home | KeyId::End | KeyId::PageUp | KeyId::PageDown => {
+                ZonePosition::NavigationCluster
+            }
 
             // Numpad
             KeyId::NumLock
@@ -724,10 +587,7 @@ mod tests {
     fn test_zone_effect_alternating() {
         let effect = ZoneEffect::Alternating(vec![Color::RED, Color::BLUE]);
         let colors = effect.compute_colors(4, 0.0);
-        assert_eq!(
-            colors,
-            vec![Color::RED, Color::BLUE, Color::RED, Color::BLUE]
-        );
+        assert_eq!(colors, vec![Color::RED, Color::BLUE, Color::RED, Color::BLUE]);
     }
 
     #[test]
@@ -750,17 +610,11 @@ mod tests {
         let fallback = ZoneFallback::new();
 
         // Should have mappings for known keyboards
-        assert!(
-            fallback
-                .get_mapping(product_ids::APEX_PRO_TKL_2023)
-                .is_some()
-        );
+        assert!(fallback.get_mapping(product_ids::APEX_PRO_TKL_2023).is_some());
         assert!(fallback.get_mapping(product_ids::APEX_3).is_some());
         assert!(fallback.get_mapping(product_ids::APEX_3_TKL).is_some());
 
-        let mapping = fallback
-            .get_mapping(product_ids::APEX_PRO_TKL_2023)
-            .unwrap();
+        let mapping = fallback.get_mapping(product_ids::APEX_PRO_TKL_2023).unwrap();
         assert_eq!(mapping.zone_count, 9);
         assert!(mapping.total_led_count() > 0);
     }
