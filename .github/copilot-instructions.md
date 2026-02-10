@@ -1,121 +1,126 @@
 # GitHub Copilot Instructions - steelseriesgg-rs
 
-Comprehensive code generation guardrails for **steelseriesgg-rs** - an open-source SteelSeries GG replacement for Linux.
+Code generation guardrails for **steelseriesgg-rs** - an open-source SteelSeries GG replacement for Linux.
 
 ## Project Context
 
-- **Language**: Rust 2021 (Rust 1.82+ toolchain; rustfmt 2024 style_edition)
-- **Binary**: `ssgg` (CLI + daemon)
-- **Purpose**: RGB lighting control, GameSense server, audio management for SteelSeries devices
-- **Key Docs**: `CLAUDE.md` (comprehensive), `AGENTS.md` (quick ref), `README.md` (user docs)
+- **Language**: Rust 2021 (rustfmt edition 2024, 100 char max)
+- **Stack**: Tokio (async), Axum (HTTP), hidapi 2.6.4 (HID), clap 4.5 (CLI)
+- **Binary**: `ssgg` (CLI + daemon for RGB lighting, GameSense server, audio management)
+- **Library**: `steelseries_gg` (public API)
+- **Target**: SteelSeries keyboards & headsets on Linux
+
+**Key Documentation**: `AGENTS.md` (comprehensive AI guide), `README.md` (user docs)
+
+---
 
 ## Core Principles
 
-1. **User commands > Rules** - Direct instructions override defaults
-2. **Edit > Create** - Modify existing code, avoid new files
+1. **User instructions override defaults** - Direct requests take precedence
+2. **Edit > Create** - Modify existing code, avoid creating new files
 3. **Subtraction > Addition** - Minimal changes, no over-engineering
-4. **Align with patterns** - Follow existing codebase conventions
-5. **Safety first** - No security vulnerabilities (command injection, XSS, SQL injection)
+4. **Follow existing patterns** - Match codebase conventions
+5. **Safety first** - No security vulnerabilities (injection, XSS, etc.)
+6. **No speculative features** - Only implement what's requested
 
-## Rust-Specific Guidelines
+---
 
-### Code Style
+## Rust Style & Conventions
+
+### Formatting (ENFORCED by CI)
 
 ```rust
-// Naming conventions
-fn my_function() {}           // snake_case for functions/vars
-struct MyStruct {}            // PascalCase for types
-const MY_CONSTANT: u32 = 42;  // SCREAMING_SNAKE_CASE for constants
+// Naming
+fn my_function() {}                 // snake_case
+struct MyType {}                    // PascalCase
+const MY_CONST: u32 = 42;          // SCREAMING_SNAKE_CASE
 
+// Style (rustfmt.toml)
 max_width = 100
-hard_tabs = false
 tab_spaces = 4
+hard_tabs = false
 newline_style = "Unix"
-```
-
-**Before commit (REQUIRED):**
-```bash
-cargo fmt                     # Format
-cargo clippy --all-features   # Lint
-cargo test                    # Test
+edition = "2024"
 ```
 
 ### Error Handling
 
 ```rust
-// Prefer Result over panic
-use anyhow::Result;           // For binaries
-use thiserror::Error;         // For libraries
-
-fn operation() -> Result<()> {
-    device.send_report()?;    // Propagate errors
+// Binaries: anyhow::Result
+use anyhow::{Result, Context};
+fn cmd() -> Result<()> {
+    device.init().context("Failed to init")?;
     Ok(())
 }
 
-// NEVER use .unwrap() or .expect() in production code
-// Use ? operator or proper error handling
-```
+// Libraries: thiserror::Error
+#[derive(Error, Debug)]
+pub enum DeviceError {
+    #[error("Device not found: {0}")]
+    NotFound(String),
+    #[error("HID error: {0}")]
+    HidError(#[from] hidapi::HidError),
+}
 
-### Device Communication Patterns
-
-**ALWAYS use HID report builders:**
-```rust
-// CORRECT
-let report = HidReportBuilder::new(HidDeviceType::Keyboard)
-    .command(CommandCode::RgbControl)
-    .zone_data(zone, &color)
-    .build()?;
-
-// WRONG - manual buffer construction
-let mut report = [0u8; 65];
-report[0] = 0x21;  // Fragile, error-prone
-```
-
-**Critical constants:**
-```rust
-STEELSERIES_VENDOR_ID = 0x1038
-KEYBOARD_REPORT_SIZE = 65     // With report ID
-HEADSET_REPORT_SIZE = 64      // Without report ID
-MAX_RGB_ZONES = 12
-GAMESENSE_DEFAULT_PORT = 27301
+// NEVER .unwrap() or .expect() in production
+// Use ? operator or proper handling
 ```
 
 ### Async/Tokio Patterns
 
 ```rust
-// Use tokio for async operations
+// Shared state
 use tokio::sync::{Mutex, RwLock};
-use tokio::time::{sleep, Duration};
-
-// Prefer Arc<Mutex<T>> for shared state in async
 let shared = Arc::new(Mutex::new(state));
 
-// Use tokio::spawn for background tasks
+// Background tasks
 tokio::spawn(async move {
-    // Background work
+    loop {
+        // work
+        tokio::time::sleep(Duration::from_secs(1)).await;
+    }
 });
+
+// Axum HTTP server
+let app = Router::new()
+    .route("/event", post(handler))
+    .layer(CorsLayer::permissive())
+    .with_state(state);
+
+let listener = TcpListener::bind("127.0.0.1:27301").await?;
+axum::serve(listener, app).await?;
 ```
 
-### Feature Flags
+---
+
+## Architecture Patterns (CRITICAL)
+
+### 1. HID Report Builder (ALWAYS USE)
 
 ```rust
-// Conditional compilation for features
-#[cfg(feature = "audio")]
-pub mod audio;
+// CORRECT - Type-safe, guaranteed valid
+let report = HidReportBuilder::new(HidDeviceType::Keyboard)
+    .command(CommandCode::RgbControl)
+    .zone_data(zone, &color)
+    .build()?;
+device.send_report(&report)?;
 
-#[cfg(feature = "sonar")]
-use crate::audio::sonar::SonarClient;
-
-// Always test with all feature combinations
-// cargo test --all-features
+// WRONG - Manual construction (fragile)
+let mut report = [0u8; 65];
+report[0] = 0x00;
+report[1] = 0x21;  // Error-prone
 ```
 
-## Architecture Patterns
+**Critical constants:**
+- Keyboards: 65 bytes (with report ID)
+- Headsets: 64 bytes (no report ID)
+- `STEELSERIES_VENDOR_ID = 0x1038`
+- `APEX_PRO_TKL_2023_PRODUCT_ID = 0x1628` (NOT 0x1618!)
 
-### Device Abstraction
+### 2. Device Trait Pattern
 
 ```rust
-// Implement Device trait for new hardware
+// Common interface for all hardware
 pub trait Device: Send + Sync {
     fn info(&self) -> &DeviceInfo;
     fn initialize(&mut self) -> Result<()>;
@@ -123,103 +128,50 @@ pub trait Device: Send + Sync {
     // ... 20+ methods
 }
 
-// Use DeviceManager for discovery
-let mut manager = DeviceManager::new()?;
-manager.refresh()?;
-let device = manager.open_device(vendor_id, product_id, interface)?;
+// Keyboard extends Device with RGB
+pub trait Keyboard: Device {
+    fn set_color(&mut self, color: Color) -> Result<()>;
+    fn set_zone_colors(&mut self, colors: &[Color]) -> Result<()>;
+    fn set_brightness(&mut self, brightness: u8) -> Result<()>;
+    fn supports_per_key_rgb(&self) -> bool;
+    // ... 25+ methods
+}
 ```
 
-### RGB Effect Engine
+### 3. RGB Effect Engine with Caching
 
 ```rust
-// Use EffectEngine with caching
+// Create effect
 let mut engine = EffectEngine::new(Effect::Breathing {
     color: Color::new(0, 255, 255),
     speed: 2.0,
 });
 
-// Caches results for 16ms (~60 FPS)
+// Compute (cached if Δt < 16ms = ~60 FPS)
 let colors = engine.compute(num_zones, elapsed);
+
+// CRITICAL: First call always computes
+// Cache check: last_compute_time != Duration::ZERO
 ```
 
-### Performance Monitoring
+**Supported effects:**
+- Static, Breathing, Spectrum, Wave, Reactive, Gradient, Custom, Off
+
+### 4. Performance Monitoring
 
 ```rust
-// Track performance in critical paths
+// Track critical paths
 let perf = PerformanceManager::new();
 perf.start_operation("rgb_update");
 // ... work
 perf.end_operation("rgb_update");
 ```
 
-## Critical Gotchas
-
-1. **HID Report Sizing**: Keyboards = 65 bytes (with report ID), Headsets = 64 bytes
-2. **Interface Numbers**: Keyboards use interface 1, headsets use interface 3
-3. **Product IDs**: Apex Pro TKL 2023 = `0x1628` (NOT `0x1618`)
-4. **Animated Effects**: Require daemon mode for continuous updates
-5. **Per-Key RGB**: Protocol not reverse-engineered yet (use zone fallback)
-6. **RGB Caching**: First compute always executes (check `last_compute_time != Duration::ZERO`)
-
-## Security Requirements
-
-**NEVER introduce these vulnerabilities:**
-- Command injection (validate all shell inputs)
-- Path traversal (sanitize file paths)
-- Buffer overflows (use safe Rust patterns)
-- Unvalidated user input to system calls
-- Hardcoded credentials or API keys
-
-**For HID communication:**
-- Always validate buffer sizes before sending
-- Use type-safe builders (HidReportBuilder)
-- Bounds check array access
-- Sanitize device paths
-
-## Testing Standards
-
-```rust
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_color_blending() {
-        let c1 = Color::new(255, 0, 0);
-        let c2 = Color::new(0, 0, 255);
-        let blended = c1.blend(&c2, 0.5);
-        assert_eq!(blended, Color::new(127, 0, 127));
-    }
-}
-```
-
-**Test coverage expectations:**
-- Unit tests for all public APIs
-- Edge cases (empty, max, invalid input)
-- Error paths (Result::Err cases)
-- Feature flag combinations
-
-**Current coverage:** ~77 tests across RGB, HID, zones, keyboards, profiles, performance
-
-## Dependencies
-
-**DO NOT add new dependencies without justification**
-
-**Core deps:**
-- hidapi 2.6.4 - HID communication (pinned)
-- tokio 1.49 - Async runtime
-- axum 0.8 - HTTP server
-- clap 4.5 - CLI parsing
-- serde/serde_json - Serialization
-- thiserror 2.0 - Error types
-
-**Optional:**
-- libpulse-binding 2.30 (audio feature)
-- reqwest 0.13 (sonar feature)
+---
 
 ## Code Generation Guidelines
 
-### Prefer Built-ins
+### Prefer Built-in Patterns
 
 ```rust
 // PREFER
@@ -240,23 +192,23 @@ When editing:
 - Preserve existing comments
 - Keep existing error messages
 
-### No Over-Engineering
+### NO Over-Engineering
 
 **DON'T add unless requested:**
 - Extra abstraction layers
 - Premature optimization
 - Speculative features
-- Excessive documentation (docstrings on every private fn)
+- Excessive docstrings (on private functions)
 - Error handling for impossible cases
+- Feature flags for hypothetical needs
+- Backwards-compatibility hacks
 
 **Example - TOO MUCH:**
 ```rust
-/// Sets the RGB color (UNNEEDED docstring for internal function)
+/// Internal color setter (UNNEEDED for internal fn)
 fn set_color_internal(&mut self, color: Color) -> Result<()> {
-    // Validate color (UNNEEDED - Color type guarantees validity)
-    if color.r > 255 || color.g > 255 || color.b > 255 {
-        return Err(anyhow!("Invalid color"));
-    }
+    // Validate (UNNEEDED - type guarantees validity)
+    if color.r > 255 { return Err(...); }
     self.color = color;
     Ok(())
 }
@@ -269,6 +221,184 @@ fn set_color_internal(&mut self, color: Color) {
 }
 ```
 
+---
+
+## Security Requirements (MANDATORY)
+
+**NEVER introduce:**
+- Command injection (validate shell inputs)
+- Path traversal (sanitize file paths)
+- Buffer overflows (use safe Rust patterns)
+- Unvalidated user input to system calls
+- Hardcoded credentials/API keys
+
+**For HID communication:**
+- Always validate buffer sizes
+- Use type-safe builders (HidReportBuilder)
+- Bounds check array access
+- Sanitize device paths
+
+---
+
+## Testing Standards
+
+```rust
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_color_blending() {
+        let c1 = Color::new(255, 0, 0);
+        let c2 = Color::new(0, 0, 255);
+        let blended = c1.blend(&c2, 0.5);
+        assert_eq!(blended, Color::new(127, 0, 127));
+    }
+}
+```
+
+**Coverage expectations:**
+- Unit tests for all public APIs
+- Edge cases (empty, max, invalid)
+- Error paths (Result::Err cases)
+- Feature flag combinations
+
+**Current: ~77 tests** (RGB, HID, zones, keyboards, profiles, performance, validation)
+
+---
+
+## Dependencies (DO NOT add without justification)
+
+**Core:**
+- hidapi 2.6.4 (pinned)
+- tokio 1.49 (rt-multi-thread, macros)
+- axum 0.8 (HTTP server)
+- clap 4.5 (CLI derive)
+- serde/serde_json (serialization)
+- thiserror 2.0 (errors)
+
+**Optional:**
+- libpulse-binding 2.30 (audio feature)
+- reqwest 0.13 (sonar feature)
+
+---
+
+## Critical Gotchas
+
+1. **HID Report Sizing**: Keyboards=65 bytes, Headsets=64 bytes (always use HidReportBuilder)
+2. **Interface Numbers**: Keyboards=interface 1, Headsets=interface 3
+3. **Product IDs**: Apex Pro TKL 2023 = `0x1628` (NOT `0x1618`)
+4. **Animated Effects**: CLI is one-shot; use daemon mode for animations
+5. **Per-Key RGB**: Protocol not reverse-engineered (use zone fallback)
+6. **RGB Caching**: First compute always executes (check `last_compute_time != Duration::ZERO`)
+7. **Actuation Read**: Not implemented (write-only, read is placeholder)
+
+---
+
+## Feature Flags
+
+```rust
+#[cfg(feature = "audio")]
+pub mod audio;
+
+#[cfg(feature = "sonar")]
+use crate::audio::sonar::SonarClient;
+
+// Always test with all feature combinations:
+// cargo test --all-features
+```
+
+---
+
+## CLI Commands (clap derive API)
+
+```rust
+#[derive(Parser)]
+struct Cli {
+    #[command(subcommand)]
+    command: Commands,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    Rgb {
+        #[arg(long)]
+        color: String,
+        #[arg(long)]
+        brightness: Option<u8>,
+    },
+}
+
+fn cmd_rgb(color: &str, brightness: Option<u8>) -> Result<()> {
+    let color = Color::parse(color)?;
+    let mut controller = RgbController::new()?;
+    controller.set_color(color)?;
+    if let Some(b) = brightness {
+        controller.set_brightness(b)?;
+    }
+    Ok(())
+}
+```
+
+---
+
+## Performance Optimization
+
+### Release Profile
+
+```toml
+[profile.release]
+strip = true           # ~30% size reduction
+lto = "fat"            # ~15% perf gain
+codegen-units = 1
+panic = "abort"        # ~10% size reduction
+opt-level = 3
+overflow-checks = false
+```
+
+**Result:** ~2-3 MB binary, <100ms startup, <5ms RGB latency
+
+### Runtime Best Practices
+
+1. **Reuse buffers:**
+   ```rust
+   // GOOD
+   let mut buf = Vec::with_capacity(MAX_ZONES);
+   loop { buf.clear(); /* reuse */ }
+
+   // BAD
+   loop { let buf = Vec::new(); /* allocates */ }
+   ```
+
+2. **Use caching:** RGB effects cached for 16ms (~60 FPS)
+3. **Batch HID writes:** When possible
+4. **Minimize allocations:** In hot paths
+5. **Use const fn:** For compile-time computation
+
+---
+
+## Git Workflow
+
+**Commit messages:**
+```
+feat: Add per-key RGB fallback using zones
+fix: RGB caching returns black on first compute
+refactor: Extract HID report builder pattern
+docs: Update AGENTS.md with common gotchas
+test: Add unit tests for Color blending
+perf: Optimize HID protocol by 20%
+```
+
+**Before commit (REQUIRED):**
+```bash
+cargo fmt                          # Format
+cargo clippy --all-features        # Lint (no warnings)
+cargo test --all-features          # Test
+cargo build --release              # Build
+```
+
+---
+
 ## Module Organization
 
 ```
@@ -279,8 +409,8 @@ src/
 ├── devices/             # Hardware layer
 │   ├── mod.rs           # Device trait, discovery
 │   ├── hid_reports.rs   # HID protocol
-│   ├── keyboards/       # Keyboard implementations
-│   └── headsets/        # Headset implementations
+│   ├── keyboards/       # Keyboard impls
+│   └── headsets/        # Headset impls
 ├── rgb/                 # Color & effects
 ├── gamesense/           # HTTP server
 ├── performance.rs       # Monitoring
@@ -295,93 +425,9 @@ src/
 - Add to `lib.rs` if public API
 - Update `PROJECT_INDEX.md` if significant
 
-## CLI Command Patterns
+---
 
-```rust
-// Use clap derive API
-#[derive(Parser)]
-struct Cli {
-    #[command(subcommand)]
-    command: Commands,
-}
-
-#[derive(Subcommand)]
-enum Commands {
-    Rgb {
-        #[arg(long)]
-        color: String,
-
-        #[arg(long)]
-        brightness: Option<u8>,
-    },
-}
-
-// Implement handler
-fn cmd_rgb(color: &str, brightness: Option<u8>) -> Result<()> {
-    let color = Color::parse(color)?;
-    let mut controller = RgbController::new()?;
-    controller.set_color(color)?;
-    if let Some(b) = brightness {
-        controller.set_brightness(b)?;
-    }
-    Ok(())
-}
-```
-
-## Performance Considerations
-
-**Release profile:**
-```toml
-[profile.release]
-strip = true
-lto = "fat"
-codegen-units = 1
-opt-level = 3
-```
-
-**Runtime optimization:**
-- Reuse buffers (Vec, String) where possible
-- Cache expensive computations (RGB effects)
-- Batch HID writes when possible
-- Use const fn for compile-time computation
-- Minimize allocations in hot paths
-
-**Example:**
-```rust
-// GOOD - reuse buffer
-let mut buffer = Vec::with_capacity(MAX_ZONES);
-loop {
-    buffer.clear();
-    compute_colors(&mut buffer);
-    device.send(&buffer)?;
-}
-
-// BAD - allocate every iteration
-loop {
-    let buffer = compute_colors();  // New allocation
-    device.send(&buffer)?;
-}
-```
-
-## Git Workflow
-
-**Commit messages:**
-```
-feat: Add per-key RGB fallback using zones
-fix: RGB caching returns black on first compute
-refactor: Extract HID report builder pattern
-docs: Update AGENTS.md with common gotchas
-test: Add unit tests for Color blending
-```
-
-**Before commit:**
-```bash
-cargo fmt
-cargo clippy --all-features
-cargo test --all-features
-```
-
-## Documentation
+## Documentation Guidelines
 
 **Only add when valuable:**
 - Complex algorithms (RGB effects, HID protocol)
@@ -406,6 +452,8 @@ pub fn compute(&mut self, num_zones: usize, elapsed: Duration) -> &[Color] {
 }
 ```
 
+---
+
 ## Common Tasks Quick Reference
 
 ```bash
@@ -424,20 +472,37 @@ cargo run -- daemon
 RUST_LOG=debug cargo run -- devices
 cargo run -- --debug-hid devices
 
-# Lint
+# Lint (REQUIRED before commit)
 cargo clippy --all-features -- -D warnings
 ```
 
+---
+
 ## Additional Resources
 
-- **Comprehensive guide**: `CLAUDE.md` (28KB developer reference)
-- **Quick reference**: `AGENTS.md` (AI agent guide)
+- **Comprehensive guide**: `AGENTS.md` (50KB AI reference)
 - **User docs**: `README.md`
 - **Contributing**: `CONTRIBUTING.md`
 - **Project structure**: `PROJECT_INDEX.md`
-- **Roadmap**: `PLAN.md`
+- **Roadmap**: `PLAN.md` (per-key RGB focus)
+- **Protocol research**: `docs/development/*.md`
 
 ---
 
-**Last Updated**: 2026-02-10
+## Current Development Focus
+
+**Primary:** Per-key RGB control for Apex Pro TKL 2023
+- Protocol reverse engineering in progress
+- Command code `0x2A` is placeholder
+- Zone-based fallback working as interim
+
+**Secondary:** Actuation point control
+- Write working (`0x2D` command)
+- Read command not yet discovered
+- Limited to Apex Pro series
+
+---
+
 **Version**: 0.1.0
+**Last Updated**: 2026-02-10
+**License**: MIT
