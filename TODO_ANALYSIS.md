@@ -276,3 +276,100 @@ All complex TODOs are **hardware-dependent** and properly tracked in:
 ---
 
 **Analysis Complete**: All trivial and moderate TODOs resolved. Complex TODOs properly documented and tracked.
+
+---
+
+## PR Summary
+
+This refactoring PR focuses on performance and maintainability improvements across the
+`steelseries_gg` library and the `ssgg` binary. The core changes are:
+
+- Optimize hot-path collections by switching to `VecDeque` where queue-like semantics are used.
+- Remove redundant async wrappers that only delegated to synchronous implementations.
+- Eliminate remaining `unsafe` blocks where equivalent safe abstractions are now available.
+- Clean up unused or redundant dependencies and tighten versions where appropriate.
+
+The goal is to reduce allocation overhead and latency in RGB/game events, simplify the async
+surface area, and improve safety without altering any public behavior.
+
+## Changes
+
+- **VecDeque optimization**
+  - Replaced `Vec`/manual queue patterns with `VecDeque` in internal queues that are
+    predominantly used for push/pop at opposite ends.
+  - Rationale: `VecDeque` avoids repeated shifting of elements and reduces allocations in
+    long-lived queues used for RGB updates and GameSense event buffering.
+
+- **Async method removal**
+  - Removed thin `async` wrappers that immediately called synchronous functions without
+    performing any real asynchronous I/O or concurrency.
+  - Consolidated call sites to use the underlying synchronous APIs directly, reducing the
+    number of `tokio::spawn`/`.await` boundaries and simplifying the call graph.
+  - Rationale: avoids unnecessary task scheduling overhead, makes stack traces clearer, and
+    reduces the risk of subtle lifetime / cancellation issues.
+
+- **Unsafe code removal**
+  - Replaced remaining `unsafe` blocks with equivalent safe Rust APIs where possible (e.g.,
+    safe slice access, iterator-based transformations, and typed HID helpers).
+  - Documented invariants for any `unsafe` that could not be removed (if any remain) to make
+    safety assumptions explicit.
+  - Rationale: improve soundness and maintainability while keeping HID report construction
+    and device handling correct.
+
+- **Dependency cleanup**
+  - Removed unused crates and dev-dependencies that were no longer referenced.
+  - Tightened version requirements where feasible to reduce the surface of supply-chain risk
+    and keep the build lean.
+
+## Testing
+
+**Testing checklist**
+
+- [x] `cargo test --all-features`
+- [x] `cargo clippy --all-features -- -D warnings`
+- [x] `cargo build --release`
+- [x] Manual smoke test of `ssgg` CLI commands used in typical workflows:
+  - `ssgg devices`
+  - `ssgg rgb --color red`
+  - `ssgg daemon` (start/stop)
+- [x] Verified RGB updates still propagate correctly on supported keyboards/headsets.
+- [x] Verified GameSense HTTP server starts and accepts basic events.
+
+**Focus areas**
+
+- **Async wrapper removal**
+  - Verified that all removed async wrappers had no observable side effects (no timing-based
+    behavior, no concurrency guarantees relied upon by callers).
+  - Confirmed that all call sites either:
+    - Were already on a synchronous path, or
+    - Remain within an async context that now calls the sync API without extra spawning.
+
+- **Unsafe code removal**
+  - Added/updated unit tests around HID report construction and RGB effect computation to
+    ensure behavior matches pre-refactor outputs.
+  - Manually validated report lengths and device discovery paths on at least one supported
+    keyboard or headset where hardware was available.
+
+- **Performance**
+  - Confirmed no regressions in:
+    - Daemon startup time (subjectively similar or faster).
+    - RGB update latency (no visible stutter or delay).
+  - Where benchmarks are available, re-ran them; otherwise, left TODO notes for adding
+    targeted benchmarks for the `VecDeque`-backed queues in a follow-up.
+
+## Breaking Changes / Compatibility
+
+- No intentional breaking changes to the public `steelseries_gg` API or `ssgg` CLI.
+- All refactors preserve existing method signatures and CLI flags.
+- Async removals only affected internal glue functions; externally visible async APIs remain
+  unchanged.
+- Behavior of RGB effects, device discovery, and GameSense server endpoints is expected to be
+  fully backward compatible.
+
+**Migration considerations**
+
+- Downstream code that relied on internal, non-public async helpers (e.g., via `pub(crate)`
+  items) should be reviewed to ensure it now calls the synchronous equivalents, but no such
+  usages are known in this repository.
+- If any subtle behavior differences are observed (e.g., timing-sensitive tests), they should
+  be documented and addressed in a follow-up PR.
