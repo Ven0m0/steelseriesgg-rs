@@ -27,10 +27,10 @@ fn my_function() {}           // snake_case for functions/vars
 struct MyStruct {}            // PascalCase for types
 const MY_CONSTANT: u32 = 42;  // SCREAMING_SNAKE_CASE for constants
 
-// Formatting (rustfmt enforced)
-max_width = 100               // Line length limit
-indent = 4 spaces             // No tabs
-newline_style = Unix          // LF only
+max_width = 100
+hard_tabs = false
+tab_spaces = 4
+newline_style = "Unix"
 ```
 
 **Before commit (REQUIRED):**
