@@ -17,8 +17,10 @@ use pulse::PulseHandler;
 #[cfg(feature = "sonar")]
 pub use sonar::{SonarChannel, SonarClient};
 
+#[cfg(feature = "audio")]
 use crate::{Error, Result};
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "audio")]
 use std::collections::HashMap;
 
 // Channel types are used by both audio and sonar features
