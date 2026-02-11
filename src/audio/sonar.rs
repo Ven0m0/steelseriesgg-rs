@@ -585,7 +585,7 @@ impl SonarClient {
             }
         }
 
-        unreachable!("Retry loop should always return a result or error")
+        Err(Error::Audio("PUT request retry loop exited unexpectedly".to_string()))
     }
 
     /// Check if an HTTP error is transient and should be retried.
