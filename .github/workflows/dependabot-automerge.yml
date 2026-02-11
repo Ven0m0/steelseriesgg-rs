@@ -1,4 +1,4 @@
-name: Dependabot auto-merge
+name: Dependency auto-merge
 
 on:
   pull_request:
@@ -10,7 +10,9 @@ permissions:
 
 jobs:
   automerge:
-    if: github.actor == 'dependabot[bot]'
+    if: |
+      github.actor == 'dependabot[bot]' ||
+      github.actor == 'renovate[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: fastify/github-action-merge-dependabot@v3

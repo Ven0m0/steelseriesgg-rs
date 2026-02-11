@@ -187,7 +187,7 @@ fn test_effect_engine_caching() {
 fn test_per_key_performance_benchmark() {
     let db = KeyMappingDatabase::new();
     if let Some(mapping) = db.get_mapping(product_ids::APEX_PRO_TKL_2023) {
-        let mut controller = PerKeyRgbController::new(mapping);
+        let mut controller = PerKeyRgbController::new(mapping.clone());
 
         // Set a complex effect
         controller.set_effect(PerKeyEffect::Wave {
