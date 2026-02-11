@@ -106,7 +106,7 @@ pub trait Keyboard: Device {
     async fn trigger_key_reactive(&mut self, keys: &[KeyId], duration: f32) -> Result<()>;
 
     /// Apply per-key effect with brightness control.
-    fn apply_per_key_effect_with_brightness(&mut self, brightness: f32) -> Result<()>;
+    async fn apply_per_key_effect_with_brightness(&mut self, brightness: f32) -> Result<()>;
 
     /// Convert per-key effect to zone-based fallback.
     async fn convert_per_key_to_zones(&mut self, effect: &PerKeyEffect) -> Result<()>;

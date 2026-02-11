@@ -728,7 +728,7 @@ impl RgbValidator {
 
         // Zone-based RGB tests
         report.add_result(self.test_zone_rgb_basic(keyboard));
-        report.add_result(self.test_zone_rgb_effects(keyboard).await);
+        report.add_result(self.test_zone_rgb_effects(keyboard));
         report.add_result(self.test_zone_reliability(keyboard).await);
 
         // Per-key RGB tests (if supported)

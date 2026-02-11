@@ -1,3 +1,4 @@
+use hidapi::HidApi;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -198,8 +199,8 @@ impl DeviceManager {
                 vendor_id: device.vendor_id(),
                 product_id,
                 interface_number: device.interface_number(),
-                serial_number: device.serial_number().map(|s| s.to_string()),
-                manufacturer: device.manufacturer_string().map(|s| s.to_string()),
+                serial_number: device.serial_number().map(|s: &str| s.to_string()),
+                manufacturer: device.manufacturer_string().map(|s: &str| s.to_string()),
                 path: path.clone(),
             };
 
@@ -441,8 +442,8 @@ impl DeviceManager {
                 vendor_id: device.vendor_id(),
                 product_id,
                 interface_number: device.interface_number(),
-                serial_number: device.serial_number().map(|s| s.to_string()),
-                manufacturer: device.manufacturer_string().map(|s| s.to_string()),
+                serial_number: device.serial_number().map(|s: &str| s.to_string()),
+                manufacturer: device.manufacturer_string().map(|s: &str| s.to_string()),
                 path,
             };
 
