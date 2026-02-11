@@ -862,8 +862,8 @@ impl AdaptiveRefreshController {
     /// Record timing measurements and potentially adjust refresh rate.
     pub fn record_timing(&mut self, computation_time: Duration, hid_time: Duration) -> f64 {
         // Keep rolling window of recent times
-        self.computation_times.push(computation_time);
-        self.hid_times.push(hid_time);
+        self.computation_times.push_back(computation_time);
+        self.hid_times.push_back(hid_time);
 
         if self.computation_times.len() > 10 {
             self.computation_times.pop_front();

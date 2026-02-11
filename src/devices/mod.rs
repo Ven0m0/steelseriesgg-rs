@@ -114,7 +114,7 @@ pub trait Device: Send + Sync {
 }
 
 /// Report cache entry for deduplication.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 /// HID communication optimizer for reducing CPU usage.
 pub struct HidOptimizer {
     /// Cache of recently sent reports to avoid duplicates (hash -> timestamp)
