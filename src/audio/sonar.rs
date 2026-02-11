@@ -529,8 +529,15 @@ impl SonarClient {
                         .map_err(|e| Error::Audio(format!("Failed to parse response: {}", e)));
                 }
                 Err(e) => {
-                    let is_transient = Self::is_transient_error(&e);
-                    if !is_transient {
+                    if Self::is_transient_error(&e) {
+                        if attempt == MAX_RETRIES {
+                            return Err(Error::Audio(format!(
+                                "GET request failed after {} retries: {}",
+                                MAX_RETRIES,
+                                e
+                            )));
+                        }
+                    } else {
                         return Err(Error::Audio(format!("GET request failed: {}", e)));
                     }
 
@@ -546,7 +553,7 @@ impl SonarClient {
             }
         }
 
-        unreachable!("Retry loop should have returned either success or error")
+        unreachable!("Retry loop should always return a result or error")
     }
 
     /// Perform a PUT request.
@@ -572,8 +579,15 @@ impl SonarClient {
                     return Ok(());
                 }
                 Err(e) => {
-                    let is_transient = Self::is_transient_error(&e);
-                    if !is_transient || attempt == MAX_RETRIES {
+                    if Self::is_transient_error(&e) {
+                        if attempt == MAX_RETRIES {
+                            return Err(Error::Audio(format!(
+                                "PUT request failed after {} retries: {}",
+                                MAX_RETRIES,
+                                e
+                            )));
+                        }
+                    } else {
                         return Err(Error::Audio(format!("PUT request failed: {}", e)));
                     }
                     // Continue to next attempt if transient error and retries remaining
@@ -581,7 +595,7 @@ impl SonarClient {
             }
         }
 
-        unreachable!("Retry loop should have returned either success or error")
+        Err(Error::Audio("PUT request retry loop exited unexpectedly".to_string()))
     }
 
     /// Check if an HTTP error is transient and should be retried.
