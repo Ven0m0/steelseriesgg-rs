@@ -508,8 +508,6 @@ impl SonarClient {
     async fn get<T: serde::de::DeserializeOwned>(&self, url: &str) -> Result<T> {
         const MAX_RETRIES: u32 = 2;
 
-        let mut last_error = None;
-
         for attempt in 0..=MAX_RETRIES {
             if attempt > 0 {
                 tracing::debug!("Retrying GET request (attempt {}/{})", attempt + 1, MAX_RETRIES + 1);
@@ -532,9 +530,12 @@ impl SonarClient {
                 }
                 Err(e) => {
                     if Self::is_transient_error(&e) {
-                        last_error = Some(e);
-                        if attempt < MAX_RETRIES {
-                            continue;
+                        if attempt == MAX_RETRIES {
+                            return Err(Error::Audio(format!(
+                                "GET request failed after {} retries: {}",
+                                MAX_RETRIES,
+                                e
+                            )));
                         }
                     } else {
                         return Err(Error::Audio(format!("GET request failed: {}", e)));
@@ -543,11 +544,7 @@ impl SonarClient {
             }
         }
 
-        Err(Error::Audio(format!(
-            "GET request failed after {} retries: {}",
-            MAX_RETRIES,
-            last_error.unwrap()
-        )))
+        unreachable!("Retry loop should always return a result or error")
     }
 
     /// Perform a PUT request.
@@ -555,8 +552,6 @@ impl SonarClient {
     /// Retries transient failures (connection errors, timeouts) up to 2 times.
     async fn put(&self, url: &str) -> Result<()> {
         const MAX_RETRIES: u32 = 2;
-
-        let mut last_error = None;
 
         for attempt in 0..=MAX_RETRIES {
             if attempt > 0 {
@@ -576,9 +571,12 @@ impl SonarClient {
                 }
                 Err(e) => {
                     if Self::is_transient_error(&e) {
-                        last_error = Some(e);
-                        if attempt < MAX_RETRIES {
-                            continue;
+                        if attempt == MAX_RETRIES {
+                            return Err(Error::Audio(format!(
+                                "PUT request failed after {} retries: {}",
+                                MAX_RETRIES,
+                                e
+                            )));
                         }
                     } else {
                         return Err(Error::Audio(format!("PUT request failed: {}", e)));
@@ -587,11 +585,7 @@ impl SonarClient {
             }
         }
 
-        Err(Error::Audio(format!(
-            "PUT request failed after {} retries: {}",
-            MAX_RETRIES,
-            last_error.unwrap()
-        )))
+        unreachable!("Retry loop should always return a result or error")
     }
 
     /// Check if an HTTP error is transient and should be retried.
