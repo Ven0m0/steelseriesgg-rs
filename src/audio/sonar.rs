@@ -533,8 +533,7 @@ impl SonarClient {
                         if attempt == MAX_RETRIES {
                             return Err(Error::Audio(format!(
                                 "GET request failed after {} retries: {}",
-                                MAX_RETRIES,
-                                e
+                                MAX_RETRIES, e
                             )));
                         }
                     } else {
@@ -583,8 +582,7 @@ impl SonarClient {
                         if attempt == MAX_RETRIES {
                             return Err(Error::Audio(format!(
                                 "PUT request failed after {} retries: {}",
-                                MAX_RETRIES,
-                                e
+                                MAX_RETRIES, e
                             )));
                         }
                     } else {
