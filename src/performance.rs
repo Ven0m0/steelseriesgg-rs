@@ -223,13 +223,6 @@ impl PerformanceMonitor {
         let base_interval_ms = self.current_complexity.frame_budget_ms();
 
         // Analyze recent performance to detect system load
-        let _avg_frame_time = if !self.timing_history.is_empty() {
-            let sum: Duration = self.timing_history.iter().sum();
-            sum.as_secs_f32() * 1000.0 / self.timing_history.len() as f32
-        } else {
-            base_interval_ms
-        };
-
         let avg_computation_time = if !self.computation_history.is_empty() {
             let sum: Duration = self.computation_history.iter().sum();
             sum.as_micros() as f32 / (self.computation_history.len() as f32 * 1000.0) // Convert to ms
