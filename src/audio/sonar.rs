@@ -508,8 +508,6 @@ impl SonarClient {
     async fn get<T: serde::de::DeserializeOwned>(&self, url: &str) -> Result<T> {
         const MAX_RETRIES: u32 = 2;
 
-        let mut last_error = None;
-
         for attempt in 0..=MAX_RETRIES {
             if attempt > 0 {
                 tracing::debug!("Retrying GET request (attempt {}/{})", attempt + 1, MAX_RETRIES + 1);
@@ -520,7 +518,6 @@ impl SonarClient {
                 Ok(r) => r,
                 Err(e) => {
                     if Self::is_transient_error(&e) && attempt < MAX_RETRIES {
-                        last_error = Some(e);
                         continue;
                     }
                     return Err(Error::Audio(format!("GET request failed: {}", e)));
@@ -540,11 +537,7 @@ impl SonarClient {
                 .map_err(|e| Error::Audio(format!("Failed to parse response: {}", e)));
         }
 
-        Err(Error::Audio(format!(
-            "GET request failed after {} retries: {}",
-            MAX_RETRIES,
-            last_error.unwrap()
-        )))
+        unreachable!("Loop always returns or continues")
     }
 
     /// Perform a PUT request.
@@ -552,8 +545,6 @@ impl SonarClient {
     /// Retries transient failures (connection errors, timeouts) up to 2 times.
     async fn put(&self, url: &str) -> Result<()> {
         const MAX_RETRIES: u32 = 2;
-
-        let mut last_error = None;
 
         for attempt in 0..=MAX_RETRIES {
             if attempt > 0 {
@@ -565,7 +556,6 @@ impl SonarClient {
                 Ok(r) => r,
                 Err(e) => {
                     if Self::is_transient_error(&e) && attempt < MAX_RETRIES {
-                        last_error = Some(e);
                         continue;
                     }
                     return Err(Error::Audio(format!("PUT request failed: {}", e)));
@@ -582,11 +572,7 @@ impl SonarClient {
             return Ok(());
         }
 
-        Err(Error::Audio(format!(
-            "PUT request failed after {} retries: {}",
-            MAX_RETRIES,
-            last_error.unwrap()
-        )))
+        unreachable!("Loop always returns or continues")
     }
 
     /// Check if an HTTP error is transient and should be retried.
