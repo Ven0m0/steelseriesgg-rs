@@ -668,7 +668,7 @@ impl Keyboard for GenericKeyboard {
         }
     }
 
-    fn apply_per_key_effect_with_brightness(&mut self, brightness: f32) -> Result<()> {
+    async fn apply_per_key_effect_with_brightness(&mut self, brightness: f32) -> Result<()> {
         let key_colors = if let Some(ref mut controller) = self.per_key_controller {
             controller.set_brightness(brightness.clamp(0.0, 1.0));
 
