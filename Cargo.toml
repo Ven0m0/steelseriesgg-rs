@@ -79,7 +79,7 @@ tower-http = { version = "0.6", default-features = false, features = ["cors"] }
 # Logging
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-anyhow = "1.0.100"
+anyhow = "1.0.101"
 async-trait = "0.1.89"
 
 # Future enhancement dependencies:
