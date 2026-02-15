@@ -143,8 +143,17 @@ fn is_root() -> bool {
 /// ```
 pub fn set_poll_rate(device_type: DeviceType, rate: PollRate) -> Result<()> {
     if !is_root() {
+        let bin_name = match std::env::current_exe() {
+            Ok(path) => path
+                .file_name()
+                .map(|name| name.to_string_lossy().into_owned())
+                .unwrap_or_else(|| "ssgg".to_string()),
+            Err(_) => "ssgg".to_string(),
+        };
+
         return Err(Error::PermissionDenied(format!(
-            "Poll rate changes require root privileges. Try: sudo ssgg pollrate {} {}",
+            "Poll rate changes require root privileges. Try: sudo {} pollrate {} {}",
+            bin_name,
             device_type.name(),
             rate.to_hz()
         )));
