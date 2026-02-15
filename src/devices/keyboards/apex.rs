@@ -205,8 +205,8 @@ impl Keyboard for Apex3Tkl {
         self.inner.trigger_key_reactive(keys, duration).await
     }
 
-    fn apply_per_key_effect_with_brightness(&mut self, brightness: f32) -> Result<()> {
-        self.inner.apply_per_key_effect_with_brightness(brightness)
+    async fn apply_per_key_effect_with_brightness(&mut self, brightness: f32) -> Result<()> {
+        self.inner.apply_per_key_effect_with_brightness(brightness).await
     }
 
     async fn convert_per_key_to_zones(&mut self, effect: &PerKeyEffect) -> Result<()> {
