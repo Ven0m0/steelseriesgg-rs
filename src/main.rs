@@ -1845,7 +1845,7 @@ async fn cmd_performance(manager: &DeviceManager, action: PerformanceAction) -> 
                         export_performance_stats(manager, &keyboards, output_path, json)?;
                     }
 
-                    std::thread::sleep(Duration::from_secs(interval_seconds));
+tokio::time::sleep(Duration::from_secs(interval_seconds)).await;
                 }
             } else {
                 display_performance_stats(manager, &keyboards, json)?;

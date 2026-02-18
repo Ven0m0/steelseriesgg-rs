@@ -520,21 +520,27 @@ impl SonarClient {
                     if Self::is_transient_error(&e) && attempt < MAX_RETRIES {
                         continue;
                     }
-                    return Err(Error::Audio(format!("GET request failed: {}", e)));
+
+                    return response
+                        .json()
+                        .await
+                        .map_err(|e| Error::Audio(format!("Failed to parse response: {}", e)));
                 }
-            };
+                Err(e) => {
+                    if Self::is_transient_error(&e) {
+                        if attempt == MAX_RETRIES {
+                            return Err(Error::Audio(format!(
+                                "GET request failed after {} retries: {}",
+                                MAX_RETRIES, e
+                            )));
+                        }
+                    } else {
+                        return Err(Error::Audio(format!("GET request failed: {}", e)));
+                    }
 
-            if !response.status().is_success() {
-                return Err(Error::Audio(format!(
-                    "GET request failed with status: {}",
-                    response.status()
-                )));
+                    // Continue to next attempt if transient error and retries remaining
+                }
             }
-
-            return response
-                .json()
-                .await
-                .map_err(|e| Error::Audio(format!("Failed to parse response: {}", e)));
         }
 
         unreachable!("Loop always returns or continues")
@@ -552,24 +558,23 @@ impl SonarClient {
                 tokio::time::sleep(Duration::from_millis(100 * attempt as u64)).await;
             }
 
-            let response = match self.client.put(url).send().await {
-                Ok(r) => r,
+            match self.client.put(url).send().await {
+                Ok(response) => {
+                    if !response.status().is_success() {
+                        return Err(Error::Audio(format!(
+                            "PUT request failed with status: {}",
+                            response.status()
+                        )));
+                    }
+                    return Ok(());
+                }
                 Err(e) => {
                     if Self::is_transient_error(&e) && attempt < MAX_RETRIES {
                         continue;
                     }
-                    return Err(Error::Audio(format!("PUT request failed: {}", e)));
+                    // Continue to next attempt if transient error and retries remaining
                 }
-            };
-
-            if !response.status().is_success() {
-                return Err(Error::Audio(format!(
-                    "PUT request failed with status: {}",
-                    response.status()
-                )));
             }
-
-            return Ok(());
         }
 
         unreachable!("Loop always returns or continues")
@@ -577,7 +582,7 @@ impl SonarClient {
 
     /// Check if an HTTP error is transient and should be retried.
     fn is_transient_error(error: &reqwest::Error) -> bool {
-        error.is_timeout() || error.is_connect() || error.is_request()
+        error.is_timeout() || error.is_connect()
     }
 
     /// Generic helper to set volume for a specific path.

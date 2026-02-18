@@ -1,0 +1,43 @@
+{
+	"$schema": "https://docs.renovatebot.com/renovate-schema.json",
+	"automerge": true,
+	"separateMajorMinor": false,
+	"lockFileMaintenance": {
+		"enabled": true,
+		"automerge": true,
+		"automergeType": "pr",
+		"commitMessageAction": "Update"
+	},
+	"packageRules": [
+		{
+			"matchUpdateTypes": ["minor", "patch", "pin", "digest", "major"],
+			"matchCurrentVersion": "!/^0/",
+			"automerge": true,
+			"automergeType": "branch",
+			"dependencyDashboardApproval": true,
+			"extends": ["packages:linters"]
+		}
+	],
+	"digest": {
+		"automerge": true
+	},
+	"extends": [
+		"config:recommended",
+		":configMigration",
+		"abandonments:recommended",
+		":maintainLockFilesWeekly",
+		":dependencyDashboard",
+		":semanticPrefixFixDepsChoreOthers",
+		":preserveSemverRanges",
+		":ignoreModulesAndTests",
+		"group:all",
+		"mergeConfidence:age-confidence-badges",
+		"replacements:all",
+		"workarounds:all",
+		"helpers:githubDigestChangelogs",
+		"helpers:goXPackagesChangelogLink",
+		"helpers:goXPackagesNameLink",
+		"schedule:weekly",
+		"packages:eslint"
+	]
+}
