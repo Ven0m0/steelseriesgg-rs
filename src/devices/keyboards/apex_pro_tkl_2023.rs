@@ -178,8 +178,8 @@ impl Keyboard for ApexProTkl2023 {
         self.inner.trigger_key_reactive(keys, duration).await
     }
 
-    async fn apply_per_key_effect_with_brightness(&mut self, brightness: f32) -> Result<()> {
-        self.inner.apply_per_key_effect_with_brightness(brightness).await
+    fn apply_per_key_effect_with_brightness(&mut self, brightness: f32) -> Result<()> {
+        self.inner.apply_per_key_effect_with_brightness(brightness)
     }
 
     async fn convert_per_key_to_zones(&mut self, effect: &PerKeyEffect) -> Result<()> {

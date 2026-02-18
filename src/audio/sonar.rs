@@ -514,13 +514,11 @@ impl SonarClient {
                 tokio::time::sleep(Duration::from_millis(100 * attempt as u64)).await;
             }
 
-            match self.client.get(url).send().await {
-                Ok(response) => {
-                    if !response.status().is_success() {
-                        return Err(Error::Audio(format!(
-                            "GET request failed with status: {}",
-                            response.status()
-                        )));
+            let response = match self.client.get(url).send().await {
+                Ok(r) => r,
+                Err(e) => {
+                    if Self::is_transient_error(&e) && attempt < MAX_RETRIES {
+                        continue;
                     }
 
                     return response
@@ -545,7 +543,7 @@ impl SonarClient {
             }
         }
 
-        unreachable!("Retry loop should always return a result or error")
+        unreachable!("Loop always returns or continues")
     }
 
     /// Perform a PUT request.
@@ -571,22 +569,15 @@ impl SonarClient {
                     return Ok(());
                 }
                 Err(e) => {
-                    if Self::is_transient_error(&e) {
-                        if attempt == MAX_RETRIES {
-                            return Err(Error::Audio(format!(
-                                "PUT request failed after {} retries: {}",
-                                MAX_RETRIES, e
-                            )));
-                        }
-                    } else {
-                        return Err(Error::Audio(format!("PUT request failed: {}", e)));
+                    if Self::is_transient_error(&e) && attempt < MAX_RETRIES {
+                        continue;
                     }
                     // Continue to next attempt if transient error and retries remaining
                 }
             }
         }
 
-        Err(Error::Audio("PUT request retry loop exited unexpectedly".to_string()))
+        unreachable!("Loop always returns or continues")
     }
 
     /// Check if an HTTP error is transient and should be retried.
