@@ -514,31 +514,24 @@ impl SonarClient {
                 tokio::time::sleep(Duration::from_millis(100 * attempt as u64)).await;
             }
 
-            let response = match self.client.get(url).send().await {
-                Ok(r) => r,
-                Err(e) => {
-                    if Self::is_transient_error(&e) && attempt < MAX_RETRIES {
-                        continue;
+            match self.client.get(url).send().await {
+                Ok(response) => {
+                    if !response.status().is_success() {
+                        return Err(Error::Audio(format!(
+                            "GET request failed with status: {}",
+                            response.status()
+                        )));
                     }
-
                     return response
                         .json()
                         .await
                         .map_err(|e| Error::Audio(format!("Failed to parse response: {}", e)));
                 }
                 Err(e) => {
-                    if Self::is_transient_error(&e) {
-                        if attempt == MAX_RETRIES {
-                            return Err(Error::Audio(format!(
-                                "GET request failed after {} retries: {}",
-                                MAX_RETRIES, e
-                            )));
-                        }
-                    } else {
-                        return Err(Error::Audio(format!("GET request failed: {}", e)));
+                    if Self::is_transient_error(&e) && attempt < MAX_RETRIES {
+                        continue;
                     }
-
-                    // Continue to next attempt if transient error and retries remaining
+                    return Err(Error::Audio(format!("GET request failed: {}", e)));
                 }
             }
         }
@@ -572,7 +565,7 @@ impl SonarClient {
                     if Self::is_transient_error(&e) && attempt < MAX_RETRIES {
                         continue;
                     }
-                    // Continue to next attempt if transient error and retries remaining
+                    return Err(Error::Audio(format!("PUT request failed: {}", e)));
                 }
             }
         }

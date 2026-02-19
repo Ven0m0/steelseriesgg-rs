@@ -13,7 +13,6 @@ use super::keyboards::{GenericKeyboard, Keyboard};
 use super::product_ids::{APEX_3_TKL, APEX_PRO_TKL_2023};
 use super::{DeviceInfo, DeviceType, device_name_from_product_id, device_type_from_product_id};
 use crate::{Error, Result, STEELSERIES_VENDOR_ID};
-use hidapi::HidApi;
 
 /// Device fingerprint for tracking devices across disconnections
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
