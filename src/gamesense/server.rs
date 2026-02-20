@@ -3,14 +3,14 @@
 use axum::{
     Json, Router,
     extract::State,
-    http::StatusCode,
+    http::{HeaderValue, Method, StatusCode, header},
     routing::{get, post},
 };
 use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use tower_http::cors::CorsLayer;
+use tower_http::cors::{AllowOrigin, CorsLayer};
 use tracing::{debug, info};
 
 use super::*;
@@ -88,7 +88,18 @@ impl GameSenseServer {
             .route("/remove_game_event", post(remove_event))
             // Info endpoint
             .route("/", get(server_info))
-            .layer(CorsLayer::permissive())
+            .layer(
+                CorsLayer::new()
+                    .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
+                    .allow_headers([header::CONTENT_TYPE])
+                    .allow_origin(AllowOrigin::predicate(|origin: &HeaderValue, _parts: &_| {
+                        let origin_bytes = origin.as_bytes();
+                        origin_bytes.starts_with(b"http://localhost")
+                            || origin_bytes.starts_with(b"https://localhost")
+                            || origin_bytes.starts_with(b"http://127.0.0.1")
+                            || origin_bytes.starts_with(b"https://127.0.0.1")
+                    })),
+            )
             .with_state(state)
     }
 
