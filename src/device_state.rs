@@ -186,6 +186,13 @@ pub struct DeviceStateStore {
     last_write_time: Arc<Mutex<Instant>>,
     write_behind_handle: Option<tokio::task::JoinHandle<()>>,
 }
+impl Drop for DeviceStateStore {
+    fn drop(&mut self) {
+        if let Some(handle) = self.write_behind_handle.take() {
+            handle.abort();
+        }
+    }
+}
 
 impl DeviceStateStore {
     /// Create a new device state store with async persistence.
@@ -194,6 +201,11 @@ impl DeviceStateStore {
             .ok_or_else(|| Error::InvalidConfig("could not determine config directory".to_string()))?
             .join("device_state.json");
 
+        Self::with_path(state_file)
+    }
+
+    /// Create a new device state store with a specific path (useful for testing).
+    pub fn with_path(state_file: PathBuf) -> Result<Self> {
         if let Some(parent) = state_file.parent() {
             std::fs::create_dir_all(parent)?;
         }
@@ -514,5 +526,127 @@ impl DeviceStateStore {
             && existing.product_id == candidate.product_id
             && interface_matches
             && existing.serial_number == candidate.serial_number
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    #[tokio::test]
+    async fn test_persistence() -> Result<()> {
+        let dir = tempdir().unwrap();
+        let state_file = dir.path().join("device_state.json");
+
+        let store = DeviceStateStore::with_path(state_file.clone())?;
+
+        let device_id = DeviceId {
+            vendor_id: 0x1038,
+            product_id: 0x1234,
+            interface_number: 1,
+            serial_number: Some("serial123".to_string()),
+            path: Some("path/to/device".to_string()),
+        };
+
+        let keyboard_state = KeyboardState {
+            effect: Effect::Static {
+                color: crate::rgb::Color::WHITE,
+            },
+            brightness: 80,
+        };
+
+        store.update_keyboard(device_id.clone(), keyboard_state.clone())?;
+
+        // Force save
+        store.save().await?;
+
+        // Create new store and verify load
+        let store2 = DeviceStateStore::with_path(state_file.clone())?;
+        let loaded_state = store2.get(&device_id).expect("Should have state");
+
+        assert_eq!(loaded_state.keyboard.unwrap(), keyboard_state);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_write_behind() -> Result<()> {
+        let dir = tempdir().unwrap();
+        let state_file = dir.path().join("device_state.json");
+
+        let store = DeviceStateStore::with_path(state_file.clone())?;
+
+        let device_id = DeviceId {
+            vendor_id: 0x1038,
+            product_id: 0x5678,
+            interface_number: 0,
+            serial_number: None,
+            path: None,
+        };
+
+        let headset_state = HeadsetState {
+            sidetone: 75,
+            mic_volume: 90,
+            mic_muted: true,
+            eq_preset: "Bass Boost".to_string(),
+            auto_off_minutes: 30,
+        };
+
+        store.update_headset(device_id.clone(), headset_state.clone())?;
+
+        // Check dirty flag
+        {
+            let dirty = store.dirty_flag.lock();
+            assert!(*dirty, "Dirty flag should be set after update");
+        }
+
+        // Force save to simulate write-behind execution and verify persistence
+        store.save().await?;
+
+        let content = std::fs::read_to_string(&state_file)?;
+        assert!(content.contains("Bass Boost"));
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_legacy_migration() -> Result<()> {
+        let dir = tempdir().unwrap();
+        let state_file = dir.path().join("device_state.json");
+
+        // Pre-populate with legacy state (no path/interface)
+        let legacy_id_str = "1038:1111:0:serial:none";
+        let initial_json = format!(
+            r#"{{
+                "{}": {{
+                    "keyboard": {{
+                        "effect": {{ "Static": {{ "color": {{ "r": 255, "g": 255, "b": 255 }} }} }},
+                        "brightness": 100
+                    }},
+                    "headset": null
+                }}
+            }}"#,
+            legacy_id_str
+        );
+
+        std::fs::write(&state_file, initial_json)?;
+
+        let store = DeviceStateStore::with_path(state_file.clone())?;
+
+        // New device ID with path/interface
+        let new_device_id = DeviceId {
+            vendor_id: 0x1038,
+            product_id: 0x1111,
+            interface_number: 1,
+            serial_number: Some("serial".to_string()),
+            path: Some("new/path".to_string()),
+        };
+
+        // Verify migration
+        let state = store.get_or_create(new_device_id.clone()).await;
+        assert!(state.keyboard.is_some(), "Should have found legacy state");
+
+        Ok(())
     }
 }
