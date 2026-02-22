@@ -383,9 +383,10 @@ pub struct PerKeyRgbCommand {
 /// Addressing mode for per-key RGB commands.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PerKeyAddressingMode {
-    /// Direct matrix addressing (row, col)
+    /// Direct matrix addressing: [row] [col] [R] [G] [B] (5 bytes per key)
     Matrix,
-    /// Logical key addressing (requires key mapping)
+    /// Logical key addressing: [key_id] [R] [G] [B] (4 bytes per key)
+    /// Note: key_id is stored in address.col
     Logical,
 }
 
@@ -560,31 +561,37 @@ impl HidCommand for PerKeyRgbCommand {
         data[offset] = self.key_colors.len().min(255) as u8;
         offset += 1;
 
-        // PLACEHOLDER: Per-key data format
-        // The actual format depends on the real SteelSeries protocol:
-        //
-        // Option 1: Sequential key data
-        // [addr_row] [addr_col] [R] [G] [B] [addr_row] [addr_col] [R] [G] [B] ...
-        //
-        // Option 2: Matrix update
-        // [start_row] [start_col] [width] [height] [R G B] [R G B] ...
-        //
-        // Option 3: Key ID mapping
-        // [key_id] [R] [G] [B] [key_id] [R] [G] [B] ...
-        //
-        // Current implementation uses Option 1 (most flexible):
+        match self.addressing_mode {
+            PerKeyAddressingMode::Matrix => {
+                // Matrix addressing: [row] [col] [R] [G] [B]
+                for (address, color) in &self.key_colors {
+                    if offset + 5 > report_size {
+                        break; // Prevent buffer overflow
+                    }
 
-        for (address, color) in &self.key_colors {
-            if offset + 4 >= report_size {
-                break; // Prevent buffer overflow
+                    data[offset] = address.row;
+                    data[offset + 1] = address.col;
+                    data[offset + 2] = color.r;
+                    data[offset + 3] = color.g;
+                    data[offset + 4] = color.b;
+                    offset += 5;
+                }
             }
+            PerKeyAddressingMode::Logical => {
+                // Logical addressing: [key_id] [R] [G] [B]
+                // Note: key_id is stored in address.col
+                for (address, color) in &self.key_colors {
+                    if offset + 4 > report_size {
+                        break; // Prevent buffer overflow
+                    }
 
-            data[offset] = address.row;
-            data[offset + 1] = address.col;
-            data[offset + 2] = color.r;
-            data[offset + 3] = color.g;
-            data[offset + 4] = color.b;
-            offset += 5;
+                    data[offset] = address.col;
+                    data[offset + 1] = color.r;
+                    data[offset + 2] = color.g;
+                    data[offset + 3] = color.b;
+                    offset += 4;
+                }
+            }
         }
 
         Ok(data)
@@ -599,14 +606,16 @@ impl HidCommand for PerKeyRgbCommand {
 
         // Validate matrix addressing bounds
         for address in self.key_colors.keys() {
-            if address.row >= Self::MAX_ROWS || address.col >= Self::MAX_COLS {
-                return Err(Error::DeviceCommunication(format!(
-                    "Key address ({}, {}) exceeds maximum matrix size ({}x{})",
-                    address.row,
-                    address.col,
-                    Self::MAX_ROWS,
-                    Self::MAX_COLS
-                )));
+            if self.addressing_mode == PerKeyAddressingMode::Matrix {
+                if address.row >= Self::MAX_ROWS || address.col >= Self::MAX_COLS {
+                    return Err(Error::DeviceCommunication(format!(
+                        "Key address ({}, {}) exceeds maximum matrix size ({}x{})",
+                        address.row,
+                        address.col,
+                        Self::MAX_ROWS,
+                        Self::MAX_COLS
+                    )));
+                }
             }
         }
 
