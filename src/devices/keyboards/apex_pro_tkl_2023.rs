@@ -37,7 +37,11 @@ impl ApexProTkl2023 {
         let report = report_builder.build_report(command)?;
 
         // Use send_raw from inner Device trait
-        self.inner.send_raw(&report)
+        self.inner.send_raw(&report)?;
+
+        // Update cache
+        self.inner.update_cached_actuation_point(value);
+        Ok(())
     }
 
     /// Set actuation point in millimeters.
@@ -49,10 +53,14 @@ impl ApexProTkl2023 {
         // Use the new command infrastructure for consistent serialization
         let report_builder = HidReportBuilder::new(HidDeviceType::Keyboard);
 
-        let report = report_builder.build_report(command)?;
+        let report = report_builder.build_report(command.clone())?;
 
         // Use send_raw from inner Device trait
-        self.inner.send_raw(&report)
+        self.inner.send_raw(&report)?;
+
+        // Update cache
+        self.inner.update_cached_actuation_point(command.actuation_point);
+        Ok(())
     }
 }
 

@@ -158,6 +158,7 @@ pub struct GenericKeyboard {
     zone_mapping: Option<ZoneMap>,
     per_key_controller: Option<PerKeyRgbController>,
     zone_color_buffer: Vec<Color>,
+    actuation_point_cache: Option<u8>,
 }
 
 impl GenericKeyboard {
@@ -211,6 +212,7 @@ impl GenericKeyboard {
             zone_mapping,
             per_key_controller,
             zone_color_buffer: Vec::with_capacity(zone_count),
+            actuation_point_cache: None,
         }
     }
 
@@ -253,10 +255,20 @@ impl GenericKeyboard {
 
         result
     }
+
     fn send_zone_buffer(&mut self) -> Result<()> {
         let rgb_command = RgbZoneCommand::new_all_zones(&self.zone_color_buffer);
         let data = self.report_builder.build_report(rgb_command)?;
         self.send_report(&data)
+    }
+
+    /// Update the cached actuation point value.
+    ///
+    /// This should be called by wrapper structs (like ApexProTkl2023) when they
+    /// successfully set the actuation point, so that  can return
+    /// the last known value.
+    pub fn update_cached_actuation_point(&mut self, value: u8) {
+        self.actuation_point_cache = Some(value);
     }
 }
 
@@ -807,18 +819,22 @@ impl Keyboard for GenericKeyboard {
     }
 
     fn read_actuation_point(&mut self) -> Result<u8> {
-        // PLACEHOLDER: HID command to read actuation point not yet discovered
-        //
-        // When the read command is discovered, implementation should:
-        // 1. Send query command (e.g., [0xXX] where XX is the read command byte)
-        // 2. Call self.receive_raw() to read response
-        // 3. Parse response to extract actuation value
-        // 4. Return value in 0.1mm units (4 = 0.4mm, 36 = 3.6mm)
-        //
-        // For now, return DeviceCommunication error
-        Err(Error::DeviceCommunication(
-            "Reading actuation point not yet implemented - HID read command not discovered".to_string(),
-        ))
+        if let Some(value) = self.actuation_point_cache {
+            Ok(value)
+        } else {
+            // PLACEHOLDER: HID command to read actuation point not yet discovered
+            //
+            // When the read command is discovered, implementation should:
+            // 1. Send query command (e.g., [0xXX] where XX is the read command byte)
+            // 2. Call self.receive_raw() to read response
+            // 3. Parse response to extract actuation value
+            // 4. Return value in 0.1mm units (4 = 0.4mm, 36 = 3.6mm)
+            //
+            // For now, return DeviceCommunication error if no cached value
+            Err(Error::DeviceCommunication(
+                "Reading actuation point not yet implemented - HID read command not discovered and no cached value available".to_string(),
+            ))
+        }
     }
 
     fn set_actuation_point(&mut self, _value: u8) -> Result<()> {
