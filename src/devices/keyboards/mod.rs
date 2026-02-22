@@ -154,8 +154,6 @@ pub struct GenericKeyboard {
     zone_count: usize,
     report_builder: HidReportBuilder,
     key_mapping: Option<KeyMapping>,
-    #[allow(dead_code)]
-    key_mapping_db: KeyMappingDatabase,
     zone_fallback: ZoneFallback,
     zone_mapping: Option<ZoneMap>,
     per_key_controller: Option<PerKeyRgbController>,
@@ -169,8 +167,7 @@ impl GenericKeyboard {
         let zone_count = zone_count_for_product_id(info.product_id);
 
         // Initialize key mapping database and try to find mapping for this keyboard
-        let key_mapping_db = KeyMappingDatabase::new();
-        let key_mapping = key_mapping_db.get_mapping(info.product_id).cloned();
+        let key_mapping = KeyMappingDatabase::new().get_mapping(info.product_id).cloned();
 
         if key_mapping.is_some() {
             tracing::debug!("Loaded key mapping for product ID 0x{:04x}", info.product_id);
@@ -210,7 +207,6 @@ impl GenericKeyboard {
             zone_count,
             report_builder: HidReportBuilder::new(HidDeviceType::Keyboard),
             key_mapping,
-            key_mapping_db,
             zone_fallback,
             zone_mapping,
             per_key_controller,
@@ -401,13 +397,12 @@ impl Keyboard for GenericKeyboard {
     }
 
     fn set_key_color(&mut self, key_id: KeyId, color: Color) -> Result<()> {
-        if !self.supports_per_key_rgb() {
+        let Some(mapping) = self.key_mapping.as_ref() else {
             return Err(Error::DeviceCommunication(
                 "Per-key RGB not supported - no key mapping available".to_string(),
             ));
-        }
+        };
 
-        let mapping = self.key_mapping.as_ref().unwrap();
         if let Some(address) = mapping.get_key_address(key_id) {
             self.set_key_color_direct(address, color)
         } else {
@@ -419,19 +414,19 @@ impl Keyboard for GenericKeyboard {
     }
 
     fn set_key_colors(&mut self, key_colors: &[(KeyId, Color)]) -> Result<()> {
-        if !self.supports_per_key_rgb() {
+        let Some(mapping) = self.key_mapping.as_ref() else {
             return Err(Error::DeviceCommunication(
                 "Per-key RGB not supported - no key mapping available".to_string(),
             ));
-        }
+        };
 
-        let mapping = self.key_mapping.as_ref().unwrap();
-        let mut builder = PerKeyRgbBuilder::with_key_mapping(mapping.clone());
-
+        // Resolve logical key IDs to matrix addresses without cloning the full mapping.
+        let mut builder = PerKeyRgbBuilder::new(super::hid_reports::PerKeyAddressingMode::Matrix);
         for (key_id, color) in key_colors {
-            if let Err(e) = builder.add_key_logical(*key_id, *color) {
-                tracing::warn!("Failed to add key {:?}: {}", key_id, e);
-                // Continue with other keys rather than failing entirely
+            if let Some(address) = mapping.get_key_address(*key_id) {
+                builder.add_key_matrix(address, *color);
+            } else {
+                tracing::warn!("Key {:?} not found in key mapping", key_id);
             }
         }
 

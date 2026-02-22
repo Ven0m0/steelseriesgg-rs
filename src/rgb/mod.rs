@@ -752,7 +752,7 @@ impl PerKeyEffectEngine {
                     if let Some((x, y)) = Self::get_key_position_static(key_mapping, key) {
                         let (cx, cy) = Self::get_keyboard_center_static();
                         let distance = ((x - cx).powi(2) + (y - cy).powi(2)).sqrt();
-                        let ripple_pos = (elapsed_secs * speed - distance * 3.0) % 2.0;
+                        let ripple_pos = (elapsed_secs * speed - distance * 3.0).rem_euclid(2.0);
                         let brightness = if ripple_pos > 0.0 && ripple_pos < 1.0 {
                             (ripple_pos * std::f32::consts::PI).sin()
                         } else {
@@ -767,7 +767,7 @@ impl PerKeyEffectEngine {
                     for &center_key in center_keys {
                         let distance = Self::key_distance_static(key_mapping, key, center_key);
                         if distance != f32::INFINITY {
-                            let ripple_pos = (elapsed_secs * speed - distance * 5.0) % 2.0;
+                            let ripple_pos = (elapsed_secs * speed - distance * 5.0).rem_euclid(2.0);
                             let brightness = if ripple_pos > 0.0 && ripple_pos < 1.0 {
                                 (ripple_pos * std::f32::consts::PI).sin()
                             } else {
