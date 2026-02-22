@@ -516,3 +516,95 @@ impl DeviceStateStore {
             && existing.serial_number == candidate.serial_number
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_device_id_to_key_full() {
+        let device_id = DeviceId {
+            vendor_id: 0x1234,
+            product_id: 0x5678,
+            interface_number: 1,
+            serial_number: Some("ABC-123".to_string()),
+            path: Some("/dev/hidraw0".to_string()),
+        };
+
+        let key = device_id.to_key();
+        // hash_path("/dev/hidraw0") -> expected hash string
+        let expected_hash = format!("{:08x}", hash_path("/dev/hidraw0"));
+        assert_eq!(key, format!("1234:5678:1:ABC-123:{}", expected_hash));
+    }
+
+    #[test]
+    fn test_device_id_to_key_minimal() {
+        let device_id = DeviceId {
+            vendor_id: 0xABCD,
+            product_id: 0xEFF0,
+            interface_number: 0,
+            serial_number: None,
+            path: None,
+        };
+
+        let key = device_id.to_key();
+        assert_eq!(key, "abcd:eff0:0:none:none");
+    }
+
+    #[test]
+    fn test_device_id_from_key_full() {
+        let key = "1234:5678:1:ABC-123:deadbeef";
+        let device_id = DeviceId::from_key(key).expect("Should parse valid key");
+
+        assert_eq!(device_id.vendor_id, 0x1234);
+        assert_eq!(device_id.product_id, 0x5678);
+        assert_eq!(device_id.interface_number, 1);
+        assert_eq!(device_id.serial_number, Some("ABC-123".to_string()));
+        assert_eq!(device_id.path, None); // Path is lost in hash
+    }
+
+    #[test]
+    fn test_device_id_from_key_minimal() {
+        let key = "abcd:eff0:0:none:none";
+        let device_id = DeviceId::from_key(key).expect("Should parse minimal key");
+
+        assert_eq!(device_id.vendor_id, 0xABCD);
+        assert_eq!(device_id.product_id, 0xEFF0);
+        assert_eq!(device_id.interface_number, 0);
+        assert_eq!(device_id.serial_number, None);
+        assert_eq!(device_id.path, None);
+    }
+
+    #[test]
+    fn test_device_id_round_trip() {
+        let original = DeviceId {
+            vendor_id: 0x1038,
+            product_id: 0x1234,
+            interface_number: 2,
+            serial_number: Some("SN123".to_string()),
+            path: Some("/sys/class/hidraw/hidraw1".to_string()),
+        };
+
+        let key = original.to_key();
+        let restored = DeviceId::from_key(&key).expect("Should parse round-trip key");
+
+        assert_eq!(original.vendor_id, restored.vendor_id);
+        assert_eq!(original.product_id, restored.product_id);
+        assert_eq!(original.interface_number, restored.interface_number);
+        assert_eq!(original.serial_number, restored.serial_number);
+        // Path is intentionally not restored (it's hashed)
+        assert_eq!(restored.path, None);
+    }
+
+    #[test]
+    fn test_device_id_from_key_invalid() {
+        // Too few parts
+        assert!(DeviceId::from_key("1234:5678").is_err());
+
+        // Invalid hex
+        assert!(DeviceId::from_key("zzzz:5678:0:none:none").is_err());
+
+        // Invalid interface number
+        assert!(DeviceId::from_key("1234:5678:not_int:none:none").is_err());
+    }
+}
