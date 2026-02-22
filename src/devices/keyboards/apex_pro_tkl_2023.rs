@@ -90,24 +90,24 @@ impl Device for ApexProTkl2023 {
 // Delegate Keyboard trait
 #[async_trait]
 impl Keyboard for ApexProTkl2023 {
-    fn set_color(&mut self, color: Color) -> Result<()> {
-        self.inner.set_color(color)
+    async fn set_color(&mut self, color: Color) -> Result<()> {
+        self.inner.set_color(color).await
     }
 
-    fn set_zone_colors(&mut self, colors: &[Color]) -> Result<()> {
-        self.inner.set_zone_colors(colors)
+    async fn set_zone_colors(&mut self, colors: &[Color]) -> Result<()> {
+        self.inner.set_zone_colors(colors).await
     }
 
     fn zone_count(&self) -> usize {
         self.inner.zone_count()
     }
 
-    fn set_brightness(&mut self, brightness: u8) -> Result<()> {
-        self.inner.set_brightness(brightness)
+    async fn set_brightness(&mut self, brightness: u8) -> Result<()> {
+        self.inner.set_brightness(brightness).await
     }
 
-    fn apply(&mut self) -> Result<()> {
-        self.inner.apply()
+    async fn apply(&mut self) -> Result<()> {
+        self.inner.apply().await
     }
 
     fn supports_per_key_rgb(&self) -> bool {
@@ -118,28 +118,28 @@ impl Keyboard for ApexProTkl2023 {
         self.inner.get_key_mapping()
     }
 
-    fn set_key_color(&mut self, key_id: KeyId, color: Color) -> Result<()> {
-        self.inner.set_key_color(key_id, color)
+    async fn set_key_color(&mut self, key_id: KeyId, color: Color) -> Result<()> {
+        self.inner.set_key_color(key_id, color).await
     }
 
-    fn set_key_colors(&mut self, key_colors: &[(KeyId, Color)]) -> Result<()> {
-        self.inner.set_key_colors(key_colors)
+    async fn set_key_colors(&mut self, key_colors: &[(KeyId, Color)]) -> Result<()> {
+        self.inner.set_key_colors(key_colors).await
     }
 
-    fn set_key_color_direct(&mut self, address: KeyAddress, color: Color) -> Result<()> {
-        self.inner.set_key_color_direct(address, color)
+    async fn set_key_color_direct(&mut self, address: KeyAddress, color: Color) -> Result<()> {
+        self.inner.set_key_color_direct(address, color).await
     }
 
-    fn set_key_colors_direct(&mut self, key_colors: &[(KeyAddress, Color)]) -> Result<()> {
-        self.inner.set_key_colors_direct(key_colors)
+    async fn set_key_colors_direct(&mut self, key_colors: &[(KeyAddress, Color)]) -> Result<()> {
+        self.inner.set_key_colors_direct(key_colors).await
     }
 
-    fn clear_per_key_rgb(&mut self) -> Result<()> {
-        self.inner.clear_per_key_rgb()
+    async fn clear_per_key_rgb(&mut self) -> Result<()> {
+        self.inner.clear_per_key_rgb().await
     }
 
-    fn set_key_region(&mut self, start_row: u8, start_col: u8, rows: u8, cols: u8, color: Color) -> Result<()> {
-        self.inner.set_key_region(start_row, start_col, rows, cols, color)
+    async fn set_key_region(&mut self, start_row: u8, start_col: u8, rows: u8, cols: u8, color: Color) -> Result<()> {
+        self.inner.set_key_region(start_row, start_col, rows, cols, color).await
     }
 
     fn get_zone_mapping(&self) -> Option<&ZoneMapping> {

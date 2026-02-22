@@ -22,19 +22,19 @@ use std::sync::Arc;
 #[async_trait]
 pub trait Keyboard: Device {
     /// Set the entire keyboard to a single color.
-    fn set_color(&mut self, color: Color) -> Result<()>;
+    async fn set_color(&mut self, color: Color) -> Result<()>;
 
     /// Set colors for individual zones.
-    fn set_zone_colors(&mut self, colors: &[Color]) -> Result<()>;
+    async fn set_zone_colors(&mut self, colors: &[Color]) -> Result<()>;
 
     /// Get the number of RGB zones.
     fn zone_count(&self) -> usize;
 
     /// Set keyboard brightness (0-100).
-    fn set_brightness(&mut self, brightness: u8) -> Result<()>;
+    async fn set_brightness(&mut self, brightness: u8) -> Result<()>;
 
     /// Apply the current RGB settings.
-    fn apply(&mut self) -> Result<()>;
+    async fn apply(&mut self) -> Result<()>;
 
     // === Per-Key RGB Control ===
 
@@ -48,31 +48,31 @@ pub trait Keyboard: Device {
     ///
     /// Uses the keyboard's key mapping to convert logical key IDs to matrix addresses.
     /// Returns an error if the key is not found in the mapping or per-key RGB is not supported.
-    fn set_key_color(&mut self, key_id: KeyId, color: Color) -> Result<()>;
+    async fn set_key_color(&mut self, key_id: KeyId, color: Color) -> Result<()>;
 
     /// Set RGB colors for multiple keys by logical key IDs.
     ///
     /// Uses the keyboard's key mapping to convert logical key IDs to matrix addresses.
     /// Keys not found in the mapping are ignored with a warning.
-    fn set_key_colors(&mut self, key_colors: &[(KeyId, Color)]) -> Result<()>;
+    async fn set_key_colors(&mut self, key_colors: &[(KeyId, Color)]) -> Result<()>;
 
     /// Set RGB color for a specific key by direct matrix address.
     ///
     /// Bypasses key mapping and directly addresses the key matrix.
     /// Use with caution - invalid addresses may cause device issues.
-    fn set_key_color_direct(&mut self, address: KeyAddress, color: Color) -> Result<()>;
+    async fn set_key_color_direct(&mut self, address: KeyAddress, color: Color) -> Result<()>;
 
     /// Set RGB colors for multiple keys by direct matrix addresses.
     ///
     /// Bypasses key mapping and directly addresses the key matrix.
     /// Use with caution - invalid addresses may cause device issues.
-    fn set_key_colors_direct(&mut self, key_colors: &[(KeyAddress, Color)]) -> Result<()>;
+    async fn set_key_colors_direct(&mut self, key_colors: &[(KeyAddress, Color)]) -> Result<()>;
 
     /// Set all keys to black (turn off per-key RGB).
-    fn clear_per_key_rgb(&mut self) -> Result<()>;
+    async fn clear_per_key_rgb(&mut self) -> Result<()>;
 
     /// Set a region of keys to the same color using matrix coordinates.
-    fn set_key_region(&mut self, start_row: u8, start_col: u8, rows: u8, cols: u8, color: Color) -> Result<()>;
+    async fn set_key_region(&mut self, start_row: u8, start_col: u8, rows: u8, cols: u8, color: Color) -> Result<()>;
 
     // === Zone-based RGB Fallback ===
 
@@ -214,7 +214,7 @@ impl GenericKeyboard {
         }
     }
 
-    /// Send a HID report to the keyboard.
+    /// Send a HID report to the keyboard synchronously (blocking).
     fn send_report(&mut self, data: &[u8]) -> Result<()> {
         use tracing::debug;
 
@@ -246,17 +246,61 @@ impl GenericKeyboard {
             write_padded_report(&device, data, 65, true)
         };
 
-        match &result {
-            Ok(_) => debug!("HID report sent successfully"),
-            Err(e) => debug!("HID report failed: {:?}", e),
+        if result.is_ok() {
+            debug!("HID report sent successfully");
+        } else if let Err(e) = &result {
+            debug!("HID report failed: {:?}", e);
         }
 
         result
     }
-    fn send_zone_buffer(&mut self) -> Result<()> {
+
+    /// Send a HID report to the keyboard asynchronously (non-blocking).
+    async fn send_report_async(&mut self, data: Vec<u8>) -> Result<()> {
+        use tracing::debug;
+
+        // Validate report structure if diagnostics enabled
+        with_global_diagnostics(|diag| {
+            if !diag.validate_report_structure(&data) {
+                debug!("HID report validation failed, sending anyway");
+            }
+        });
+
+        debug!("Sending HID report ({} bytes): {:02x?}", data.len(), data);
+
+        let device = self
+            .device
+            .as_ref()
+            .ok_or(Error::DeviceCommunication("Device not connected".to_string()))?
+            .clone();
+
+        tokio::task::spawn_blocking(move || {
+            let device = device.lock();
+
+            // Record the operation with timing analysis
+            if let Some(result) = with_global_diagnostics(|diag| {
+                diag.record_timed_operation(HidOperation::Send, &data, || {
+                    write_padded_report(&device, &data, 65, true)
+                })
+            }) {
+                result
+            } else {
+                write_padded_report(&device, &data, 65, true)
+            }
+        })
+        .await
+        .map_err(|e| Error::Other(format!("JoinError: {}", e)))??;
+
+        debug!("HID report sent successfully");
+
+        Ok(())
+    }
+
+
+    async fn send_zone_buffer_async(&mut self) -> Result<()> {
         let rgb_command = RgbZoneCommand::new_all_zones(&self.zone_color_buffer);
         let data = self.report_builder.build_report(rgb_command)?;
-        self.send_report(&data)
+        self.send_report_async(data).await
     }
 }
 
@@ -343,14 +387,14 @@ impl GenericKeyboard {
 
 #[async_trait]
 impl Keyboard for GenericKeyboard {
-    fn set_color(&mut self, color: Color) -> Result<()> {
+    async fn set_color(&mut self, color: Color) -> Result<()> {
         // Use internal buffer to avoid allocation
         self.zone_color_buffer.clear();
         self.zone_color_buffer.resize(self.zone_count, color);
-        self.send_zone_buffer()
+        self.send_zone_buffer_async().await
     }
 
-    fn set_zone_colors(&mut self, colors: &[Color]) -> Result<()> {
+    async fn set_zone_colors(&mut self, colors: &[Color]) -> Result<()> {
         // Reuse internal buffer to avoid allocation
         self.zone_color_buffer.clear();
         let len = colors.len().min(self.zone_count);
@@ -361,28 +405,28 @@ impl Keyboard for GenericKeyboard {
             self.zone_color_buffer.push(Color::BLACK);
         }
 
-        self.send_zone_buffer()
+        self.send_zone_buffer_async().await
     }
 
     fn zone_count(&self) -> usize {
         self.zone_count
     }
 
-    fn set_brightness(&mut self, brightness: u8) -> Result<()> {
+    async fn set_brightness(&mut self, brightness: u8) -> Result<()> {
         // Create structured brightness command (auto-clamps to 0-100)
         let brightness_command = BrightnessCommand::new(brightness);
         let data = self.report_builder.build_report(brightness_command)?;
 
-        self.send_report(&data)
+        self.send_report_async(data).await
     }
 
-    fn apply(&mut self) -> Result<()> {
+    async fn apply(&mut self) -> Result<()> {
         // Create structured apply/save command
         let apply_command = ApplyCommand;
         let data = self.report_builder.build_report(apply_command)?;
 
         // Don't fail if device doesn't support apply command
-        let _ = self.send_report(&data);
+        let _ = self.send_report_async(data).await;
         Ok(())
     }
 
@@ -396,7 +440,7 @@ impl Keyboard for GenericKeyboard {
         self.key_mapping.as_ref()
     }
 
-    fn set_key_color(&mut self, key_id: KeyId, color: Color) -> Result<()> {
+    async fn set_key_color(&mut self, key_id: KeyId, color: Color) -> Result<()> {
         let Some(mapping) = self.key_mapping.as_ref() else {
             return Err(Error::DeviceCommunication(
                 "Per-key RGB not supported - no key mapping available".to_string(),
@@ -404,7 +448,7 @@ impl Keyboard for GenericKeyboard {
         };
 
         if let Some(address) = mapping.get_key_address(key_id) {
-            self.set_key_color_direct(address, color)
+            self.set_key_color_direct(address, color).await
         } else {
             Err(Error::DeviceCommunication(format!(
                 "Key {:?} not found in key mapping",
@@ -413,7 +457,7 @@ impl Keyboard for GenericKeyboard {
         }
     }
 
-    fn set_key_colors(&mut self, key_colors: &[(KeyId, Color)]) -> Result<()> {
+    async fn set_key_colors(&mut self, key_colors: &[(KeyId, Color)]) -> Result<()> {
         let Some(mapping) = self.key_mapping.as_ref() else {
             return Err(Error::DeviceCommunication(
                 "Per-key RGB not supported - no key mapping available".to_string(),
@@ -438,16 +482,16 @@ impl Keyboard for GenericKeyboard {
 
         let command = builder.build();
         let data = self.report_builder.build_report(command)?;
-        self.send_report(&data)
+        self.send_report_async(data).await
     }
 
-    fn set_key_color_direct(&mut self, address: KeyAddress, color: Color) -> Result<()> {
+    async fn set_key_color_direct(&mut self, address: KeyAddress, color: Color) -> Result<()> {
         let command = PerKeyRgbCommand::single_key(address, color);
         let data = self.report_builder.build_report(command)?;
-        self.send_report(&data)
+        self.send_report_async(data).await
     }
 
-    fn set_key_colors_direct(&mut self, key_colors: &[(KeyAddress, Color)]) -> Result<()> {
+    async fn set_key_colors_direct(&mut self, key_colors: &[(KeyAddress, Color)]) -> Result<()> {
         if key_colors.is_empty() {
             return Err(Error::DeviceCommunication("No key colors provided".to_string()));
         }
@@ -460,10 +504,10 @@ impl Keyboard for GenericKeyboard {
 
         let command = builder.build();
         let data = self.report_builder.build_report(command)?;
-        self.send_report(&data)
+        self.send_report_async(data).await
     }
 
-    fn clear_per_key_rgb(&mut self) -> Result<()> {
+    async fn clear_per_key_rgb(&mut self) -> Result<()> {
         if let Some(ref mapping) = self.key_mapping {
             // Set all keys in the mapping to black
             let black_keys: Vec<(KeyId, Color)> = mapping
@@ -473,7 +517,7 @@ impl Keyboard for GenericKeyboard {
                 .collect();
 
             if !black_keys.is_empty() {
-                self.set_key_colors(&black_keys)
+                self.set_key_colors(&black_keys).await
             } else {
                 Ok(()) // No keys to clear
             }
@@ -491,11 +535,11 @@ impl Keyboard for GenericKeyboard {
 
             let command = builder.build();
             let data = self.report_builder.build_report(command)?;
-            self.send_report(&data)
+            self.send_report_async(data).await
         }
     }
 
-    fn set_key_region(&mut self, start_row: u8, start_col: u8, rows: u8, cols: u8, color: Color) -> Result<()> {
+    async fn set_key_region(&mut self, start_row: u8, start_col: u8, rows: u8, cols: u8, color: Color) -> Result<()> {
         let mut builder = PerKeyRgbBuilder::new(super::hid_reports::PerKeyAddressingMode::Matrix);
         builder.set_region(start_row, start_col, rows, cols, color);
 
@@ -507,7 +551,7 @@ impl Keyboard for GenericKeyboard {
 
         let command = builder.build();
         let data = self.report_builder.build_report(command)?;
-        self.send_report(&data)
+        self.send_report_async(data).await
     }
 
     // === Zone-based RGB Fallback Implementation ===
@@ -536,11 +580,11 @@ impl Keyboard for GenericKeyboard {
             // Fallback to single color if no zone mapping available
             if !key_colors.is_empty() {
                 let avg_color = self.compute_average_color(key_colors);
-                self.set_color(avg_color)?;
-                self.apply()
+                self.set_color(avg_color).await?;
+                self.apply().await
             } else {
-                self.set_color(Color::BLACK)?;
-                self.apply()
+                self.set_color(Color::BLACK).await?;
+                self.apply().await
             }
         }
     }
@@ -549,7 +593,7 @@ impl Keyboard for GenericKeyboard {
         let mut last_error = None;
 
         for attempt in 0..max_retries {
-            match self.set_zone_colors(colors) {
+            match self.set_zone_colors(colors).await {
                 Ok(()) => {
                     if attempt > 0 {
                         tracing::info!("Zone RGB succeeded on attempt {}", attempt + 1);
@@ -586,7 +630,7 @@ impl Keyboard for GenericKeyboard {
             let mut zone_colors = vec![Color::BLACK; self.zone_count];
             zone_colors[zone_index] = Color::WHITE;
 
-            let success = self.set_zone_colors(&zone_colors).is_ok();
+            let success = self.set_zone_colors(&zone_colors).await.is_ok();
             results.push(success);
 
             if !success {
@@ -598,7 +642,7 @@ impl Keyboard for GenericKeyboard {
         }
 
         // Reset to all black after testing
-        let _ = self.set_color(Color::BLACK);
+        let _ = self.set_color(Color::BLACK).await;
 
         tracing::info!(
             "Zone reliability test completed: {}/{} zones working",
@@ -626,8 +670,8 @@ impl Keyboard for GenericKeyboard {
         };
 
         if let Some(colors) = key_colors {
-            self.set_key_colors(&colors)?;
-            self.apply()
+            self.set_key_colors(&colors).await?;
+            self.apply().await
         } else {
             // Fallback: convert to zone-based effect if no per-key support
             self.convert_per_key_to_zones(&effect).await
@@ -649,8 +693,8 @@ impl Keyboard for GenericKeyboard {
         };
 
         if let Some(colors) = key_colors {
-            self.set_key_colors(&colors)?;
-            self.apply()
+            self.set_key_colors(&colors).await?;
+            self.apply().await
         } else {
             // Fallback: simulate reactive effect using zones
             if !keys.is_empty() {
@@ -674,12 +718,12 @@ impl Keyboard for GenericKeyboard {
         };
 
         if let Some(colors) = key_colors {
-            self.set_key_colors(&colors)?;
-            self.apply()
+            self.set_key_colors(&colors).await?;
+            self.apply().await
         } else {
             // Fallback: apply brightness to zones
-            self.set_brightness((brightness * 100.0) as u8)?;
-            self.apply()
+            self.set_brightness((brightness * 100.0) as u8).await?;
+            self.apply().await
         }
     }
 

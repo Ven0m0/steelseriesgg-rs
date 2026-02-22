@@ -724,16 +724,16 @@ impl RgbValidator {
         let mut report = ValidationReport::new(keyboard.info().clone());
 
         // Basic connectivity test
-        report.add_result(self.test_basic_connectivity(keyboard));
+        report.add_result(self.test_basic_connectivity(keyboard).await);
 
         // Zone-based RGB tests
-        report.add_result(self.test_zone_rgb_basic(keyboard));
-        report.add_result(self.test_zone_rgb_effects(keyboard));
+        report.add_result(self.test_zone_rgb_basic(keyboard).await);
+        report.add_result(self.test_zone_rgb_effects(keyboard).await);
         report.add_result(self.test_zone_reliability(keyboard).await);
 
         // Per-key RGB tests (if supported)
         if keyboard.supports_per_key_rgb() {
-            report.add_result(self.test_per_key_basic(keyboard));
+            report.add_result(self.test_per_key_basic(keyboard).await);
             report.add_result(self.test_per_key_effects(keyboard).await);
             report.add_result(self.test_reactive_effects(keyboard).await);
         }
@@ -743,9 +743,9 @@ impl RgbValidator {
 
         // Performance tests
         if self.benchmark_mode {
-            report.add_result(self.benchmark_effect_performance(keyboard));
-            report.add_result(self.benchmark_communication_speed(keyboard));
-            report.add_result(self.stress_test_rgb_system(keyboard));
+            report.add_result(self.benchmark_effect_performance(keyboard).await);
+            report.add_result(self.benchmark_communication_speed(keyboard).await);
+            report.add_result(self.stress_test_rgb_system(keyboard).await);
         }
 
         // Capability detection
@@ -758,12 +758,12 @@ impl RgbValidator {
     }
 
     /// Test basic device connectivity and communication.
-    fn test_basic_connectivity(&self, keyboard: &mut dyn Keyboard) -> ValidationResult {
+    async fn test_basic_connectivity(&self, keyboard: &mut dyn Keyboard) -> ValidationResult {
         let start = Instant::now();
         let test_name = "Basic Connectivity".to_string();
 
-        match keyboard.set_color(Color::BLACK) {
-            Ok(_) => match keyboard.apply() {
+        match keyboard.set_color(Color::BLACK).await {
+            Ok(_) => match keyboard.apply().await {
                 Ok(_) => ValidationResult::success(test_name, start.elapsed())
                     .with_note("Device responds to basic RGB commands"),
                 Err(e) => ValidationResult::failure(test_name, start.elapsed(), format!("Apply command failed: {}", e)),
@@ -773,7 +773,7 @@ impl RgbValidator {
     }
 
     /// Test basic zone-based RGB functionality.
-    fn test_zone_rgb_basic(&self, keyboard: &mut dyn Keyboard) -> ValidationResult {
+    async fn test_zone_rgb_basic(&self, keyboard: &mut dyn Keyboard) -> ValidationResult {
         let start = Instant::now();
         let test_name = "Zone RGB Basic".to_string();
 
@@ -781,9 +781,9 @@ impl RgbValidator {
         let test_colors = [Color::RED, Color::GREEN, Color::BLUE];
 
         for (i, &color) in test_colors.iter().enumerate() {
-            match keyboard.set_color(color) {
+            match keyboard.set_color(color).await {
                 Ok(_) => {
-                    if let Err(e) = keyboard.apply() {
+                    if let Err(e) = keyboard.apply().await {
                         return ValidationResult::failure(
                             test_name,
                             start.elapsed(),
@@ -807,7 +807,7 @@ impl RgbValidator {
     }
 
     /// Test zone-based RGB effects.
-    fn test_zone_rgb_effects(&self, _keyboard: &mut dyn Keyboard) -> ValidationResult {
+    async fn test_zone_rgb_effects(&self, _keyboard: &mut dyn Keyboard) -> ValidationResult {
         let start = Instant::now();
         let test_name = "Zone RGB Effects".to_string();
 
@@ -852,7 +852,7 @@ impl RgbValidator {
     }
 
     /// Test basic per-key RGB functionality.
-    fn test_per_key_basic(&self, keyboard: &mut dyn Keyboard) -> ValidationResult {
+    async fn test_per_key_basic(&self, keyboard: &mut dyn Keyboard) -> ValidationResult {
         let start = Instant::now();
         let test_name = "Per-Key RGB Basic".to_string();
 
@@ -869,8 +869,8 @@ impl RgbValidator {
             (KeyId::D, Color::YELLOW),
         ];
 
-        match keyboard.set_key_colors(&test_keys) {
-            Ok(_) => match keyboard.apply() {
+        match keyboard.set_key_colors(&test_keys).await {
+            Ok(_) => match keyboard.apply().await {
                 Ok(_) => ValidationResult::success(test_name, start.elapsed())
                     .with_metric("test_keys", test_keys.len() as f64)
                     .with_note("Successfully set WASD key colors"),
@@ -955,7 +955,7 @@ impl RgbValidator {
     }
 
     /// Benchmark effect computation performance.
-    fn benchmark_effect_performance(&self, _keyboard: &mut dyn Keyboard) -> ValidationResult {
+    async fn benchmark_effect_performance(&self, _keyboard: &mut dyn Keyboard) -> ValidationResult {
         let start = Instant::now();
         let test_name = "Effect Performance Benchmark".to_string();
 
@@ -969,7 +969,7 @@ impl RgbValidator {
     }
 
     /// Benchmark HID communication speed.
-    fn benchmark_communication_speed(&self, keyboard: &mut dyn Keyboard) -> ValidationResult {
+    async fn benchmark_communication_speed(&self, keyboard: &mut dyn Keyboard) -> ValidationResult {
         let start = Instant::now();
         let test_name = "Communication Speed Benchmark".to_string();
 
@@ -978,7 +978,7 @@ impl RgbValidator {
 
         for _ in 0..iterations {
             let iter_start = Instant::now();
-            if let Err(e) = keyboard.set_color(Color::BLACK) {
+            if let Err(e) = keyboard.set_color(Color::BLACK).await {
                 return ValidationResult::failure(
                     test_name,
                     start.elapsed(),
@@ -997,7 +997,7 @@ impl RgbValidator {
     }
 
     /// Stress test the RGB system with rapid updates.
-    fn stress_test_rgb_system(&self, keyboard: &mut dyn Keyboard) -> ValidationResult {
+    async fn stress_test_rgb_system(&self, keyboard: &mut dyn Keyboard) -> ValidationResult {
         let start = Instant::now();
         let test_name = "RGB System Stress Test".to_string();
 
@@ -1006,7 +1006,7 @@ impl RgbValidator {
 
         for i in 0..self.stress_iterations {
             let color = colors[i % colors.len()];
-            if keyboard.set_color(color).is_err() {
+            if keyboard.set_color(color).await.is_err() {
                 failures += 1;
             }
         }
