@@ -86,8 +86,9 @@ pub trait HidCommand {
     /// Get the command code for this command.
     fn command_code(&self) -> CommandCode;
 
-    /// Serialize the command to a byte vector.
-    fn serialize(&self, device_type: HidDeviceType) -> Result<Vec<u8>>;
+    /// Serialize the command to a byte buffer.
+    /// Returns the number of bytes written.
+    fn serialize(&self, buffer: &mut [u8], device_type: HidDeviceType) -> Result<usize>;
 
     /// Validate the command parameters.
     fn validate(&self) -> Result<()>;
@@ -141,25 +142,35 @@ impl<'a> HidCommand for RgbZoneCommand<'a> {
         CommandCode::RgbControl
     }
 
-    fn serialize(&self, device_type: HidDeviceType) -> Result<Vec<u8>> {
+    fn serialize(&self, buffer: &mut [u8], device_type: HidDeviceType) -> Result<usize> {
         self.validate()?;
 
         let report_size = device_type.report_size();
-        let mut data = vec![0u8; report_size];
+        if buffer.len() < report_size {
+            return Err(Error::DeviceCommunication(format!(
+                "Buffer too small: {} bytes (expected {})",
+                buffer.len(),
+                report_size
+            )));
+        }
+
+        // Zero out buffer
+        buffer[..report_size].fill(0);
+
         let mut offset = 0;
 
         // Add report ID for keyboards
         if device_type.includes_report_id() {
-            data[0] = 0x00; // Report ID
+            buffer[0] = 0x00; // Report ID
             offset = 1;
         }
 
         // Command code
-        data[offset] = self.command_code() as u8;
+        buffer[offset] = self.command_code() as u8;
         offset += 1;
 
         // Zone selector
-        data[offset] = self.zone_selector;
+        buffer[offset] = self.zone_selector;
         offset += 1;
 
         // RGB color data
@@ -167,13 +178,13 @@ impl<'a> HidCommand for RgbZoneCommand<'a> {
             if offset + 2 >= report_size {
                 break; // Prevent buffer overflow
             }
-            data[offset] = color.r;
-            data[offset + 1] = color.g;
-            data[offset + 2] = color.b;
+            buffer[offset] = color.r;
+            buffer[offset + 1] = color.g;
+            buffer[offset + 2] = color.b;
             offset += 3;
         }
 
-        Ok(data)
+        Ok(report_size)
     }
 
     fn validate(&self) -> Result<()> {
@@ -224,24 +235,32 @@ impl HidCommand for BrightnessCommand {
         CommandCode::Brightness
     }
 
-    fn serialize(&self, device_type: HidDeviceType) -> Result<Vec<u8>> {
+    fn serialize(&self, buffer: &mut [u8], device_type: HidDeviceType) -> Result<usize> {
         self.validate()?;
 
         let report_size = device_type.report_size();
-        let mut data = vec![0u8; report_size];
+        if buffer.len() < report_size {
+            return Err(Error::DeviceCommunication(format!(
+                "Buffer too small: {} bytes (expected {})",
+                buffer.len(),
+                report_size
+            )));
+        }
+
+        buffer[..report_size].fill(0);
         let mut offset = 0;
 
         // Add report ID for keyboards
         if device_type.includes_report_id() {
-            data[0] = 0x00; // Report ID
+            buffer[0] = 0x00; // Report ID
             offset = 1;
         }
 
         // Command code and brightness
-        data[offset] = self.command_code() as u8;
-        data[offset + 1] = self.brightness;
+        buffer[offset] = self.command_code() as u8;
+        buffer[offset + 1] = self.brightness;
 
-        Ok(data)
+        Ok(report_size)
     }
 
     fn validate(&self) -> Result<()> {
@@ -268,21 +287,29 @@ impl HidCommand for ApplyCommand {
         CommandCode::Apply
     }
 
-    fn serialize(&self, device_type: HidDeviceType) -> Result<Vec<u8>> {
+    fn serialize(&self, buffer: &mut [u8], device_type: HidDeviceType) -> Result<usize> {
         let report_size = device_type.report_size();
-        let mut data = vec![0u8; report_size];
+        if buffer.len() < report_size {
+            return Err(Error::DeviceCommunication(format!(
+                "Buffer too small: {} bytes (expected {})",
+                buffer.len(),
+                report_size
+            )));
+        }
+
+        buffer[..report_size].fill(0);
         let mut offset = 0;
 
         // Add report ID for keyboards
         if device_type.includes_report_id() {
-            data[0] = 0x00; // Report ID
+            buffer[0] = 0x00; // Report ID
             offset = 1;
         }
 
         // Command code only
-        data[offset] = self.command_code() as u8;
+        buffer[offset] = self.command_code() as u8;
 
-        Ok(data)
+        Ok(report_size)
     }
 
     fn validate(&self) -> Result<()> {
@@ -328,27 +355,35 @@ impl HidCommand for ActuationCommand {
         CommandCode::ActuationControl
     }
 
-    fn serialize(&self, device_type: HidDeviceType) -> Result<Vec<u8>> {
+    fn serialize(&self, buffer: &mut [u8], device_type: HidDeviceType) -> Result<usize> {
         self.validate()?;
 
         let report_size = device_type.report_size();
-        let mut data = vec![0u8; report_size];
+        if buffer.len() < report_size {
+            return Err(Error::DeviceCommunication(format!(
+                "Buffer too small: {} bytes (expected {})",
+                buffer.len(),
+                report_size
+            )));
+        }
+
+        buffer[..report_size].fill(0);
         let mut offset = 0;
 
         // Add report ID for keyboards
         if device_type.includes_report_id() {
-            data[0] = 0x00; // Report ID
+            buffer[0] = 0x00; // Report ID
             offset = 1;
         }
 
         // Command code
-        data[offset] = self.command_code() as u8;
+        buffer[offset] = self.command_code() as u8;
         offset += 1;
 
         // Actuation point value
-        data[offset] = self.actuation_point;
+        buffer[offset] = self.actuation_point;
 
-        Ok(data)
+        Ok(report_size)
     }
 
     fn validate(&self) -> Result<()> {
@@ -449,7 +484,7 @@ impl PerKeyRgbCommand {
 
 impl PerKeyRgbCommand {
     /// Create a new per-key RGB command.
-    /// Note: Duplicate `new` removed, consolidated into the main implementation block.
+    /// Note: Duplicate  removed, consolidated into the main implementation block.
     /// Create a command for a single key.
     pub fn single_key(address: KeyAddress, color: Color) -> Self {
         let mut command = Self::new(PerKeyAddressingMode::Matrix);
@@ -511,25 +546,33 @@ impl HidCommand for PerKeyRgbCommand {
         CommandCode::PerKeyRgb
     }
 
-    fn serialize(&self, device_type: HidDeviceType) -> Result<Vec<u8>> {
+    fn serialize(&self, buffer: &mut [u8], device_type: HidDeviceType) -> Result<usize> {
         self.validate()?;
 
         let report_size = device_type.report_size();
-        let mut data = vec![0u8; report_size];
+        if buffer.len() < report_size {
+            return Err(Error::DeviceCommunication(format!(
+                "Buffer too small: {} bytes (expected {})",
+                buffer.len(),
+                report_size
+            )));
+        }
+
+        buffer[..report_size].fill(0);
         let mut offset = 0;
 
         // Add report ID for keyboards
         if device_type.includes_report_id() {
-            data[0] = 0x00; // Report ID
+            buffer[0] = 0x00; // Report ID
             offset = 1;
         }
 
         // Command code
-        data[offset] = self.command_code() as u8;
+        buffer[offset] = self.command_code() as u8;
         offset += 1;
 
         // Addressing mode
-        data[offset] = self.addressing_mode as u8;
+        buffer[offset] = self.addressing_mode as u8;
         offset += 1;
 
         // Batch ID flag (bit 7 of addressing mode) and fragment info
@@ -540,24 +583,24 @@ impl HidCommand for PerKeyRgbCommand {
         if self.fragment.is_some() {
             flags |= 0x40; // Bit 6 indicates fragmentation
         }
-        data[offset] = flags;
+        buffer[offset] = flags;
         offset += 1;
 
         // Batch ID (if present) - next 4 bytes
         if let Some(batch_id) = self.batch_id {
-            data[offset..offset + 4].copy_from_slice(&batch_id.to_le_bytes());
+            buffer[offset..offset + 4].copy_from_slice(&batch_id.to_le_bytes());
             offset += 4;
         }
 
         // Fragment info (if present) - next 2 bytes
         if let Some((current, total)) = self.fragment {
-            data[offset] = current;
-            data[offset + 1] = total;
+            buffer[offset] = current;
+            buffer[offset + 1] = total;
             offset += 2;
         }
 
         // Key count (for parsing/validation)
-        data[offset] = self.key_colors.len().min(255) as u8;
+        buffer[offset] = self.key_colors.len().min(255) as u8;
         offset += 1;
 
         // PLACEHOLDER: Per-key data format
@@ -579,15 +622,15 @@ impl HidCommand for PerKeyRgbCommand {
                 break; // Prevent buffer overflow
             }
 
-            data[offset] = address.row;
-            data[offset + 1] = address.col;
-            data[offset + 2] = color.r;
-            data[offset + 3] = color.g;
-            data[offset + 4] = color.b;
+            buffer[offset] = address.row;
+            buffer[offset + 1] = address.col;
+            buffer[offset + 2] = color.r;
+            buffer[offset + 3] = color.g;
+            buffer[offset + 4] = color.b;
             offset += 5;
         }
 
-        Ok(data)
+        Ok(report_size)
     }
 
     fn validate(&self) -> Result<()> {
@@ -813,22 +856,23 @@ impl HidReportBuilder {
     }
 
     /// Build a report from a command.
-    pub fn build_report<T: HidCommand>(&self, command: T) -> Result<Vec<u8>> {
+    pub fn build_report<T: HidCommand>(&self, command: T, buffer: &mut [u8]) -> Result<usize> {
         tracing::debug!(
             "Building HID report: {} ({})",
             command.description(),
             command.command_code()
         );
 
-        let data = command.serialize(self.device_type)?;
-        self.validate_report(&data)?;
+        let size = command.serialize(buffer, self.device_type)?;
+        let data = &buffer[..size];
+        self.validate_report(data)?;
 
         tracing::debug!(
             "Built {} byte HID report: {:02x?}",
             data.len(),
             &data[..data.len().min(32)]
         );
-        Ok(data)
+        Ok(size)
     }
 
     /// Validate a raw HID report.
@@ -1408,47 +1452,49 @@ mod tests {
     #[test]
     fn test_keyboard_report_serialization() {
         let builder = HidReportBuilder::new(HidDeviceType::Keyboard);
+        let mut buffer = [0u8; KEYBOARD_REPORT_SIZE];
 
         // RGB command
         let rgb_cmd = RgbZoneCommand::new_single_color(Color::RED, 1);
-        let data = builder.build_report(rgb_cmd).unwrap();
-        assert_eq!(data.len(), KEYBOARD_REPORT_SIZE);
-        assert_eq!(data[0], 0x00); // Report ID
-        assert_eq!(data[1], 0x21); // RGB command
-        assert_eq!(data[2], 0xFF); // Zone selector
-        assert_eq!(data[3], 255); // Red
-        assert_eq!(data[4], 0); // Green
-        assert_eq!(data[5], 0); // Blue
+        let size = builder.build_report(rgb_cmd, &mut buffer).unwrap();
+        assert_eq!(size, KEYBOARD_REPORT_SIZE);
+        assert_eq!(buffer[0], 0x00); // Report ID
+        assert_eq!(buffer[1], 0x21); // RGB command
+        assert_eq!(buffer[2], 0xFF); // Zone selector
+        assert_eq!(buffer[3], 255); // Red
+        assert_eq!(buffer[4], 0); // Green
+        assert_eq!(buffer[5], 0); // Blue
 
         // Brightness command
         let brightness_cmd = BrightnessCommand::new(75);
-        let data = builder.build_report(brightness_cmd).unwrap();
-        assert_eq!(data.len(), KEYBOARD_REPORT_SIZE);
-        assert_eq!(data[0], 0x00); // Report ID
-        assert_eq!(data[1], 0x22); // Brightness command
-        assert_eq!(data[2], 75); // Brightness value
+        let size = builder.build_report(brightness_cmd, &mut buffer).unwrap();
+        assert_eq!(size, KEYBOARD_REPORT_SIZE);
+        assert_eq!(buffer[0], 0x00); // Report ID
+        assert_eq!(buffer[1], 0x22); // Brightness command
+        assert_eq!(buffer[2], 75); // Brightness value
 
         // Apply command
         let apply_cmd = ApplyCommand;
-        let data = builder.build_report(apply_cmd).unwrap();
-        assert_eq!(data.len(), KEYBOARD_REPORT_SIZE);
-        assert_eq!(data[0], 0x00); // Report ID
-        assert_eq!(data[1], 0x09); // Apply command
+        let size = builder.build_report(apply_cmd, &mut buffer).unwrap();
+        assert_eq!(size, KEYBOARD_REPORT_SIZE);
+        assert_eq!(buffer[0], 0x00); // Report ID
+        assert_eq!(buffer[1], 0x09); // Apply command
     }
 
     #[test]
     fn test_headset_report_serialization() {
         let builder = HidReportBuilder::new(HidDeviceType::Headset);
+        let mut buffer = [0u8; HEADSET_REPORT_SIZE];
 
         // RGB command
         let rgb_cmd = RgbZoneCommand::new_single_color(Color::BLUE, 1);
-        let data = builder.build_report(rgb_cmd).unwrap();
-        assert_eq!(data.len(), HEADSET_REPORT_SIZE);
-        assert_eq!(data[0], 0x21); // RGB command (no report ID)
-        assert_eq!(data[1], 0xFF); // Zone selector
-        assert_eq!(data[2], 0); // Red
-        assert_eq!(data[3], 0); // Green
-        assert_eq!(data[4], 255); // Blue
+        let size = builder.build_report(rgb_cmd, &mut buffer).unwrap();
+        assert_eq!(size, HEADSET_REPORT_SIZE);
+        assert_eq!(buffer[0], 0x21); // RGB command (no report ID)
+        assert_eq!(buffer[1], 0xFF); // Zone selector
+        assert_eq!(buffer[2], 0); // Red
+        assert_eq!(buffer[3], 0); // Green
+        assert_eq!(buffer[4], 255); // Blue
     }
 
     #[test]
@@ -1504,18 +1550,19 @@ mod tests {
 
         // Test serialization
         let builder = HidReportBuilder::new(HidDeviceType::Keyboard);
-        let data = builder.build_report(cmd).unwrap();
-        assert_eq!(data.len(), KEYBOARD_REPORT_SIZE);
-        assert_eq!(data[0], 0x00); // Report ID
-        assert_eq!(data[1], 0x2A); // Per-key RGB command
-        assert_eq!(data[2], 0x00); // Matrix addressing mode
-        assert_eq!(data[3], 0x00); // Flags
-        assert_eq!(data[4], 0x01); // Key count
-        assert_eq!(data[5], 3); // Row
-        assert_eq!(data[6], 1); // Col
-        assert_eq!(data[7], 255); // Red
-        assert_eq!(data[8], 0); // Green
-        assert_eq!(data[9], 0); // Blue
+        let mut buffer = [0u8; KEYBOARD_REPORT_SIZE];
+        let size = builder.build_report(cmd, &mut buffer).unwrap();
+        assert_eq!(size, KEYBOARD_REPORT_SIZE);
+        assert_eq!(buffer[0], 0x00); // Report ID
+        assert_eq!(buffer[1], 0x2A); // Per-key RGB command
+        assert_eq!(buffer[2], 0x00); // Matrix addressing mode
+        assert_eq!(buffer[3], 0x00); // Flags
+        assert_eq!(buffer[4], 0x01); // Key count
+        assert_eq!(buffer[5], 3); // Row
+        assert_eq!(buffer[6], 1); // Col
+        assert_eq!(buffer[7], 255); // Red
+        assert_eq!(buffer[8], 0); // Green
+        assert_eq!(buffer[9], 0); // Blue
     }
 
     #[test]
@@ -1730,23 +1777,25 @@ mod tests {
     #[test]
     fn test_actuation_command_serialization() {
         let builder = HidReportBuilder::new(HidDeviceType::Keyboard);
+        let mut buffer = [0u8; KEYBOARD_REPORT_SIZE];
 
         // Test valid command serialization
         let cmd = ActuationCommand::new(20);
-        let data = builder.build_report(cmd).unwrap();
+        let size = builder.build_report(cmd, &mut buffer).unwrap();
 
-        assert_eq!(data.len(), KEYBOARD_REPORT_SIZE);
-        assert_eq!(data[0], 0x00); // Report ID
-        assert_eq!(data[1], 0x2D); // Actuation command
-        assert_eq!(data[2], 20); // Actuation value
+        assert_eq!(size, KEYBOARD_REPORT_SIZE);
+        assert_eq!(buffer[0], 0x00); // Report ID
+        assert_eq!(buffer[1], 0x2D); // Actuation command
+        assert_eq!(buffer[2], 20); // Actuation value
 
         // Test headset serialization
         let builder = HidReportBuilder::new(HidDeviceType::Headset);
+        let mut buffer = [0u8; HEADSET_REPORT_SIZE];
         let cmd = ActuationCommand::new(15);
-        let data = builder.build_report(cmd).unwrap();
-        assert_eq!(data.len(), HEADSET_REPORT_SIZE);
-        assert_eq!(data[0], 0x2D); // Actuation command (no report ID)
-        assert_eq!(data[1], 15); // Actuation value
+        let size = builder.build_report(cmd, &mut buffer).unwrap();
+        assert_eq!(size, HEADSET_REPORT_SIZE);
+        assert_eq!(buffer[0], 0x2D); // Actuation command (no report ID)
+        assert_eq!(buffer[1], 15); // Actuation value
     }
 
     #[test]
