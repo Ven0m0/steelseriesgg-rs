@@ -348,3 +348,50 @@ pub fn zone_count_for_product_id(product_id: u16) -> usize {
         _ => 1,                                                      // Default single zone
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::thread;
+    use std::time::Duration;
+
+    #[test]
+    fn test_hid_optimizer_duplicate_report() {
+        let optimizer = HidOptimizer::new();
+        let data = b"test_report_data";
+
+        // Initial check - should not be duplicate
+        assert!(!optimizer.is_duplicate_report(data));
+
+        // Mark as sent
+        optimizer.mark_report_sent(data);
+
+        // Immediate check - should be duplicate
+        assert!(optimizer.is_duplicate_report(data));
+
+        // Different data - should not be duplicate
+        let other_data = b"other_data";
+        assert!(!optimizer.is_duplicate_report(other_data));
+
+        // Wait for cache to expire
+        // Timeout is 50ms, so wait a bit more to be safe
+        thread::sleep(Duration::from_millis(60));
+
+        // Check again - should no longer be duplicate
+        assert!(!optimizer.is_duplicate_report(data));
+    }
+
+    #[test]
+    fn test_hash_report_collision() {
+        let data1 = b"report1";
+        let data2 = b"report2";
+
+        let hash1 = hash_report(data1);
+        let hash2 = hash_report(data2);
+
+        assert_ne!(hash1, hash2);
+
+        // Ensure deterministic output
+        assert_eq!(hash1, hash_report(data1));
+    }
+}
