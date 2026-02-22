@@ -1035,7 +1035,7 @@ async fn cmd_per_key_rgb(keyboard: &mut Box<dyn Keyboard>, action: PerKeyAction)
             match pattern_name.as_str() {
                 "rainbow" => {
                     println!("Testing rainbow pattern across keyboard");
-                    test_rainbow_pattern(keyboard)?;
+                    test_rainbow_pattern(keyboard).await?;
                 }
                 "checkerboard" => {
                     println!("Testing checkerboard pattern");
@@ -1108,7 +1108,7 @@ async fn cmd_per_key_rgb(keyboard: &mut Box<dyn Keyboard>, action: PerKeyAction)
 }
 
 // Helper functions for pattern testing
-fn test_rainbow_pattern(keyboard: &mut Box<dyn Keyboard>) -> Result<()> {
+async fn test_rainbow_pattern(keyboard: &mut Box<dyn Keyboard>) -> Result<()> {
     let colors = [
         Color::RED,
         Color::ORANGE,
@@ -1146,7 +1146,7 @@ fn test_rainbow_pattern(keyboard: &mut Box<dyn Keyboard>) -> Result<()> {
     } else {
         // Fallback to zone-based rainbow
         let zone_colors: Vec<Color> = (0..keyboard.zone_count()).map(|i| colors[i % colors.len()]).collect();
-        keyboard.set_zone_colors(&zone_colors)?;
+        keyboard.set_zone_colors(&zone_colors).await?;
     }
 
     Ok(())
@@ -2686,7 +2686,7 @@ async fn cmd_daemon(mut manager: DeviceManager) -> Result<()> {
                 {
                     let mut state = daemon_state_anim.write().await;
                     if let Some((keyboard, _, _)) = state.keyboards.get_mut(&serial) {
-                        if let Err(e) = keyboard.set_zone_colors(&colors) {
+                        if let Err(e) = keyboard.set_zone_colors(&colors).await {
                             tracing::warn!("Failed to update keyboard {}: {}", serial, e);
                         }
                     }

@@ -121,8 +121,8 @@ impl Keyboard for Apex3Tkl {
         self.inner.set_color(color)
     }
 
-    fn set_zone_colors(&mut self, colors: &[Color]) -> Result<()> {
-        self.inner.set_zone_colors(colors)
+    async fn set_zone_colors(&mut self, colors: &[Color]) -> Result<()> {
+        self.inner.set_zone_colors(colors).await
     }
 
     fn zone_count(&self) -> usize {

@@ -24,8 +24,8 @@ pub trait Keyboard: Device {
     /// Set the entire keyboard to a single color.
     fn set_color(&mut self, color: Color) -> Result<()>;
 
-    /// Set colors for individual zones.
-    fn set_zone_colors(&mut self, colors: &[Color]) -> Result<()>;
+    async fn set_zone_colors(&mut self, colors: &[Color]) -> Result<()>;
+    async fn set_zone_colors(fn set_zone_colors(&mut self, colors: &[Color]) -> Result<()>;mut self, colors: fn set_zone_colors(&mut self, colors: &[Color]) -> Result<()>;[Color]) -> Result<()>;
 
     /// Get the number of RGB zones.
     fn zone_count(&self) -> usize;
@@ -258,6 +258,58 @@ impl GenericKeyboard {
         let data = self.report_builder.build_report(rgb_command)?;
         self.send_report(&data)
     }
+    async fn send_report_async(&self, data: Vec<u8>) -> Result<()> {
+        use tracing::debug;
+
+        // Validate report structure if diagnostics enabled
+        with_global_diagnostics(|diag| {
+            if !diag.validate_report_structure(&data) {
+                debug!("HID report validation failed, sending anyway");
+            }
+        });
+
+        debug!("Sending HID report ({} bytes): {:02x?}", data.len(), data);
+
+        let device = self
+            .device
+            .clone()
+            .ok_or(Error::DeviceCommunication("Device not connected".to_string()))?;
+
+        // Clone data for closure
+        let data_clone = data.clone();
+
+        let result = tokio::task::spawn_blocking(move || {
+            let device = device.lock();
+
+            // Record the operation with timing analysis
+            if let Some(result) = with_global_diagnostics(|diag| {
+                diag.record_timed_operation(HidOperation::Send, &data_clone, || {
+                    write_padded_report(&device, &data_clone, 65, true)
+                })
+            }) {
+                // Diagnostics handled the operation and returned result
+                result
+            } else {
+                // No diagnostics, do normal operation
+                write_padded_report(&device, &data_clone, 65, true)
+            }
+        })
+        .await
+        .map_err(|e| Error::DeviceCommunication(format!("Join error: {}", e)))?;
+
+        match &result {
+            Ok(_) => debug!("HID report sent successfully"),
+            Err(e) => debug!("HID report failed: {:?}", e),
+        }
+
+        result
+    }
+
+    async fn send_zone_buffer_async(&mut self) -> Result<()> {
+        let rgb_command = RgbZoneCommand::new_all_zones(&self.zone_color_buffer);
+        let data = self.report_builder.build_report(rgb_command)?;
+        self.send_report_async(data).await
+    }
 }
 
 impl Device for GenericKeyboard {
@@ -350,7 +402,8 @@ impl Keyboard for GenericKeyboard {
         self.send_zone_buffer()
     }
 
-    fn set_zone_colors(&mut self, colors: &[Color]) -> Result<()> {
+
+    async fn set_zone_colors(&mut self, colors: &[Color]) -> Result<()> {
         // Reuse internal buffer to avoid allocation
         self.zone_color_buffer.clear();
         let len = colors.len().min(self.zone_count);
@@ -361,7 +414,7 @@ impl Keyboard for GenericKeyboard {
             self.zone_color_buffer.push(Color::BLACK);
         }
 
-        self.send_zone_buffer()
+        self.send_zone_buffer_async().await
     }
 
     fn zone_count(&self) -> usize {
@@ -549,7 +602,7 @@ impl Keyboard for GenericKeyboard {
         let mut last_error = None;
 
         for attempt in 0..max_retries {
-            match self.set_zone_colors(colors) {
+            match self.set_zone_colors(colors).await {
                 Ok(()) => {
                     if attempt > 0 {
                         tracing::info!("Zone RGB succeeded on attempt {}", attempt + 1);
