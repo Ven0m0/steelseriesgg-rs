@@ -4,17 +4,12 @@
 //! including timing metrics, memory usage tracking, and adaptive timing calculations.
 //! Also includes intelligent performance optimizations:
 //! - Advanced effect computation caching
-//! - HID communication batching and queuing
-//! - Memory pool management
 //! - Adaptive refresh rates
-//! - Background processing
 //! - Smart invalidation strategies
 
 use crate::rgb::{Color, Effect, PerKeyEffect};
-use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
-use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 /// RGB timing metrics for performance monitoring as required by the performance foundation plan.
@@ -410,97 +405,6 @@ impl Default for PerformanceStats {
     }
 }
 
-/// Memory pool for reusing RGB color vectors.
-pub struct ColorVectorPool {
-    /// Pool of pre-allocated color vectors
-    pool: Arc<Mutex<Vec<Vec<Color>>>>,
-    /// Statistics tracking
-    stats: Arc<Mutex<PoolStats>>,
-}
-
-#[derive(Debug, Default)]
-struct PoolStats {
-    allocations_saved: u64,
-    peak_utilization: usize,
-    current_size: usize,
-}
-
-impl ColorVectorPool {
-    /// Create a new color vector pool with initial capacity.
-    pub fn new(initial_capacity: usize) -> Self {
-        let mut pool = Vec::with_capacity(initial_capacity);
-
-        // Pre-allocate some vectors of common sizes
-        for size in [1, 9, 87, 104] {
-            // Single key, zones, TKL keys, full keyboard keys
-            for _ in 0..(initial_capacity / 4) {
-                pool.push(vec![Color::BLACK; size]);
-            }
-        }
-
-        let initial_size = pool.len();
-
-        Self {
-            pool: Arc::new(Mutex::new(pool)),
-            stats: Arc::new(Mutex::new(PoolStats {
-                current_size: initial_size,
-                ..Default::default()
-            })),
-        }
-    }
-
-    /// Get a vector from the pool, or allocate a new one if needed.
-    pub fn get(&self, size: usize) -> Vec<Color> {
-        let mut pool = self.pool.lock();
-        let mut stats = self.stats.lock();
-
-        // Try to find a vector of suitable size
-        for i in 0..pool.len() {
-            if pool[i].len() >= size {
-                let mut vec = pool.swap_remove(i);
-                vec.truncate(size);
-                vec.fill(Color::BLACK); // Reset colors
-                stats.allocations_saved += 1;
-                stats.current_size = pool.len();
-                return vec;
-            }
-        }
-
-        // No suitable vector found, allocate new one
-        stats.current_size = pool.len();
-        vec![Color::BLACK; size]
-    }
-
-    /// Return a vector to the pool for reuse.
-    pub fn return_vector(&self, mut vec: Vec<Color>) {
-        let mut pool = self.pool.lock();
-        let mut stats = self.stats.lock();
-
-        // Only keep reasonably sized vectors
-        if vec.len() <= 256 && pool.len() < 50 {
-            vec.clear();
-            pool.push(vec);
-            stats.current_size = pool.len();
-            stats.peak_utilization = stats.peak_utilization.max(pool.len());
-        }
-    }
-
-    /// Get pool utilization statistics.
-    pub fn get_utilization(&self) -> f64 {
-        let stats = self.stats.lock();
-        if stats.peak_utilization > 0 {
-            stats.current_size as f64 / stats.peak_utilization as f64
-        } else {
-            0.0
-        }
-    }
-
-    /// Get number of allocations saved.
-    pub fn allocations_saved(&self) -> u64 {
-        self.stats.lock().allocations_saved
-    }
-}
-
 /// Advanced effect computation cache with smart invalidation.
 pub struct EffectComputationCache {
     /// Cache storage for computed effects
@@ -689,137 +593,6 @@ impl EffectComputationCache {
     }
 }
 
-/// HID operation batching system to reduce communication overhead.
-pub struct HidBatchProcessor {
-    /// Pending operations to batch
-    pending_operations: Vec<HidOperation>,
-    /// Maximum batch size
-    max_batch_size: usize,
-    /// Maximum time to wait before processing batch
-    max_batch_delay: Duration,
-    /// Last batch processing time
-    last_batch_time: Instant,
-    /// Statistics
-    operations_batched: u64,
-}
-
-#[derive(Debug, Clone)]
-struct HidOperation {
-    operation_type: HidOpType,
-    data: Vec<u8>,
-    timestamp: Instant,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-#[allow(dead_code)]
-pub enum HidOpType {
-    SetZoneColors,
-    SetPerKeyColors,
-    SetBrightness,
-    Apply,
-}
-
-impl HidBatchProcessor {
-    /// Create a new HID batch processor.
-    pub fn new(max_batch_size: usize, max_batch_delay: Duration) -> Self {
-        Self {
-            pending_operations: Vec::with_capacity(max_batch_size),
-            max_batch_size,
-            max_batch_delay,
-            last_batch_time: Instant::now(),
-            operations_batched: 0,
-        }
-    }
-
-    /// Add an operation to the batch.
-    pub fn add_operation(&mut self, op_type: HidOpType, data: Vec<u8>) -> bool {
-        let operation = HidOperation {
-            operation_type: op_type,
-            data,
-            timestamp: Instant::now(),
-        };
-
-        self.pending_operations.push(operation);
-
-        // Check if batch should be processed
-        self.should_process_batch()
-    }
-
-    /// Check if the batch should be processed now.
-    pub fn should_process_batch(&self) -> bool {
-        self.pending_operations.len() >= self.max_batch_size
-            || self.last_batch_time.elapsed() >= self.max_batch_delay
-            || (!self.pending_operations.is_empty() && self.has_urgent_operation())
-    }
-
-    /// Process the current batch and return operations to execute.
-    pub fn process_batch(&mut self) -> Vec<Vec<u8>> {
-        if self.pending_operations.is_empty() {
-            return Vec::new();
-        }
-
-        // Optimize the batch by removing redundant operations
-        let optimized_ops = self.optimize_operations();
-
-        self.operations_batched += optimized_ops.len() as u64;
-        self.last_batch_time = Instant::now();
-        self.pending_operations.clear();
-
-        optimized_ops.into_iter().map(|op| op.data).collect()
-    }
-
-    /// Get number of operations that have been batched.
-    pub fn operations_batched(&self) -> u64 {
-        self.operations_batched
-    }
-
-    /// Check if any operation in the batch is urgent.
-    fn has_urgent_operation(&self) -> bool {
-        self.pending_operations.iter().any(|op| {
-            matches!(op.operation_type, HidOpType::Apply) || op.timestamp.elapsed() > Duration::from_millis(50)
-        })
-    }
-
-    /// Optimize operations by removing redundant ones.
-    fn optimize_operations(&self) -> Vec<HidOperation> {
-        let mut optimized = Vec::new();
-        let mut last_per_key: Option<&HidOperation> = None;
-        let mut last_zone: Option<&HidOperation> = None;
-        let mut last_brightness: Option<&HidOperation> = None;
-        let mut has_apply = false;
-
-        // Process operations in chronological order
-        for op in &self.pending_operations {
-            match op.operation_type {
-                HidOpType::SetPerKeyColors => last_per_key = Some(op),
-                HidOpType::SetZoneColors => last_zone = Some(op),
-                HidOpType::SetBrightness => last_brightness = Some(op),
-                HidOpType::Apply => has_apply = true,
-            }
-        }
-
-        // Add the most recent operation of each type
-        if let Some(op) = last_brightness {
-            optimized.push(op.clone());
-        }
-        if let Some(op) = last_zone {
-            optimized.push(op.clone());
-        }
-        if let Some(op) = last_per_key {
-            optimized.push(op.clone());
-        }
-        if has_apply {
-            optimized.push(HidOperation {
-                operation_type: HidOpType::Apply,
-                data: vec![],
-                timestamp: Instant::now(),
-            });
-        }
-
-        optimized
-    }
-}
-
 /// Adaptive refresh rate controller.
 pub struct AdaptiveRefreshController {
     /// Current refresh rate in Hz
@@ -914,12 +687,8 @@ impl AdaptiveRefreshController {
 
 /// Performance optimization manager that coordinates all optimization systems.
 pub struct PerformanceManager {
-    /// Memory pool for color vectors
-    color_pool: ColorVectorPool,
     /// Effect computation cache
     effect_cache: EffectComputationCache,
-    /// HID operation batching
-    hid_batcher: HidBatchProcessor,
     /// Adaptive refresh rate control
     refresh_controller: AdaptiveRefreshController,
     /// Performance statistics
@@ -930,33 +699,10 @@ impl PerformanceManager {
     /// Create a new performance manager with default settings.
     pub fn new() -> Self {
         Self {
-            color_pool: ColorVectorPool::new(20),
             effect_cache: EffectComputationCache::new(100, Duration::from_secs(5)),
-            hid_batcher: HidBatchProcessor::new(5, Duration::from_millis(16)),
             refresh_controller: AdaptiveRefreshController::new(60.0, 15.0, 120.0),
             stats: PerformanceStats::default(),
         }
-    }
-
-    /// Create a performance manager with custom settings.
-    pub fn with_config(pool_size: usize, cache_size: usize, batch_size: usize, initial_refresh_rate: f64) -> Self {
-        Self {
-            color_pool: ColorVectorPool::new(pool_size),
-            effect_cache: EffectComputationCache::new(cache_size, Duration::from_secs(5)),
-            hid_batcher: HidBatchProcessor::new(batch_size, Duration::from_millis(16)),
-            refresh_controller: AdaptiveRefreshController::new(initial_refresh_rate, 15.0, 120.0),
-            stats: PerformanceStats::default(),
-        }
-    }
-
-    /// Get a color vector from the memory pool.
-    pub fn get_color_vector(&self, size: usize) -> Vec<Color> {
-        self.color_pool.get(size)
-    }
-
-    /// Return a color vector to the memory pool.
-    pub fn return_color_vector(&self, vec: Vec<Color>) {
-        self.color_pool.return_vector(vec);
     }
 
     /// Try to get cached effect computation.
@@ -980,20 +726,6 @@ impl PerformanceManager {
         self.effect_cache.put(effect, elapsed_time, colors, computation_time);
     }
 
-    /// Add HID operation to batch.
-    pub fn add_hid_operation(&mut self, data: Vec<u8>) -> Option<Vec<Vec<u8>>> {
-        if self.hid_batcher.add_operation(HidOpType::SetZoneColors, data) {
-            Some(self.hid_batcher.process_batch())
-        } else {
-            None
-        }
-    }
-
-    /// Force process HID batch.
-    pub fn flush_hid_batch(&mut self) -> Vec<Vec<u8>> {
-        self.hid_batcher.process_batch()
-    }
-
     /// Record performance timing and adjust refresh rate.
     pub fn record_timing(&mut self, computation_time: Duration, hid_time: Duration) -> f64 {
         self.stats.total_computations += 1;
@@ -1006,11 +738,8 @@ impl PerformanceManager {
         self.stats.avg_computation_time_us = self.stats.avg_computation_time_us * (1.0 - alpha) + comp_us * alpha;
         self.stats.avg_hid_time_us = self.stats.avg_hid_time_us * (1.0 - alpha) + hid_us * alpha;
 
-        // Update other stats
+        // Update cache stats
         self.stats.cache_hit_rate = self.effect_cache.hit_rate();
-        self.stats.hid_operations_batched = self.hid_batcher.operations_batched();
-        self.stats.allocations_saved = self.color_pool.allocations_saved();
-        self.stats.memory_pool_utilization = self.color_pool.get_utilization();
 
         let new_rate = self.refresh_controller.record_timing(computation_time, hid_time);
         if new_rate != self.stats.current_refresh_rate {
@@ -1049,29 +778,6 @@ mod tests {
     use crate::rgb::Color;
 
     #[test]
-    fn test_color_vector_pool() {
-        let pool = ColorVectorPool::new(10);
-
-        // Get vectors of different sizes
-        let vec1 = pool.get(5);
-        let vec2 = pool.get(10);
-
-        assert_eq!(vec1.len(), 5);
-        assert_eq!(vec2.len(), 10);
-
-        // Return them to pool
-        pool.return_vector(vec1);
-        pool.return_vector(vec2);
-
-        // Get again - should reuse from pool
-        let vec3 = pool.get(5);
-        assert_eq!(vec3.len(), 5);
-
-        // Check that allocations were saved
-        assert!(pool.allocations_saved() > 0);
-    }
-
-    #[test]
     fn test_effect_cache() {
         let mut cache = EffectComputationCache::new(10, Duration::from_secs(1));
 
@@ -1096,22 +802,6 @@ mod tests {
     }
 
     #[test]
-    fn test_hid_batch_processor() {
-        let mut batcher = HidBatchProcessor::new(3, Duration::from_millis(100));
-
-        // Add operations one by one
-        assert!(!batcher.add_operation(HidOpType::SetZoneColors, vec![1, 2, 3]));
-        assert!(!batcher.add_operation(HidOpType::SetBrightness, vec![4, 5, 6]));
-
-        // Third operation should trigger batch processing
-        assert!(batcher.add_operation(HidOpType::Apply, vec![]));
-
-        let batch = batcher.process_batch();
-        assert!(!batch.is_empty());
-        assert!(batcher.operations_batched() > 0);
-    }
-
-    #[test]
     fn test_adaptive_refresh_controller() {
         let mut controller = AdaptiveRefreshController::new(60.0, 15.0, 120.0);
 
@@ -1133,11 +823,6 @@ mod tests {
     #[test]
     fn test_performance_manager() {
         let mut manager = PerformanceManager::new();
-
-        // Test color vector pooling
-        let vec = manager.get_color_vector(10);
-        assert_eq!(vec.len(), 10);
-        manager.return_color_vector(vec);
 
         // Test effect caching
         let effect = PerKeyEffect::Static { color: Color::BLUE };

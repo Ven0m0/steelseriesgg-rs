@@ -14,7 +14,7 @@ use std::collections::HashMap;
 use std::hash::Hash;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use tokio::time::interval;
 use tracing::{debug, error, trace};
 
@@ -182,8 +182,6 @@ pub struct DeviceStateStore {
     states: Arc<RwLock<HashMap<DeviceId, DeviceState>>>,
     state_file: PathBuf,
     dirty_flag: Arc<Mutex<bool>>,
-    #[allow(dead_code)]
-    last_write_time: Arc<Mutex<Instant>>,
     write_behind_handle: Option<tokio::task::JoinHandle<()>>,
 }
 
@@ -200,13 +198,11 @@ impl DeviceStateStore {
 
         let states = Arc::new(RwLock::new(HashMap::new()));
         let dirty_flag = Arc::new(Mutex::new(false));
-        let last_write_time = Arc::new(Mutex::new(Instant::now()));
 
         let mut store = Self {
             states: Arc::clone(&states),
             state_file: state_file.clone(),
             dirty_flag: Arc::clone(&dirty_flag),
-            last_write_time: Arc::clone(&last_write_time),
             write_behind_handle: None,
         };
 
@@ -216,7 +212,7 @@ impl DeviceStateStore {
         }
 
         // Start the write-behind background task
-        let write_handle = Self::start_write_behind_task(states, state_file, dirty_flag, last_write_time);
+        let write_handle = Self::start_write_behind_task(states, state_file, dirty_flag);
         store.write_behind_handle = Some(write_handle);
 
         debug!("DeviceStateStore initialized with async persistence");
@@ -228,7 +224,6 @@ impl DeviceStateStore {
         states: Arc<RwLock<HashMap<DeviceId, DeviceState>>>,
         state_file: PathBuf,
         dirty_flag: Arc<Mutex<bool>>,
-        last_write_time: Arc<Mutex<Instant>>,
     ) -> tokio::task::JoinHandle<()> {
         tokio::spawn(async move {
             let mut interval = interval(Duration::from_secs(5));
@@ -252,8 +247,6 @@ impl DeviceStateStore {
                     if let Err(e) = result {
                         error!("Failed to write device state to disk: {}", e);
                     } else {
-                        let mut last_write = last_write_time.lock();
-                        *last_write = Instant::now();
                         trace!("Device state persisted to disk asynchronously");
                     }
                 }
