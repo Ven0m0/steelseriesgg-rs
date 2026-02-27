@@ -521,7 +521,7 @@ pub const CACHE_THRESHOLD_MS: u64 = 16;  // ~60 FPS
 | **clap** | 4.5 | CLI argument parsing (derive) | ~150 KB |
 | **serde** | 1.0 | Serialization (derive) | ~100 KB |
 | **serde_json** | 1.0 | JSON serialization | ~80 KB |
-| **toml** | 0.9 | Config file parsing | ~60 KB |
+| **toml** | 1.0 | Config file parsing | ~60 KB |
 | **thiserror** | 2.0 | Error type macros | ~20 KB |
 | **anyhow** | 1.0 | Error handling (binaries) | ~30 KB |
 | **tracing** | 0.1 | Structured logging | ~80 KB |
@@ -530,7 +530,6 @@ pub const CACHE_THRESHOLD_MS: u64 = 16;  // ~60 FPS
 | **chrono** | 0.4 | Timestamps (serde) | ~100 KB |
 | **tower-http** | 0.6 | HTTP middleware (CORS) | ~80 KB |
 | **directories** | 6.0 | XDG base directories | ~10 KB |
-| **nix** | 0.31 | Unix system calls | ~150 KB |
 | **parking_lot** | 0.12 | High-performance locks | ~30 KB |
 | **sysinfo** | 0.38 | System information | ~80 KB |
 | **indicatif** | 0.18 | Progress bars | ~50 KB |

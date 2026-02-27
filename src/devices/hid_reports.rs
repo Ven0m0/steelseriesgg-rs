@@ -34,10 +34,10 @@ pub enum CommandCode {
     ReactiveMode = 0x25,
     /// Color shift (0x26)
     ColorShift = 0x26,
-    /// Per-key RGB control (0x2A) - RESEARCH PLACEHOLDER
+    /// Per-key RGB control (0x23)
     /// NOTE: This command code is a placeholder. The actual per-key RGB command
     /// for SteelSeries keyboards has not been discovered and may be different.
-    PerKeyRgb = 0x2A,
+    PerKeyRgb = 0x23,
     /// Actuation point control (0x2D) - EXPERIMENTAL
     /// NOTE: This command code is experimental based on hardware research.
     ActuationControl = 0x2D,
@@ -51,7 +51,7 @@ impl fmt::Display for CommandCode {
             CommandCode::Brightness => write!(f, "BRIGHTNESS"),
             CommandCode::ReactiveMode => write!(f, "REACTIVE"),
             CommandCode::ColorShift => write!(f, "COLOR_SHIFT"),
-            CommandCode::PerKeyRgb => write!(f, "PERKEY_RGB"),
+            CommandCode::PerKeyRgb => write!(f, "PERKEY_RGB_22"),
             CommandCode::ActuationControl => write!(f, "ACTUATION_CTRL"),
         }
     }
@@ -374,10 +374,6 @@ pub struct PerKeyRgbCommand {
     pub key_colors: HashMap<KeyAddress, Color>,
     /// Addressing mode
     pub addressing_mode: PerKeyAddressingMode,
-    /// Batch operation identifier (for complex multi-report operations)
-    pub batch_id: Option<u32>,
-    /// Fragment position (for split operations across multiple reports)
-    pub fragment: Option<(u8, u8)>, // (current_fragment, total_fragments)
 }
 
 /// Addressing mode for per-key RGB commands.
@@ -391,7 +387,10 @@ pub enum PerKeyAddressingMode {
 
 impl PerKeyRgbCommand {
     /// Maximum keys per report to fit within 64-byte payload limit
-    pub const MAX_KEYS_PER_REPORT: usize = 12; // (64 - header) / 5 bytes per key ≈ 12
+    /// Header: Cmd (1) + Count (1) = 2 bytes
+    /// Key Data: Row (1) + Col (1) + R (1) + G (1) + B (1) = 5 bytes
+    /// Max Keys: (64 - 2) / 5 = 12
+    pub const MAX_KEYS_PER_REPORT: usize = 12;
 
     /// Maximum matrix dimensions
     pub const MAX_ROWS: u8 = 32;
@@ -402,19 +401,13 @@ impl PerKeyRgbCommand {
         Self {
             key_colors: HashMap::new(),
             addressing_mode,
-            batch_id: None,
-            fragment: None,
         }
     }
 
     /// Create a new per-key RGB command with batch ID for complex operations.
-    pub fn new_with_batch(addressing_mode: PerKeyAddressingMode, batch_id: u32) -> Self {
-        Self {
-            key_colors: HashMap::new(),
-            addressing_mode,
-            batch_id: Some(batch_id),
-            fragment: None,
-        }
+    /// Note: Batch ID is no longer used in serialization but kept for API compatibility.
+    pub fn new_with_batch(addressing_mode: PerKeyAddressingMode, _batch_id: u32) -> Self {
+        Self::new(addressing_mode)
     }
 
     /// Check if this command needs fragmentation due to size limits.
@@ -428,12 +421,15 @@ impl PerKeyRgbCommand {
         let chunk_size = Self::MAX_KEYS_PER_REPORT;
         let keys: Vec<_> = self.key_colors.iter().collect();
 
-        for (i, chunk) in keys.chunks(chunk_size).enumerate() {
+        // Handle empty case
+        if keys.is_empty() {
+            return vec![self.clone()];
+        }
+
+        for chunk in keys.chunks(chunk_size) {
             let mut fragment_command = PerKeyRgbCommand {
                 key_colors: HashMap::new(),
                 addressing_mode: self.addressing_mode,
-                batch_id: self.batch_id,
-                fragment: Some(((i + 1) as u8, keys.len().div_ceil(chunk_size) as u8)),
             };
 
             for (address, color) in chunk {
@@ -445,11 +441,7 @@ impl PerKeyRgbCommand {
 
         fragments
     }
-}
 
-impl PerKeyRgbCommand {
-    /// Create a new per-key RGB command.
-    /// Note: Duplicate `new` removed, consolidated into the main implementation block.
     /// Create a command for a single key.
     pub fn single_key(address: KeyAddress, color: Color) -> Self {
         let mut command = Self::new(PerKeyAddressingMode::Matrix);
@@ -528,55 +520,15 @@ impl HidCommand for PerKeyRgbCommand {
         data[offset] = self.command_code() as u8;
         offset += 1;
 
-        // Addressing mode
-        data[offset] = self.addressing_mode as u8;
-        offset += 1;
-
-        // Batch ID flag (bit 7 of addressing mode) and fragment info
-        let mut flags = 0u8;
-        if self.batch_id.is_some() {
-            flags |= 0x80; // MSB indicates batch operation
-        }
-        if self.fragment.is_some() {
-            flags |= 0x40; // Bit 6 indicates fragmentation
-        }
-        data[offset] = flags;
-        offset += 1;
-
-        // Batch ID (if present) - next 4 bytes
-        if let Some(batch_id) = self.batch_id {
-            data[offset..offset + 4].copy_from_slice(&batch_id.to_le_bytes());
-            offset += 4;
-        }
-
-        // Fragment info (if present) - next 2 bytes
-        if let Some((current, total)) = self.fragment {
-            data[offset] = current;
-            data[offset + 1] = total;
-            offset += 2;
-        }
-
-        // Key count (for parsing/validation)
+        // Key count
         data[offset] = self.key_colors.len().min(255) as u8;
         offset += 1;
 
-        // PLACEHOLDER: Per-key data format
-        // The actual format depends on the real SteelSeries protocol:
-        //
-        // Option 1: Sequential key data
-        // [addr_row] [addr_col] [R] [G] [B] [addr_row] [addr_col] [R] [G] [B] ...
-        //
-        // Option 2: Matrix update
-        // [start_row] [start_col] [width] [height] [R G B] [R G B] ...
-        //
-        // Option 3: Key ID mapping
-        // [key_id] [R] [G] [B] [key_id] [R] [G] [B] ...
-        //
-        // Current implementation uses Option 1 (most flexible):
-
+        // Per-key data format (Standard SteelSeries Per-Key Protocol)
+        // [Row] [Col] [R] [G] [B]
         for (address, color) in &self.key_colors {
-            if offset + 4 >= report_size {
-                break; // Prevent buffer overflow
+            if offset + 5 > report_size {
+                break; // Safety break
             }
 
             data[offset] = address.row;
@@ -593,7 +545,7 @@ impl HidCommand for PerKeyRgbCommand {
     fn validate(&self) -> Result<()> {
         if self.key_colors.is_empty() && !self.needs_fragmentation() {
             return Err(Error::DeviceCommunication(
-                "Per-key RGB command must have at least one key (unless fragmented)".to_string(),
+                "Per-key RGB command must have at least one key".to_string(),
             ));
         }
 
@@ -610,21 +562,12 @@ impl HidCommand for PerKeyRgbCommand {
             }
         }
 
-        // Check if command fits in HID report, accounting for extended fields
-        let mut required_bytes = 6; // Base header (cmd, addr_mode, flags)
-        if self.batch_id.is_some() {
-            required_bytes += 4; // Batch ID
-        }
-        if self.fragment.is_some() {
-            required_bytes += 2; // Fragment info
-        }
-        required_bytes += 1; // Key count
-        required_bytes += self.key_colors.len() * 5; // Key data
+        // 1 (ID) + 1 (Cmd) + 1 (Count) + N*5
+        let required_bytes = 1 + 1 + 1 + (self.key_colors.len() * 5);
 
-        if required_bytes > 64 {
-            // Max data size (excluding report ID)
+        if required_bytes > 65 {
             return Err(Error::DeviceCommunication(format!(
-                "Too many keys in command: {} keys require {} bytes (max 64)",
+                "Too many keys in command: {} keys require {} bytes (max 65)",
                 self.key_colors.len(),
                 required_bytes
             )));
@@ -634,24 +577,14 @@ impl HidCommand for PerKeyRgbCommand {
     }
 
     fn description(&self) -> String {
-        let mut desc = match self.addressing_mode {
+        match self.addressing_mode {
             PerKeyAddressingMode::Matrix => {
                 format!("Set {} keys via matrix addressing", self.key_colors.len())
             }
             PerKeyAddressingMode::Logical => {
                 format!("Set {} keys via logical addressing", self.key_colors.len())
             }
-        };
-
-        if let Some(batch_id) = self.batch_id {
-            desc.push_str(&format!(" (batch {})", batch_id));
         }
-
-        if let Some((current, total)) = self.fragment {
-            desc.push_str(&format!(" [fragment {}/{}]", current, total));
-        }
-
-        desc
     }
 }
 
@@ -661,8 +594,6 @@ pub struct PerKeyRgbBuilder {
     addressing_mode: PerKeyAddressingMode,
     key_colors: HashMap<KeyAddress, Color>,
     key_mapping: Option<KeyMapping>,
-    batch_id: Option<u32>,
-    fragment_info: Option<(u8, u8)>, // (current, total)
 }
 
 impl PerKeyRgbBuilder {
@@ -672,20 +603,12 @@ impl PerKeyRgbBuilder {
             addressing_mode,
             key_colors: HashMap::new(),
             key_mapping: None,
-            batch_id: None,
-            fragment_info: None,
         }
     }
 
     /// Create a new per-key RGB builder with batch ID.
-    pub fn new_with_batch(addressing_mode: PerKeyAddressingMode, batch_id: u32) -> Self {
-        Self {
-            addressing_mode,
-            key_colors: HashMap::new(),
-            key_mapping: None,
-            batch_id: Some(batch_id),
-            fragment_info: None,
-        }
+    pub fn new_with_batch(addressing_mode: PerKeyAddressingMode, _batch_id: u32) -> Self {
+        Self::new(addressing_mode)
     }
 
     /// Create a builder with logical addressing support.
@@ -694,20 +617,12 @@ impl PerKeyRgbBuilder {
             addressing_mode: PerKeyAddressingMode::Logical,
             key_colors: HashMap::new(),
             key_mapping: Some(key_mapping),
-            batch_id: None,
-            fragment_info: None,
         }
     }
 
     /// Create a builder with logical addressing and batch ID.
-    pub fn with_key_mapping_and_batch(key_mapping: KeyMapping, batch_id: u32) -> Self {
-        Self {
-            addressing_mode: PerKeyAddressingMode::Logical,
-            key_colors: HashMap::new(),
-            key_mapping: Some(key_mapping),
-            batch_id: Some(batch_id),
-            fragment_info: None,
-        }
+    pub fn with_key_mapping_and_batch(key_mapping: KeyMapping, _batch_id: u32) -> Self {
+        Self::with_key_mapping(key_mapping)
     }
 
     /// Add a key by matrix address.
@@ -784,8 +699,6 @@ impl PerKeyRgbBuilder {
     pub fn build(self) -> PerKeyRgbCommand {
         let mut command = PerKeyRgbCommand::new(self.addressing_mode);
         command.key_colors = self.key_colors;
-        command.batch_id = self.batch_id;
-        command.fragment = self.fragment_info;
         command
     }
 
@@ -799,7 +712,6 @@ impl PerKeyRgbBuilder {
         self.key_colors.is_empty()
     }
 }
-
 /// Structured HID report builder and validator.
 #[derive(Debug)]
 pub struct HidReportBuilder {
@@ -1507,15 +1419,13 @@ mod tests {
         let data = builder.build_report(cmd).unwrap();
         assert_eq!(data.len(), KEYBOARD_REPORT_SIZE);
         assert_eq!(data[0], 0x00); // Report ID
-        assert_eq!(data[1], 0x2A); // Per-key RGB command
-        assert_eq!(data[2], 0x00); // Matrix addressing mode
-        assert_eq!(data[3], 0x00); // Flags
-        assert_eq!(data[4], 0x01); // Key count
-        assert_eq!(data[5], 3); // Row
-        assert_eq!(data[6], 1); // Col
-        assert_eq!(data[7], 255); // Red
-        assert_eq!(data[8], 0); // Green
-        assert_eq!(data[9], 0); // Blue
+        assert_eq!(data[1], 0x23); // Per-key RGB command
+        assert_eq!(data[2], 0x01); // Key count
+        assert_eq!(data[3], 3); // Row
+        assert_eq!(data[4], 1); // Col
+        assert_eq!(data[5], 255); // Red
+        assert_eq!(data[6], 0); // Green
+        assert_eq!(data[7], 0); // Blue
     }
 
     #[test]
