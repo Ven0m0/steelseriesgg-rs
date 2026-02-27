@@ -498,7 +498,7 @@ impl Keyboard for GenericKeyboard {
 
             let command = builder.build();
             let mut buffer = [0u8; 65];
-        let size = self.report_builder.build_report(command, &mut buffer)?;
+            let size = self.report_builder.build_report(command, &mut buffer)?;
             self.send_report(&buffer[..size])
         }
     }
