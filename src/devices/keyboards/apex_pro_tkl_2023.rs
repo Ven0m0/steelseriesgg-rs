@@ -34,7 +34,8 @@ impl ApexProTkl2023 {
         // Use the new command infrastructure for consistent serialization
         let report_builder = HidReportBuilder::new(HidDeviceType::Keyboard);
 
-        let report = report_builder.build_report(command)?;
+        let mut buffer = [0u8; KEYBOARD_REPORT_SIZE];
+        let size = report_builder.build_report(command, &mut buffer)?;
 
         // Use send_raw from inner Device trait
         self.inner.send_raw(&report)?;

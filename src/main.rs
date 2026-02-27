@@ -2585,6 +2585,10 @@ async fn cmd_daemon(mut manager: DeviceManager) -> Result<()> {
         let mut last_frame_start = Instant::now();
         let mut frames_processed = 0u64;
 
+        // Reusable buffer for RGB data to avoid allocations every frame
+        // Stores (serial, colors) for each keyboard
+        let mut frame_data_buffer: Vec<(String, Vec<Color>)> = Vec::new();
+
         loop {
             let frame_start = Instant::now();
             interval.tick().await;
@@ -2632,7 +2636,7 @@ async fn cmd_daemon(mut manager: DeviceManager) -> Result<()> {
             let computation_start = Instant::now();
 
             // Split the work: read operations first, then write operations
-            let (keyboards_data, overlays, _now) = {
+            let (processed_count, overlays, _now) = {
                 let mut state = daemon_state_anim.write().await;
 
                 // Clean up expired overlays while we have the lock
@@ -2640,13 +2644,33 @@ async fn cmd_daemon(mut manager: DeviceManager) -> Result<()> {
                 state.gamesense_overlays.retain(|_, (_, expiry)| *expiry > now);
 
                 // Collect data needed for RGB computation to minimize lock time
-                let keyboards_data: Vec<_> = state
-                    .keyboards
-                    .iter_mut()
-                    .map(|(serial, (_, controller, info))| {
-                        (serial.clone(), controller.compute_colors().to_vec(), info.clone())
-                    })
-                    .collect();
+                // Reuse frame_data_buffer to avoid allocations
+                let needed_capacity = state.keyboards.len();
+                if frame_data_buffer.len() < needed_capacity {
+                    frame_data_buffer.resize(needed_capacity, (String::new(), Vec::new()));
+                }
+
+                let mut count = 0;
+                for (serial, (_, controller, _)) in state.keyboards.iter_mut() {
+                    // Safety check, though resize above ensures capacity
+                    if count >= frame_data_buffer.len() {
+                        break;
+                    }
+
+                    let (buf_serial, buf_colors) = &mut frame_data_buffer[count];
+
+                    // Update serial (reusing String allocation)
+                    buf_serial.clear();
+                    buf_serial.push_str(serial);
+
+                    // Update colors (reusing Vec allocation)
+                    // controller.compute_colors() returns &[Color]
+                    let colors = controller.compute_colors();
+                    buf_colors.clear();
+                    buf_colors.extend_from_slice(colors);
+
+                    count += 1;
+                }
 
                 // Clone overlays only if there are any
                 let overlays = if state.gamesense_overlays.is_empty() {
@@ -2655,11 +2679,13 @@ async fn cmd_daemon(mut manager: DeviceManager) -> Result<()> {
                     state.gamesense_overlays.clone()
                 };
 
-                (keyboards_data, overlays, now)
+                (count, overlays, now)
             };
 
             // Process RGB updates for each keyboard without holding the lock
-            for (serial, mut colors, _info) in keyboards_data {
+            for i in 0..processed_count {
+                let (serial, colors) = &mut frame_data_buffer[i];
+
                 // Apply GameSense overlays using simple zone mapping
                 if !overlays.is_empty() {
                     let zone_count = colors.len();
@@ -2685,8 +2711,8 @@ async fn cmd_daemon(mut manager: DeviceManager) -> Result<()> {
                 // Apply colors to hardware - get keyboard reference with minimal lock time
                 {
                     let mut state = daemon_state_anim.write().await;
-                    if let Some((keyboard, _, _)) = state.keyboards.get_mut(&serial) {
-                        if let Err(e) = keyboard.set_zone_colors(&colors) {
+                    if let Some((keyboard, _, _)) = state.keyboards.get_mut(serial.as_str()) {
+                        if let Err(e) = keyboard.set_zone_colors(colors) {
                             tracing::warn!("Failed to update keyboard {}: {}", serial, e);
                         }
                     }

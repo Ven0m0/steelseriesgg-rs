@@ -258,8 +258,9 @@ impl GenericKeyboard {
 
     fn send_zone_buffer(&mut self) -> Result<()> {
         let rgb_command = RgbZoneCommand::new_all_zones(&self.zone_color_buffer);
-        let data = self.report_builder.build_report(rgb_command)?;
-        self.send_report(&data)
+        let mut buffer = [0u8; super::KEYBOARD_REPORT_SIZE];
+        let size = self.report_builder.build_report(rgb_command, &mut buffer)?;
+        self.send_report(&buffer[..size])
     }
 
     /// Update the cached actuation point value.
@@ -285,8 +286,9 @@ impl Device for GenericKeyboard {
         // Send initialization sequence if needed
         // Some SteelSeries keyboards need a "save" or "commit" command
         let apply_command = ApplyCommand;
-        if let Ok(data) = self.report_builder.build_report(apply_command) {
-            let _ = self.send_report(&data); // Don't fail if this doesn't work
+        let mut buffer = [0u8; 65];
+        if let Ok(size) = self.report_builder.build_report(apply_command, &mut buffer) {
+            let _ = self.send_report(&buffer[..size]); // Don't fail if this doesn't work
         }
         Ok(())
     }
@@ -383,18 +385,20 @@ impl Keyboard for GenericKeyboard {
     fn set_brightness(&mut self, brightness: u8) -> Result<()> {
         // Create structured brightness command (auto-clamps to 0-100)
         let brightness_command = BrightnessCommand::new(brightness);
-        let data = self.report_builder.build_report(brightness_command)?;
+        let mut buffer = [0u8; 65];
+        let size = self.report_builder.build_report(brightness_command, &mut buffer)?;
 
-        self.send_report(&data)
+        self.send_report(&buffer[..size])
     }
 
     fn apply(&mut self) -> Result<()> {
         // Create structured apply/save command
         let apply_command = ApplyCommand;
-        let data = self.report_builder.build_report(apply_command)?;
+        let mut buffer = [0u8; 65];
+        let size = self.report_builder.build_report(apply_command, &mut buffer)?;
 
         // Don't fail if device doesn't support apply command
-        let _ = self.send_report(&data);
+        let _ = self.send_report(&buffer[..size]);
         Ok(())
     }
 
@@ -449,14 +453,16 @@ impl Keyboard for GenericKeyboard {
         }
 
         let command = builder.build();
-        let data = self.report_builder.build_report(command)?;
-        self.send_report(&data)
+        let mut buffer = [0u8; 65];
+        let size = self.report_builder.build_report(command, &mut buffer)?;
+        self.send_report(&buffer[..size])
     }
 
     fn set_key_color_direct(&mut self, address: KeyAddress, color: Color) -> Result<()> {
         let command = PerKeyRgbCommand::single_key(address, color);
-        let data = self.report_builder.build_report(command)?;
-        self.send_report(&data)
+        let mut buffer = [0u8; 65];
+        let size = self.report_builder.build_report(command, &mut buffer)?;
+        self.send_report(&buffer[..size])
     }
 
     fn set_key_colors_direct(&mut self, key_colors: &[(KeyAddress, Color)]) -> Result<()> {
@@ -471,8 +477,9 @@ impl Keyboard for GenericKeyboard {
         }
 
         let command = builder.build();
-        let data = self.report_builder.build_report(command)?;
-        self.send_report(&data)
+        let mut buffer = [0u8; 65];
+        let size = self.report_builder.build_report(command, &mut buffer)?;
+        self.send_report(&buffer[..size])
     }
 
     fn clear_per_key_rgb(&mut self) -> Result<()> {
@@ -502,8 +509,9 @@ impl Keyboard for GenericKeyboard {
             }
 
             let command = builder.build();
-            let data = self.report_builder.build_report(command)?;
-            self.send_report(&data)
+            let mut buffer = [0u8; 65];
+            let size = self.report_builder.build_report(command, &mut buffer)?;
+            self.send_report(&buffer[..size])
         }
     }
 
@@ -518,8 +526,9 @@ impl Keyboard for GenericKeyboard {
         }
 
         let command = builder.build();
-        let data = self.report_builder.build_report(command)?;
-        self.send_report(&data)
+        let mut buffer = [0u8; 65];
+        let size = self.report_builder.build_report(command, &mut buffer)?;
+        self.send_report(&buffer[..size])
     }
 
     // === Zone-based RGB Fallback Implementation ===
