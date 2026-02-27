@@ -158,6 +158,7 @@ pub struct GenericKeyboard {
     zone_mapping: Option<ZoneMap>,
     per_key_controller: Option<PerKeyRgbController>,
     zone_color_buffer: Vec<Color>,
+    actuation_point_cache: Option<u8>,
 }
 
 impl GenericKeyboard {
@@ -211,6 +212,7 @@ impl GenericKeyboard {
             zone_mapping,
             per_key_controller,
             zone_color_buffer: Vec::with_capacity(zone_count),
+            actuation_point_cache: None,
         }
     }
 
@@ -253,10 +255,21 @@ impl GenericKeyboard {
 
         result
     }
+
     fn send_zone_buffer(&mut self) -> Result<()> {
         let rgb_command = RgbZoneCommand::new_all_zones(&self.zone_color_buffer);
-        let data = self.report_builder.build_report(rgb_command)?;
-        self.send_report(&data)
+        let mut buffer = [0u8; super::KEYBOARD_REPORT_SIZE];
+        let size = self.report_builder.build_report(rgb_command, &mut buffer)?;
+        self.send_report(&buffer[..size])
+    }
+
+    /// Update the cached actuation point value.
+    ///
+    /// This should be called by wrapper structs (like ApexProTkl2023) when they
+    /// successfully set the actuation point, so that `read_actuation_point` can return
+    /// the last known value.
+    pub fn update_cached_actuation_point(&mut self, value: u8) {
+        self.actuation_point_cache = Some(value);
     }
     async fn send_report_async(&self, data: Vec<u8>) -> Result<()> {
         use tracing::debug;
@@ -325,8 +338,9 @@ impl Device for GenericKeyboard {
         // Send initialization sequence if needed
         // Some SteelSeries keyboards need a "save" or "commit" command
         let apply_command = ApplyCommand;
-        if let Ok(data) = self.report_builder.build_report(apply_command) {
-            let _ = self.send_report(&data); // Don't fail if this doesn't work
+        let mut buffer = [0u8; 65];
+        if let Ok(size) = self.report_builder.build_report(apply_command, &mut buffer) {
+            let _ = self.send_report(&buffer[..size]); // Don't fail if this doesn't work
         }
         Ok(())
     }
@@ -424,18 +438,20 @@ impl Keyboard for GenericKeyboard {
     fn set_brightness(&mut self, brightness: u8) -> Result<()> {
         // Create structured brightness command (auto-clamps to 0-100)
         let brightness_command = BrightnessCommand::new(brightness);
-        let data = self.report_builder.build_report(brightness_command)?;
+        let mut buffer = [0u8; 65];
+        let size = self.report_builder.build_report(brightness_command, &mut buffer)?;
 
-        self.send_report(&data)
+        self.send_report(&buffer[..size])
     }
 
     fn apply(&mut self) -> Result<()> {
         // Create structured apply/save command
         let apply_command = ApplyCommand;
-        let data = self.report_builder.build_report(apply_command)?;
+        let mut buffer = [0u8; 65];
+        let size = self.report_builder.build_report(apply_command, &mut buffer)?;
 
         // Don't fail if device doesn't support apply command
-        let _ = self.send_report(&data);
+        let _ = self.send_report(&buffer[..size]);
         Ok(())
     }
 
@@ -490,14 +506,16 @@ impl Keyboard for GenericKeyboard {
         }
 
         let command = builder.build();
-        let data = self.report_builder.build_report(command)?;
-        self.send_report(&data)
+        let mut buffer = [0u8; 65];
+        let size = self.report_builder.build_report(command, &mut buffer)?;
+        self.send_report(&buffer[..size])
     }
 
     fn set_key_color_direct(&mut self, address: KeyAddress, color: Color) -> Result<()> {
         let command = PerKeyRgbCommand::single_key(address, color);
-        let data = self.report_builder.build_report(command)?;
-        self.send_report(&data)
+        let mut buffer = [0u8; 65];
+        let size = self.report_builder.build_report(command, &mut buffer)?;
+        self.send_report(&buffer[..size])
     }
 
     fn set_key_colors_direct(&mut self, key_colors: &[(KeyAddress, Color)]) -> Result<()> {
@@ -512,8 +530,9 @@ impl Keyboard for GenericKeyboard {
         }
 
         let command = builder.build();
-        let data = self.report_builder.build_report(command)?;
-        self.send_report(&data)
+        let mut buffer = [0u8; 65];
+        let size = self.report_builder.build_report(command, &mut buffer)?;
+        self.send_report(&buffer[..size])
     }
 
     fn clear_per_key_rgb(&mut self) -> Result<()> {
@@ -543,8 +562,9 @@ impl Keyboard for GenericKeyboard {
             }
 
             let command = builder.build();
-            let data = self.report_builder.build_report(command)?;
-            self.send_report(&data)
+            let mut buffer = [0u8; 65];
+            let size = self.report_builder.build_report(command, &mut buffer)?;
+            self.send_report(&buffer[..size])
         }
     }
 
@@ -559,8 +579,9 @@ impl Keyboard for GenericKeyboard {
         }
 
         let command = builder.build();
-        let data = self.report_builder.build_report(command)?;
-        self.send_report(&data)
+        let mut buffer = [0u8; 65];
+        let size = self.report_builder.build_report(command, &mut buffer)?;
+        self.send_report(&buffer[..size])
     }
 
     // === Zone-based RGB Fallback Implementation ===
@@ -860,18 +881,22 @@ impl Keyboard for GenericKeyboard {
     }
 
     fn read_actuation_point(&mut self) -> Result<u8> {
-        // PLACEHOLDER: HID command to read actuation point not yet discovered
-        //
-        // When the read command is discovered, implementation should:
-        // 1. Send query command (e.g., [0xXX] where XX is the read command byte)
-        // 2. Call self.receive_raw() to read response
-        // 3. Parse response to extract actuation value
-        // 4. Return value in 0.1mm units (4 = 0.4mm, 36 = 3.6mm)
-        //
-        // For now, return DeviceCommunication error
-        Err(Error::DeviceCommunication(
-            "Reading actuation point not yet implemented - HID read command not discovered".to_string(),
-        ))
+        if let Some(value) = self.actuation_point_cache {
+            Ok(value)
+        } else {
+            // PLACEHOLDER: HID command to read actuation point not yet discovered
+            //
+            // When the read command is discovered, implementation should:
+            // 1. Send query command (e.g., [0xXX] where XX is the read command byte)
+            // 2. Call self.receive_raw() to read response
+            // 3. Parse response to extract actuation value
+            // 4. Return value in 0.1mm units (4 = 0.4mm, 36 = 3.6mm)
+            //
+            // For now, return DeviceCommunication error if no cached value
+            Err(Error::DeviceCommunication(
+                "Reading actuation point not yet implemented - HID read command not discovered and no cached value available. Hint: the actuation point can currently only be retrieved if it was set earlier in this session; cache the value you set instead of relying on reading it back.".to_string(),
+            ))
+        }
     }
 
     fn set_actuation_point(&mut self, _value: u8) -> Result<()> {
