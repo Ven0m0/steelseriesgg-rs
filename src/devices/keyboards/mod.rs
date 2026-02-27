@@ -255,7 +255,7 @@ impl GenericKeyboard {
     }
     fn send_zone_buffer(&mut self) -> Result<()> {
         let rgb_command = RgbZoneCommand::new_all_zones(&self.zone_color_buffer);
-        let mut buffer = [0u8; 65];
+        let mut buffer = [0u8; super::KEYBOARD_REPORT_SIZE];
         let size = self.report_builder.build_report(rgb_command, &mut buffer)?;
         self.send_report(&buffer[..size])
     }
