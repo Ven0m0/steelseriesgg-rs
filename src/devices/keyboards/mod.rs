@@ -832,7 +832,7 @@ impl Keyboard for GenericKeyboard {
             //
             // For now, return DeviceCommunication error if no cached value
             Err(Error::DeviceCommunication(
-                "Reading actuation point not yet implemented - HID read command not discovered and no cached value available".to_string(),
+                "Reading actuation point not yet implemented - HID read command not discovered and no cached value available. Hint: the actuation point can currently only be retrieved if it was set earlier in this session; cache the value you set instead of relying on reading it back.".to_string(),
             ))
         }
     }
