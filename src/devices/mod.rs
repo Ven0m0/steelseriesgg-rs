@@ -381,7 +381,7 @@ mod tests {
     }
 
     #[test]
-    fn test_hash_report_collision() {
+    fn test_hash_report_distinct_inputs_different_hashes() {
         let data1 = b"report1";
         let data2 = b"report2";
 
