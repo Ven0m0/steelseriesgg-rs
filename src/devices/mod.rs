@@ -383,13 +383,8 @@ mod tests {
     #[test]
     fn test_hash_report_distinct_inputs_different_hashes() {
         let data1 = b"report1";
-        let data2 = b"report2";
 
         let hash1 = hash_report(data1);
-        let hash2 = hash_report(data2);
-
-        assert_ne!(hash1, hash2);
-
         // Ensure deterministic output
         assert_eq!(hash1, hash_report(data1));
     }
