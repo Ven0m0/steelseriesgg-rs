@@ -265,7 +265,7 @@ impl GenericKeyboard {
     /// Update the cached actuation point value.
     ///
     /// This should be called by wrapper structs (like ApexProTkl2023) when they
-    /// successfully set the actuation point, so that  can return
+    /// successfully set the actuation point, so that `read_actuation_point` can return
     /// the last known value.
     pub fn update_cached_actuation_point(&mut self, value: u8) {
         self.actuation_point_cache = Some(value);
