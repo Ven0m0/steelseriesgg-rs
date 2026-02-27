@@ -373,9 +373,8 @@ mod tests {
         let other_data = b"other_data";
         assert!(!optimizer.is_duplicate_report(other_data));
 
-        // Wait for cache to expire
-        // Timeout is 50ms, so wait a bit more to be safe
-        thread::sleep(Duration::from_millis(60));
+        // Wait for the optimizer's cache to expire before rechecking
+        thread::sleep(Duration::from_millis(200));
 
         // Check again - should no longer be duplicate
         assert!(!optimizer.is_duplicate_report(data));
