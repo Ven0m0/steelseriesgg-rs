@@ -4,7 +4,8 @@
 use steelseries_gg::devices::{DeviceManager, DeviceType};
 use steelseries_gg::rgb::Color;
 
-fn main() -> anyhow::Result<()> {
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
     println!("Testing device readback capabilities...\n");
 
     let manager = DeviceManager::new()?;
@@ -22,7 +23,7 @@ fn main() -> anyhow::Result<()> {
 
     // Try to send a color command
     println!("Sending RGB red command...");
-    keyboard.set_color(Color::RED)?;
+    keyboard.set_color(Color::RED).await?;
     println!("Command sent successfully");
 
     // Try to read back any response (if device supports it)

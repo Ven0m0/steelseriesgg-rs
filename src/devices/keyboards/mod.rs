@@ -22,19 +22,19 @@ use std::sync::Arc;
 #[async_trait]
 pub trait Keyboard: Device {
     /// Set the entire keyboard to a single color.
-    fn set_color(&mut self, color: Color) -> Result<()>;
+    async fn set_color(&mut self, color: Color) -> Result<()>;
 
     /// Set colors for individual zones.
-    fn set_zone_colors(&mut self, colors: &[Color]) -> Result<()>;
+    async fn set_zone_colors(&mut self, colors: &[Color]) -> Result<()>;
 
     /// Get the number of RGB zones.
     fn zone_count(&self) -> usize;
 
     /// Set keyboard brightness (0-100).
-    fn set_brightness(&mut self, brightness: u8) -> Result<()>;
+    async fn set_brightness(&mut self, brightness: u8) -> Result<()>;
 
     /// Apply the current RGB settings.
-    fn apply(&mut self) -> Result<()>;
+    async fn apply(&mut self) -> Result<()>;
 
     // === Per-Key RGB Control ===
 
@@ -48,31 +48,31 @@ pub trait Keyboard: Device {
     ///
     /// Uses the keyboard's key mapping to convert logical key IDs to matrix addresses.
     /// Returns an error if the key is not found in the mapping or per-key RGB is not supported.
-    fn set_key_color(&mut self, key_id: KeyId, color: Color) -> Result<()>;
+    async fn set_key_color(&mut self, key_id: KeyId, color: Color) -> Result<()>;
 
     /// Set RGB colors for multiple keys by logical key IDs.
     ///
     /// Uses the keyboard's key mapping to convert logical key IDs to matrix addresses.
     /// Keys not found in the mapping are ignored with a warning.
-    fn set_key_colors(&mut self, key_colors: &[(KeyId, Color)]) -> Result<()>;
+    async fn set_key_colors(&mut self, key_colors: &[(KeyId, Color)]) -> Result<()>;
 
     /// Set RGB color for a specific key by direct matrix address.
     ///
     /// Bypasses key mapping and directly addresses the key matrix.
     /// Use with caution - invalid addresses may cause device issues.
-    fn set_key_color_direct(&mut self, address: KeyAddress, color: Color) -> Result<()>;
+    async fn set_key_color_direct(&mut self, address: KeyAddress, color: Color) -> Result<()>;
 
     /// Set RGB colors for multiple keys by direct matrix addresses.
     ///
     /// Bypasses key mapping and directly addresses the key matrix.
     /// Use with caution - invalid addresses may cause device issues.
-    fn set_key_colors_direct(&mut self, key_colors: &[(KeyAddress, Color)]) -> Result<()>;
+    async fn set_key_colors_direct(&mut self, key_colors: &[(KeyAddress, Color)]) -> Result<()>;
 
     /// Set all keys to black (turn off per-key RGB).
-    fn clear_per_key_rgb(&mut self) -> Result<()>;
+    async fn clear_per_key_rgb(&mut self) -> Result<()>;
 
     /// Set a region of keys to the same color using matrix coordinates.
-    fn set_key_region(&mut self, start_row: u8, start_col: u8, rows: u8, cols: u8, color: Color) -> Result<()>;
+    async fn set_key_region(&mut self, start_row: u8, start_col: u8, rows: u8, cols: u8, color: Color) -> Result<()>;
 
     // === Zone-based RGB Fallback ===
 
@@ -158,15 +158,14 @@ pub struct GenericKeyboard {
     zone_mapping: Option<ZoneMap>,
     per_key_controller: Option<PerKeyRgbController>,
     zone_color_buffer: Vec<Color>,
+    actuation_point_cache: Option<u8>,
 }
 
 impl GenericKeyboard {
     /// Create a new keyboard instance.
     pub fn new(info: DeviceInfo, device: HidDevice) -> Self {
-        // Use centralized zone count mapping
         let zone_count = zone_count_for_product_id(info.product_id);
 
-        // Initialize key mapping database and try to find mapping for this keyboard
         let key_mapping = KeyMappingDatabase::new().get_mapping(info.product_id).cloned();
 
         if key_mapping.is_some() {
@@ -178,7 +177,6 @@ impl GenericKeyboard {
             );
         }
 
-        // Initialize zone fallback system
         let zone_fallback = ZoneFallback::new();
         let zone_mapping = zone_fallback.get_mapping(info.product_id).cloned();
 
@@ -191,13 +189,11 @@ impl GenericKeyboard {
             );
         }
 
-        // Initialize per-key RGB controller if key mapping is available
         let per_key_controller = key_mapping.as_ref().map(|mapping| {
             tracing::debug!(
                 "Initializing per-key RGB controller for product ID 0x{:04x}",
                 info.product_id
             );
-            // Use performance-optimized controller for better responsiveness
             PerKeyRgbController::new_with_performance(mapping.clone())
         });
 
@@ -211,14 +207,14 @@ impl GenericKeyboard {
             zone_mapping,
             per_key_controller,
             zone_color_buffer: Vec::with_capacity(zone_count),
+            actuation_point_cache: None,
         }
     }
 
-    /// Send a HID report to the keyboard.
+    /// Send a HID report to the keyboard synchronously (blocking).
     fn send_report(&mut self, data: &[u8]) -> Result<()> {
         use tracing::debug;
 
-        // Validate report structure if diagnostics enabled
         with_global_diagnostics(|diag| {
             if !diag.validate_report_structure(data) {
                 debug!("HID report validation failed, sending anyway");
@@ -233,16 +229,13 @@ impl GenericKeyboard {
             .ok_or(Error::DeviceCommunication("Device not connected".to_string()))?;
         let device = device.lock();
 
-        // Record the operation with timing analysis
         let result = if let Some(result) = with_global_diagnostics(|diag| {
             diag.record_timed_operation(HidOperation::Send, data, || {
                 write_padded_report(&device, data, 65, true)
             })
         }) {
-            // Diagnostics handled the operation and returned result
             result
         } else {
-            // No diagnostics, do normal operation
             write_padded_report(&device, data, 65, true)
         };
 
@@ -253,10 +246,73 @@ impl GenericKeyboard {
 
         result
     }
-    fn send_zone_buffer(&mut self) -> Result<()> {
+
+    /// Send a HID report to the keyboard asynchronously (non-blocking).
+    ///
+    /// Offloads the blocking hidapi write to `spawn_blocking` so the tokio
+    /// worker thread is not stalled during HID I/O.
+    async fn send_report_async(&self, data: &[u8]) -> Result<()> {
+        use tracing::debug;
+
+        with_global_diagnostics(|diag| {
+            if !diag.validate_report_structure(data) {
+                debug!("HID report validation failed, sending anyway");
+            }
+        });
+
+        debug!("Sending HID report ({} bytes): {:02x?}", data.len(), data);
+
+        let device = self
+            .device
+            .clone()
+            .ok_or(Error::DeviceCommunication("Device not connected".to_string()))?;
+
+        let data = data.to_vec();
+
+        let result = tokio::task::spawn_blocking(move || {
+            let device = device.lock();
+
+            if let Some(result) = with_global_diagnostics(|diag| {
+                diag.record_timed_operation(HidOperation::Send, &data, || {
+                    write_padded_report(&device, &data, 65, true)
+                })
+            }) {
+                result
+            } else {
+                write_padded_report(&device, &data, 65, true)
+            }
+        })
+        .await
+        .map_err(|e| {
+            if e.is_cancelled() {
+                Error::DeviceCommunication(format!("HID write task was cancelled: {}", e))
+            } else {
+                Error::DeviceCommunication(format!("HID write task failed: {}", e))
+            }
+        })?;
+
+        match &result {
+            Ok(_) => debug!("HID report sent successfully"),
+            Err(e) => debug!("HID report failed: {:?}", e),
+        }
+
+        result
+    }
+
+    async fn send_zone_buffer_async(&mut self) -> Result<()> {
         let rgb_command = RgbZoneCommand::new_all_zones(&self.zone_color_buffer);
-        let data = self.report_builder.build_report(rgb_command)?;
-        self.send_report(&data)
+        let mut buffer = [0u8; super::KEYBOARD_REPORT_SIZE];
+        let size = self.report_builder.build_report(rgb_command, &mut buffer)?;
+        self.send_report_async(&buffer[..size]).await
+    }
+
+    /// Update the cached actuation point value.
+    ///
+    /// This should be called by wrapper structs (like ApexProTkl2023) when they
+    /// successfully set the actuation point, so that `read_actuation_point` can
+    /// return the last known value.
+    pub fn update_cached_actuation_point(&mut self, value: u8) {
+        self.actuation_point_cache = Some(value);
     }
 }
 
@@ -270,11 +326,10 @@ impl Device for GenericKeyboard {
     }
 
     fn initialize(&mut self) -> Result<()> {
-        // Send initialization sequence if needed
-        // Some SteelSeries keyboards need a "save" or "commit" command
         let apply_command = ApplyCommand;
-        if let Ok(data) = self.report_builder.build_report(apply_command) {
-            let _ = self.send_report(&data); // Don't fail if this doesn't work
+        let mut buffer = [0u8; 65];
+        if let Ok(size) = self.report_builder.build_report(apply_command, &mut buffer) {
+            let _ = self.send_report(&buffer[..size]);
         }
         Ok(())
     }
@@ -299,16 +354,14 @@ impl Device for GenericKeyboard {
             .ok_or(Error::DeviceCommunication("Device not connected".to_string()))?;
         let device = device.lock();
 
-        // Record the operation with timing analysis
         if let Some(result) = with_global_diagnostics(|diag| {
             diag.record_timed_operation(HidOperation::Receive, &[], || {
                 let len = device.read(buf)?;
-                Ok((len, buf[..len].to_vec())) // Return both length and data for diagnostics
+                Ok((len, buf[..len].to_vec()))
             })
         }) {
-            result.map(|(len, _data)| len) // Extract just the length
+            result.map(|(len, _data)| len)
         } else {
-            // No diagnostics, do normal operation
             let len = device.read(buf)?;
             Ok(len)
         }
@@ -316,7 +369,6 @@ impl Device for GenericKeyboard {
 }
 
 impl GenericKeyboard {
-    /// Helper method to compute average color from a list of key colors.
     fn compute_average_color(&self, key_colors: &[(KeyId, Color)]) -> Color {
         if key_colors.is_empty() {
             return Color::BLACK;
@@ -343,46 +395,40 @@ impl GenericKeyboard {
 
 #[async_trait]
 impl Keyboard for GenericKeyboard {
-    fn set_color(&mut self, color: Color) -> Result<()> {
-        // Use internal buffer to avoid allocation
+    async fn set_color(&mut self, color: Color) -> Result<()> {
         self.zone_color_buffer.clear();
         self.zone_color_buffer.resize(self.zone_count, color);
-        self.send_zone_buffer()
+        self.send_zone_buffer_async().await
     }
 
-    fn set_zone_colors(&mut self, colors: &[Color]) -> Result<()> {
-        // Reuse internal buffer to avoid allocation
+    async fn set_zone_colors(&mut self, colors: &[Color]) -> Result<()> {
         self.zone_color_buffer.clear();
         let len = colors.len().min(self.zone_count);
         self.zone_color_buffer.extend_from_slice(&colors[..len]);
 
-        // Pad remaining zones with black
         while self.zone_color_buffer.len() < self.zone_count {
             self.zone_color_buffer.push(Color::BLACK);
         }
 
-        self.send_zone_buffer()
+        self.send_zone_buffer_async().await
     }
 
     fn zone_count(&self) -> usize {
         self.zone_count
     }
 
-    fn set_brightness(&mut self, brightness: u8) -> Result<()> {
-        // Create structured brightness command (auto-clamps to 0-100)
+    async fn set_brightness(&mut self, brightness: u8) -> Result<()> {
         let brightness_command = BrightnessCommand::new(brightness);
-        let data = self.report_builder.build_report(brightness_command)?;
-
-        self.send_report(&data)
+        let mut buffer = [0u8; 65];
+        let size = self.report_builder.build_report(brightness_command, &mut buffer)?;
+        self.send_report_async(&buffer[..size]).await
     }
 
-    fn apply(&mut self) -> Result<()> {
-        // Create structured apply/save command
+    async fn apply(&mut self) -> Result<()> {
         let apply_command = ApplyCommand;
-        let data = self.report_builder.build_report(apply_command)?;
-
-        // Don't fail if device doesn't support apply command
-        let _ = self.send_report(&data);
+        let mut buffer = [0u8; 65];
+        let size = self.report_builder.build_report(apply_command, &mut buffer)?;
+        let _ = self.send_report_async(&buffer[..size]).await;
         Ok(())
     }
 
@@ -396,7 +442,7 @@ impl Keyboard for GenericKeyboard {
         self.key_mapping.as_ref()
     }
 
-    fn set_key_color(&mut self, key_id: KeyId, color: Color) -> Result<()> {
+    async fn set_key_color(&mut self, key_id: KeyId, color: Color) -> Result<()> {
         let Some(mapping) = self.key_mapping.as_ref() else {
             return Err(Error::DeviceCommunication(
                 "Per-key RGB not supported - no key mapping available".to_string(),
@@ -404,7 +450,7 @@ impl Keyboard for GenericKeyboard {
         };
 
         if let Some(address) = mapping.get_key_address(key_id) {
-            self.set_key_color_direct(address, color)
+            self.set_key_color_direct(address, color).await
         } else {
             Err(Error::DeviceCommunication(format!(
                 "Key {:?} not found in key mapping",
@@ -413,14 +459,13 @@ impl Keyboard for GenericKeyboard {
         }
     }
 
-    fn set_key_colors(&mut self, key_colors: &[(KeyId, Color)]) -> Result<()> {
+    async fn set_key_colors(&mut self, key_colors: &[(KeyId, Color)]) -> Result<()> {
         let Some(mapping) = self.key_mapping.as_ref() else {
             return Err(Error::DeviceCommunication(
                 "Per-key RGB not supported - no key mapping available".to_string(),
             ));
         };
 
-        // Resolve logical key IDs to matrix addresses without cloning the full mapping.
         let mut builder = PerKeyRgbBuilder::new(super::hid_reports::PerKeyAddressingMode::Matrix);
         for (key_id, color) in key_colors {
             if let Some(address) = mapping.get_key_address(*key_id) {
@@ -437,17 +482,19 @@ impl Keyboard for GenericKeyboard {
         }
 
         let command = builder.build();
-        let data = self.report_builder.build_report(command)?;
-        self.send_report(&data)
+        let mut buffer = [0u8; 65];
+        let size = self.report_builder.build_report(command, &mut buffer)?;
+        self.send_report_async(&buffer[..size]).await
     }
 
-    fn set_key_color_direct(&mut self, address: KeyAddress, color: Color) -> Result<()> {
+    async fn set_key_color_direct(&mut self, address: KeyAddress, color: Color) -> Result<()> {
         let command = PerKeyRgbCommand::single_key(address, color);
-        let data = self.report_builder.build_report(command)?;
-        self.send_report(&data)
+        let mut buffer = [0u8; 65];
+        let size = self.report_builder.build_report(command, &mut buffer)?;
+        self.send_report_async(&buffer[..size]).await
     }
 
-    fn set_key_colors_direct(&mut self, key_colors: &[(KeyAddress, Color)]) -> Result<()> {
+    async fn set_key_colors_direct(&mut self, key_colors: &[(KeyAddress, Color)]) -> Result<()> {
         if key_colors.is_empty() {
             return Err(Error::DeviceCommunication("No key colors provided".to_string()));
         }
@@ -459,13 +506,13 @@ impl Keyboard for GenericKeyboard {
         }
 
         let command = builder.build();
-        let data = self.report_builder.build_report(command)?;
-        self.send_report(&data)
+        let mut buffer = [0u8; 65];
+        let size = self.report_builder.build_report(command, &mut buffer)?;
+        self.send_report_async(&buffer[..size]).await
     }
 
-    fn clear_per_key_rgb(&mut self) -> Result<()> {
+    async fn clear_per_key_rgb(&mut self) -> Result<()> {
         if let Some(ref mapping) = self.key_mapping {
-            // Set all keys in the mapping to black
             let black_keys: Vec<(KeyId, Color)> = mapping
                 .get_all_keys()
                 .iter()
@@ -473,16 +520,13 @@ impl Keyboard for GenericKeyboard {
                 .collect();
 
             if !black_keys.is_empty() {
-                self.set_key_colors(&black_keys)
+                self.set_key_colors(&black_keys).await
             } else {
-                Ok(()) // No keys to clear
+                Ok(())
             }
         } else {
-            // No key mapping available, use matrix approach to clear common positions
-            // This is a fallback that clears the most common key matrix positions
             let mut builder = PerKeyRgbBuilder::new(super::hid_reports::PerKeyAddressingMode::Matrix);
 
-            // Clear typical keyboard matrix (6x17 for TKL, should cover most keys)
             for row in 0..6 {
                 for col in 0..17 {
                     builder.add_key_matrix(KeyAddress::new(row, col), Color::BLACK);
@@ -490,12 +534,13 @@ impl Keyboard for GenericKeyboard {
             }
 
             let command = builder.build();
-            let data = self.report_builder.build_report(command)?;
-            self.send_report(&data)
+            let mut buffer = [0u8; 65];
+            let size = self.report_builder.build_report(command, &mut buffer)?;
+            self.send_report_async(&buffer[..size]).await
         }
     }
 
-    fn set_key_region(&mut self, start_row: u8, start_col: u8, rows: u8, cols: u8, color: Color) -> Result<()> {
+    async fn set_key_region(&mut self, start_row: u8, start_col: u8, rows: u8, cols: u8, color: Color) -> Result<()> {
         let mut builder = PerKeyRgbBuilder::new(super::hid_reports::PerKeyAddressingMode::Matrix);
         builder.set_region(start_row, start_col, rows, cols, color);
 
@@ -506,8 +551,9 @@ impl Keyboard for GenericKeyboard {
         }
 
         let command = builder.build();
-        let data = self.report_builder.build_report(command)?;
-        self.send_report(&data)
+        let mut buffer = [0u8; 65];
+        let size = self.report_builder.build_report(command, &mut buffer)?;
+        self.send_report_async(&buffer[..size]).await
     }
 
     // === Zone-based RGB Fallback Implementation ===
@@ -517,31 +563,24 @@ impl Keyboard for GenericKeyboard {
     }
 
     async fn set_zone_effect(&mut self, effect: ZoneEffect) -> Result<()> {
-        // Set the effect in the fallback system for time-based effects
         self.zone_fallback.set_current_effect(effect.clone());
-
-        // Apply the effect immediately
         let colors = effect.compute_colors(self.zone_count, 0.0);
         self.set_zone_colors_with_retry(&colors, 3).await
     }
 
     async fn simulate_per_key_with_zones(&mut self, key_colors: &[(KeyId, Color)]) -> Result<()> {
-        // Use the zone fallback system to convert per-key colors to zone colors
         if let Some(zone_colors) = self
             .zone_fallback
             .simulate_per_key_effect(self.info.product_id, key_colors)
         {
             self.set_zone_colors_with_retry(&zone_colors, 3).await
+        } else if !key_colors.is_empty() {
+            let avg_color = self.compute_average_color(key_colors);
+            self.set_color(avg_color).await?;
+            self.apply().await
         } else {
-            // Fallback to single color if no zone mapping available
-            if !key_colors.is_empty() {
-                let avg_color = self.compute_average_color(key_colors);
-                self.set_color(avg_color)?;
-                self.apply()
-            } else {
-                self.set_color(Color::BLACK)?;
-                self.apply()
-            }
+            self.set_color(Color::BLACK).await?;
+            self.apply().await
         }
     }
 
@@ -549,7 +588,7 @@ impl Keyboard for GenericKeyboard {
         let mut last_error = None;
 
         for attempt in 0..max_retries {
-            match self.set_zone_colors(colors) {
+            match self.set_zone_colors(colors).await {
                 Ok(()) => {
                     if attempt > 0 {
                         tracing::info!("Zone RGB succeeded on attempt {}", attempt + 1);
@@ -560,14 +599,12 @@ impl Keyboard for GenericKeyboard {
                     last_error = Some(e);
                     if attempt < max_retries - 1 {
                         tracing::warn!("Zone RGB attempt {} failed, retrying: {:?}", attempt + 1, last_error);
-                        // Small delay before retry
                         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
                     }
                 }
             }
         }
 
-        // All retries failed
         if let Some(e) = last_error {
             tracing::error!("Zone RGB failed after {} attempts", max_retries);
             Err(e)
@@ -581,24 +618,21 @@ impl Keyboard for GenericKeyboard {
     async fn test_zone_reliability(&mut self) -> Result<Vec<bool>> {
         let mut results = Vec::new();
 
-        // Test each zone individually
         for zone_index in 0..self.zone_count {
             let mut zone_colors = vec![Color::BLACK; self.zone_count];
             zone_colors[zone_index] = Color::WHITE;
 
-            let success = self.set_zone_colors(&zone_colors).is_ok();
+            let success = self.set_zone_colors(&zone_colors).await.is_ok();
             results.push(success);
 
             if !success {
                 tracing::warn!("Zone {} failed reliability test", zone_index);
             }
 
-            // Small delay between tests
             tokio::time::sleep(std::time::Duration::from_millis(100)).await;
         }
 
-        // Reset to all black after testing
-        let _ = self.set_color(Color::BLACK);
+        let _ = self.set_color(Color::BLACK).await;
 
         tracing::info!(
             "Zone reliability test completed: {}/{} zones working",
@@ -618,18 +652,15 @@ impl Keyboard for GenericKeyboard {
     async fn set_per_key_effect(&mut self, effect: PerKeyEffect) -> Result<()> {
         let key_colors = if let Some(ref mut controller) = self.per_key_controller {
             controller.set_effect(effect.clone());
-
-            // Apply the effect immediately by getting colors and sending to device
             Some(controller.compute_key_colors().to_vec())
         } else {
             None
         };
 
         if let Some(colors) = key_colors {
-            self.set_key_colors(&colors)?;
-            self.apply()
+            self.set_key_colors(&colors).await?;
+            self.apply().await
         } else {
-            // Fallback: convert to zone-based effect if no per-key support
             self.convert_per_key_to_zones(&effect).await
         }
     }
@@ -641,77 +672,61 @@ impl Keyboard for GenericKeyboard {
     async fn trigger_key_reactive(&mut self, keys: &[KeyId], duration: f32) -> Result<()> {
         let key_colors = if let Some(ref mut controller) = self.per_key_controller {
             controller.trigger_reactive(keys, duration);
-
-            // Apply the updated reactive state
             Some(controller.compute_key_colors().to_vec())
         } else {
             None
         };
 
         if let Some(colors) = key_colors {
-            self.set_key_colors(&colors)?;
-            self.apply()
+            self.set_key_colors(&colors).await?;
+            self.apply().await
+        } else if !keys.is_empty() {
+            self.simulate_per_key_with_zones(&keys.iter().map(|&k| (k, Color::WHITE)).collect::<Vec<_>>())
+                .await
         } else {
-            // Fallback: simulate reactive effect using zones
-            if !keys.is_empty() {
-                // Use zone fallback to simulate reactive effect
-                self.simulate_per_key_with_zones(&keys.iter().map(|&k| (k, Color::WHITE)).collect::<Vec<_>>())
-                    .await
-            } else {
-                Ok(())
-            }
+            Ok(())
         }
     }
 
     async fn apply_per_key_effect_with_brightness(&mut self, brightness: f32) -> Result<()> {
         let key_colors = if let Some(ref mut controller) = self.per_key_controller {
             controller.set_brightness(brightness.clamp(0.0, 1.0));
-
-            // Apply the effect with new brightness
             Some(controller.compute_key_colors().to_vec())
         } else {
             None
         };
 
         if let Some(colors) = key_colors {
-            self.set_key_colors(&colors)?;
-            self.apply()
+            self.set_key_colors(&colors).await?;
+            self.apply().await
         } else {
-            // Fallback: apply brightness to zones
-            self.set_brightness((brightness * 100.0) as u8)?;
-            self.apply()
+            self.set_brightness((brightness * 100.0) as u8).await?;
+            self.apply().await
         }
     }
 
     async fn convert_per_key_to_zones(&mut self, effect: &PerKeyEffect) -> Result<()> {
-        // Convert per-key effect to zone-based effect
         let zone_effect = match effect {
             PerKeyEffect::Static { color } => ZoneEffect::Solid(*color),
 
-            PerKeyEffect::Breathing { color, speed: _ } => {
-                // Use solid color for zone-based breathing (animation handled by zone system)
-                ZoneEffect::Breathing {
-                    colors: vec![*color],
-                    phase_offset: 0.0,
-                }
-            }
+            PerKeyEffect::Breathing { color, speed: _ } => ZoneEffect::Breathing {
+                colors: vec![*color],
+                phase_offset: 0.0,
+            },
 
-            PerKeyEffect::Spectrum { speed: _ } => {
-                // Create rainbow effect across zones
-                ZoneEffect::Wave {
-                    colors: vec![
-                        Color::RED,
-                        Color::ORANGE,
-                        Color::YELLOW,
-                        Color::GREEN,
-                        Color::CYAN,
-                        Color::BLUE,
-                        Color::PURPLE,
-                        Color::MAGENTA,
-                    ],
-                    offset: 0.0,
-                }
-            }
+            PerKeyEffect::Spectrum { speed: _ } => ZoneEffect::Wave {
+                colors: vec![
+                    Color::RED,
+                    Color::ORANGE,
+                    Color::YELLOW,
+                    Color::GREEN,
+                    Color::CYAN,
+                    Color::BLUE,
+                    Color::PURPLE,
+                    Color::MAGENTA,
+                ],
+                offset: 0.0,
+            },
 
             PerKeyEffect::Wave {
                 colors,
@@ -741,13 +756,9 @@ impl Keyboard for GenericKeyboard {
                 wasd_color,
                 default_color,
                 ..
-            } => {
-                // Use alternating colors to approximate gaming zones
-                ZoneEffect::Alternating(vec![*wasd_color, *default_color])
-            }
+            } => ZoneEffect::Alternating(vec![*wasd_color, *default_color]),
 
             PerKeyEffect::Custom { key_colors } => {
-                // Average all custom colors for zone effect
                 if key_colors.is_empty() {
                     ZoneEffect::Solid(Color::BLACK)
                 } else {
@@ -773,7 +784,6 @@ impl Keyboard for GenericKeyboard {
 
             PerKeyEffect::Off => ZoneEffect::Solid(Color::BLACK),
 
-            // For complex effects, use a reasonable fallback
             _ => ZoneEffect::Solid(Color::WHITE),
         };
 
@@ -807,29 +817,22 @@ impl Keyboard for GenericKeyboard {
     }
 
     fn read_actuation_point(&mut self) -> Result<u8> {
-        // PLACEHOLDER: HID command to read actuation point not yet discovered
-        //
-        // When the read command is discovered, implementation should:
-        // 1. Send query command (e.g., [0xXX] where XX is the read command byte)
-        // 2. Call self.receive_raw() to read response
-        // 3. Parse response to extract actuation value
-        // 4. Return value in 0.1mm units (4 = 0.4mm, 36 = 3.6mm)
-        //
-        // For now, return DeviceCommunication error
-        Err(Error::DeviceCommunication(
-            "Reading actuation point not yet implemented - HID read command not discovered".to_string(),
-        ))
+        if let Some(value) = self.actuation_point_cache {
+            Ok(value)
+        } else {
+            Err(Error::DeviceCommunication(
+                "Reading actuation point not yet implemented - HID read command not discovered and no cached value available. Hint: the actuation point can currently only be retrieved if it was set earlier in this session; cache the value you set instead of relying on reading it back.".to_string(),
+            ))
+        }
     }
 
     fn set_actuation_point(&mut self, _value: u8) -> Result<()> {
-        // Placeholder implementation - most keyboards don't support this feature
         Err(Error::DeviceCommunication(
             "Setting actuation point not supported on this keyboard model".to_string(),
         ))
     }
 
     fn set_actuation_point_mm(&mut self, _mm: f32) -> Result<()> {
-        // Placeholder implementation - most keyboards don't support this feature
         Err(Error::DeviceCommunication(
             "Setting actuation point not supported on this keyboard model".to_string(),
         ))
@@ -857,20 +860,13 @@ mod tests {
 
     #[test]
     fn test_per_key_rgb_support_detection() {
-        // Note: This test uses a mock HidDevice, but the keyboard creation process
-        // will work with the key mapping database to determine per-key RGB support
-
-        // For Apex Pro TKL 2023 (should have key mapping)
         let _info = create_test_device_info();
 
-        // We can't actually create a GenericKeyboard without a real HidDevice
-        // but we can test the key mapping database directly
         let db = KeyMappingDatabase::new();
 
         assert!(db.supports_product(product_ids::APEX_PRO_TKL_2023));
         assert!(db.get_mapping(product_ids::APEX_PRO_TKL_2023).is_some());
 
-        // Test unknown product ID
         assert!(!db.supports_product(0xFFFF));
         assert!(db.get_mapping(0xFFFF).is_none());
     }
@@ -880,17 +876,14 @@ mod tests {
         let db = KeyMappingDatabase::new();
 
         if let Some(mapping) = db.get_mapping(product_ids::APEX_PRO_TKL_2023) {
-            // Test that basic keys are mapped
             assert!(mapping.supports_key(KeyId::A));
             assert!(mapping.supports_key(KeyId::Enter));
             assert!(mapping.supports_key(KeyId::Space));
             assert!(mapping.supports_key(KeyId::Escape));
 
-            // Test key address retrieval
             assert!(mapping.get_key_address(KeyId::A).is_some());
             assert!(mapping.get_key_address(KeyId::Enter).is_some());
 
-            // Test mapping statistics
             let stats = mapping.get_stats();
             assert!(stats.total_keys > 0);
             assert!(stats.utilization > 0.0);
@@ -904,7 +897,6 @@ mod tests {
         if let Some(mapping) = db.get_mapping(product_ids::APEX_PRO_TKL_2023) {
             let mut builder = PerKeyRgbBuilder::with_key_mapping(mapping.clone());
 
-            // Test adding logical keys
             let result = builder.add_key_logical(KeyId::A, Color::RED);
             assert!(result.is_ok());
 
@@ -916,33 +908,27 @@ mod tests {
 
             assert_eq!(builder.key_count(), 3);
 
-            // Build command
             let command = builder.build();
             assert_eq!(command.key_count(), 3);
             assert_eq!(command.addressing_mode, PerKeyAddressingMode::Logical);
 
-            // Test validation
             assert!(command.validate().is_ok());
         }
     }
 
     #[test]
     fn test_zone_count_mapping() {
-        // Test zone count for known keyboards
         assert_eq!(zone_count_for_product_id(product_ids::APEX_PRO_TKL_2023), 9);
         assert_eq!(zone_count_for_product_id(product_ids::APEX_3), 10);
         assert_eq!(zone_count_for_product_id(product_ids::APEX_3_TKL), 9);
 
-        // Test unknown product ID (should default to 1)
         assert_eq!(zone_count_for_product_id(0xFFFF), 1);
     }
 
     #[test]
     fn test_per_key_addressing_modes() {
-        // Test that addressing modes are distinct
         assert_ne!(PerKeyAddressingMode::Matrix, PerKeyAddressingMode::Logical);
 
-        // Test builder creation with different modes
         let matrix_builder = PerKeyRgbBuilder::new(PerKeyAddressingMode::Matrix);
         assert!(matrix_builder.is_empty());
 
@@ -955,19 +941,15 @@ mod tests {
 
     #[test]
     fn test_key_address_bounds() {
-        // Test key address creation and bounds
         let addr = KeyAddress::new(5, 16);
         assert_eq!(addr.row, 5);
         assert_eq!(addr.col, 16);
 
-        // Test command validation with bounds
         let mut command = PerKeyRgbCommand::new(PerKeyAddressingMode::Matrix);
 
-        // Valid address should work
         command.set_key_color(KeyAddress::new(5, 16), Color::RED);
         assert!(command.validate().is_ok());
 
-        // Invalid address should fail validation
         command.set_key_color(KeyAddress::new(32, 0), Color::BLUE);
         assert!(command.validate().is_err());
     }
@@ -977,12 +959,10 @@ mod tests {
         let db = KeyMappingDatabase::new();
         let supported_products = db.get_supported_products();
 
-        // Should include known Apex Pro models
         assert!(supported_products.contains(&product_ids::APEX_PRO_TKL_2023));
         assert!(supported_products.contains(&product_ids::APEX_PRO));
         assert!(supported_products.contains(&product_ids::APEX_PRO_TKL));
 
-        // Should not be empty
         assert!(!supported_products.is_empty());
     }
 }

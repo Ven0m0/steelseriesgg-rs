@@ -803,8 +803,8 @@ async fn cmd_rgb(manager: &DeviceManager, action: RgbAction) -> Result<()> {
             let color = parse_color(&color).ok_or_else(|| Error::Other(format!("Invalid color: {}", color)))?;
 
             println!("Setting color to {}", color);
-            keyboard.set_color(color)?;
-            keyboard.apply()?; // Apply the color change
+            keyboard.set_color(color).await?;
+            keyboard.apply().await?; // Apply the color change
 
             // Persist the effect to state store
             state_store.update_keyboard_effect(device_id, Effect::Static { color })?;
@@ -818,7 +818,7 @@ async fn cmd_rgb(manager: &DeviceManager, action: RgbAction) -> Result<()> {
         RgbAction::Brightness { level } => {
             let level = level.min(100);
             println!("Setting brightness to {}%", level);
-            keyboard.set_brightness(level)?;
+            keyboard.set_brightness(level).await?;
 
             // Persist brightness to state store
             state_store.update_keyboard_brightness(device_id, level)?;
@@ -859,8 +859,8 @@ async fn cmd_rgb(manager: &DeviceManager, action: RgbAction) -> Result<()> {
 
         RgbAction::Off => {
             println!("Turning off LEDs");
-            keyboard.set_color(Color::BLACK)?;
-            keyboard.apply()?; // Apply the off state
+            keyboard.set_color(Color::BLACK).await?;
+            keyboard.apply().await?; // Apply the off state
 
             // Persist the off state
             state_store.update_keyboard_effect(device_id, Effect::Off)?;
@@ -902,7 +902,7 @@ async fn cmd_actuation(manager: &DeviceManager, action: ActuationAction) -> Resu
             }
 
             keyboard.set_actuation_point_mm(mm)?;
-            keyboard.apply()?;
+            keyboard.apply().await?;
             println!("Actuation point set successfully!");
         }
 
@@ -917,7 +917,7 @@ async fn cmd_actuation(manager: &DeviceManager, action: ActuationAction) -> Resu
             }
 
             keyboard.set_actuation_point(value)?;
-            keyboard.apply()?;
+            keyboard.apply().await?;
             println!("Actuation value set successfully!");
         }
     }
@@ -939,14 +939,14 @@ async fn cmd_per_key_rgb(keyboard: &mut Box<dyn Keyboard>, action: PerKeyAction)
                 println!("Warning: Per-key RGB not supported on this keyboard");
                 println!("Available key mapping: None");
                 println!("Falling back to zone-based RGB (setting entire keyboard)");
-                keyboard.set_color(color)?;
-                keyboard.apply()?;
+                keyboard.set_color(color).await?;
+                keyboard.apply().await?;
                 return Ok(());
             }
 
             println!("Setting key '{}' to color {}", key, color);
-            keyboard.set_key_color(key_id, color)?;
-            keyboard.apply()?;
+            keyboard.set_key_color(key_id, color).await?;
+            keyboard.apply().await?;
             println!("Done!");
         }
 
@@ -979,14 +979,14 @@ async fn cmd_per_key_rgb(keyboard: &mut Box<dyn Keyboard>, action: PerKeyAction)
             if !keyboard.supports_per_key_rgb() {
                 println!("Warning: Per-key RGB not supported on this keyboard");
                 println!("Falling back to setting first color on entire keyboard");
-                keyboard.set_color(key_colors[0].1)?;
-                keyboard.apply()?;
+                keyboard.set_color(key_colors[0].1).await?;
+                keyboard.apply().await?;
                 return Ok(());
             }
 
             println!("Setting {} keys to their respective colors", key_colors.len());
-            keyboard.set_key_colors(&key_colors)?;
-            keyboard.apply()?;
+            keyboard.set_key_colors(&key_colors).await?;
+            keyboard.apply().await?;
             println!("Done!");
         }
 
@@ -1008,15 +1008,15 @@ async fn cmd_per_key_rgb(keyboard: &mut Box<dyn Keyboard>, action: PerKeyAction)
                 color
             );
 
-            keyboard.set_key_region(start_row, start_col, rows, cols, color)?;
-            keyboard.apply()?;
+            keyboard.set_key_region(start_row, start_col, rows, cols, color).await?;
+            keyboard.apply().await?;
             println!("Done!");
         }
 
         PerKeyAction::Clear => {
             println!("Clearing all per-key RGB (setting all keys to black)");
-            keyboard.clear_per_key_rgb()?;
-            keyboard.apply()?;
+            keyboard.clear_per_key_rgb().await?;
+            keyboard.apply().await?;
             println!("Done!");
         }
 
@@ -1025,8 +1025,8 @@ async fn cmd_per_key_rgb(keyboard: &mut Box<dyn Keyboard>, action: PerKeyAction)
 
             println!("Testing matrix position ({}, {}) with color {}", row, col, color);
             let address = KeyAddress::new(row, col);
-            keyboard.set_key_color_direct(address, color)?;
-            keyboard.apply()?;
+            keyboard.set_key_color_direct(address, color).await?;
+            keyboard.apply().await?;
             println!("Done! If no key lights up, this matrix position might not exist.");
         }
 
@@ -1035,19 +1035,19 @@ async fn cmd_per_key_rgb(keyboard: &mut Box<dyn Keyboard>, action: PerKeyAction)
             match pattern_name.as_str() {
                 "rainbow" => {
                     println!("Testing rainbow pattern across keyboard");
-                    test_rainbow_pattern(keyboard)?;
+                    test_rainbow_pattern(keyboard).await?;
                 }
                 "checkerboard" => {
                     println!("Testing checkerboard pattern");
-                    test_checkerboard_pattern(keyboard)?;
+                    test_checkerboard_pattern(keyboard).await?;
                 }
                 "wave" => {
                     println!("Testing wave pattern");
-                    test_wave_pattern(keyboard)?;
+                    test_wave_pattern(keyboard).await?;
                 }
                 "test" => {
                     println!("Testing basic key positions");
-                    test_basic_positions(keyboard)?;
+                    test_basic_positions(keyboard).await?;
                 }
                 _ => {
                     return Err(Error::Other(format!(
@@ -1056,7 +1056,7 @@ async fn cmd_per_key_rgb(keyboard: &mut Box<dyn Keyboard>, action: PerKeyAction)
                     )));
                 }
             }
-            keyboard.apply()?;
+            keyboard.apply().await?;
             println!("Pattern applied!");
         }
 
@@ -1108,7 +1108,7 @@ async fn cmd_per_key_rgb(keyboard: &mut Box<dyn Keyboard>, action: PerKeyAction)
 }
 
 // Helper functions for pattern testing
-fn test_rainbow_pattern(keyboard: &mut Box<dyn Keyboard>) -> Result<()> {
+async fn test_rainbow_pattern(keyboard: &mut Box<dyn Keyboard>) -> Result<()> {
     let colors = [
         Color::RED,
         Color::ORANGE,
@@ -1131,7 +1131,7 @@ fn test_rainbow_pattern(keyboard: &mut Box<dyn Keyboard>) -> Result<()> {
                 key_colors.push((*key_id, color));
             }
 
-            keyboard.set_key_colors(&key_colors)?;
+            keyboard.set_key_colors(&key_colors).await?;
         } else {
             // Fallback to matrix addressing
             let mut direct_colors = Vec::new();
@@ -1141,18 +1141,18 @@ fn test_rainbow_pattern(keyboard: &mut Box<dyn Keyboard>) -> Result<()> {
                     direct_colors.push((KeyAddress::new(row, col), colors[color_idx as usize]));
                 }
             }
-            keyboard.set_key_colors_direct(&direct_colors)?;
+            keyboard.set_key_colors_direct(&direct_colors).await?;
         }
     } else {
         // Fallback to zone-based rainbow
         let zone_colors: Vec<Color> = (0..keyboard.zone_count()).map(|i| colors[i % colors.len()]).collect();
-        keyboard.set_zone_colors(&zone_colors)?;
+        keyboard.set_zone_colors(&zone_colors).await?;
     }
 
     Ok(())
 }
 
-fn test_checkerboard_pattern(keyboard: &mut Box<dyn Keyboard>) -> Result<()> {
+async fn test_checkerboard_pattern(keyboard: &mut Box<dyn Keyboard>) -> Result<()> {
     let mut direct_colors = Vec::new();
 
     for row in 0..6 {
@@ -1167,16 +1167,16 @@ fn test_checkerboard_pattern(keyboard: &mut Box<dyn Keyboard>) -> Result<()> {
     }
 
     if keyboard.supports_per_key_rgb() {
-        keyboard.set_key_colors_direct(&direct_colors)?;
+        keyboard.set_key_colors_direct(&direct_colors).await?;
     } else {
         println!("Checkerboard pattern requires per-key RGB support");
-        keyboard.set_color(Color::WHITE)?;
+        keyboard.set_color(Color::WHITE).await?;
     }
 
     Ok(())
 }
 
-fn test_wave_pattern(keyboard: &mut Box<dyn Keyboard>) -> Result<()> {
+async fn test_wave_pattern(keyboard: &mut Box<dyn Keyboard>) -> Result<()> {
     let mut direct_colors = Vec::new();
 
     for row in 0..6 {
@@ -1189,16 +1189,16 @@ fn test_wave_pattern(keyboard: &mut Box<dyn Keyboard>) -> Result<()> {
     }
 
     if keyboard.supports_per_key_rgb() {
-        keyboard.set_key_colors_direct(&direct_colors)?;
+        keyboard.set_key_colors_direct(&direct_colors).await?;
     } else {
         println!("Wave pattern requires per-key RGB support");
-        keyboard.set_color(Color::PURPLE)?;
+        keyboard.set_color(Color::PURPLE).await?;
     }
 
     Ok(())
 }
 
-fn test_basic_positions(keyboard: &mut Box<dyn Keyboard>) -> Result<()> {
+async fn test_basic_positions(keyboard: &mut Box<dyn Keyboard>) -> Result<()> {
     // Test corners and center positions
     let test_positions = [
         (KeyAddress::new(0, 0), Color::RED),     // Top-left
@@ -1209,10 +1209,10 @@ fn test_basic_positions(keyboard: &mut Box<dyn Keyboard>) -> Result<()> {
     ];
 
     if keyboard.supports_per_key_rgb() {
-        keyboard.set_key_colors_direct(&test_positions)?;
+        keyboard.set_key_colors_direct(&test_positions).await?;
     } else {
         println!("Basic position test requires per-key RGB support");
-        keyboard.set_color(Color::WHITE)?;
+        keyboard.set_color(Color::WHITE).await?;
     }
 
     Ok(())
@@ -1340,15 +1340,15 @@ async fn cmd_profile(action: ProfileAction) -> Result<()> {
                         let device_id = DeviceId::from(keyboard_info);
 
                         // Apply brightness
-                        keyboard.set_brightness(keyboard_profile.brightness)?;
+                        keyboard.set_brightness(keyboard_profile.brightness).await?;
 
                         // Apply effect - for static effects, apply immediately
                         match &keyboard_profile.effect {
                             Effect::Static { color } => {
-                                keyboard.set_color(*color)?;
+                                keyboard.set_color(*color).await?;
                             }
                             Effect::Off => {
-                                keyboard.set_color(Color::BLACK)?;
+                                keyboard.set_color(Color::BLACK).await?;
                             }
                             _ => {
                                 println!("Note: Animated effects require running as daemon");
@@ -1947,7 +1947,7 @@ async fn cmd_performance(manager: &DeviceManager, action: PerformanceAction) -> 
                             let colors = vec![Color::RED, Color::GREEN, Color::BLUE, Color::WHITE, Color::BLACK];
 
                             for color in colors {
-                                let _ = keyboard.set_color(color);
+                                let _ = keyboard.set_color(color).await;
                                 operation_count += 1;
 
                                 // Small delay to prevent overwhelming the device
@@ -2184,12 +2184,12 @@ impl DaemonState {
                                 // Apply the restored effect if it's static
                                 match &keyboard_state.effect {
                                     Effect::Static { color } => {
-                                        if let Err(e) = keyboard.set_color(*color) {
+                                        if let Err(e) = keyboard.set_color(*color).await {
                                             warn!("Failed to apply restored color to {}: {}", info.name, e);
                                         }
                                     }
                                     Effect::Off => {
-                                        if let Err(e) = keyboard.set_color(Color::BLACK) {
+                                        if let Err(e) = keyboard.set_color(Color::BLACK).await {
                                             warn!("Failed to turn off {}: {}", info.name, e);
                                         }
                                     }
@@ -2215,12 +2215,12 @@ impl DaemonState {
 
                                     match &keyboard_profile.effect {
                                         Effect::Static { color } => {
-                                            if let Err(e) = keyboard.set_color(*color) {
+                                            if let Err(e) = keyboard.set_color(*color).await {
                                                 warn!("Failed to apply default profile color to {}: {}", info.name, e);
                                             }
                                         }
                                         Effect::Off => {
-                                            if let Err(e) = keyboard.set_color(Color::BLACK) {
+                                            if let Err(e) = keyboard.set_color(Color::BLACK).await {
                                                 warn!("Failed to turn off {} (default profile): {}", info.name, e);
                                             }
                                         }
@@ -2585,6 +2585,10 @@ async fn cmd_daemon(mut manager: DeviceManager) -> Result<()> {
         let mut last_frame_start = Instant::now();
         let mut frames_processed = 0u64;
 
+        // Reusable buffer for RGB data to avoid allocations every frame
+        // Stores (serial, colors) for each keyboard
+        let mut frame_data_buffer: Vec<(String, Vec<Color>)> = Vec::new();
+
         loop {
             let frame_start = Instant::now();
             interval.tick().await;
@@ -2632,7 +2636,7 @@ async fn cmd_daemon(mut manager: DeviceManager) -> Result<()> {
             let computation_start = Instant::now();
 
             // Split the work: read operations first, then write operations
-            let (keyboards_data, overlays, _now) = {
+            let (processed_count, overlays, _now) = {
                 let mut state = daemon_state_anim.write().await;
 
                 // Clean up expired overlays while we have the lock
@@ -2640,13 +2644,33 @@ async fn cmd_daemon(mut manager: DeviceManager) -> Result<()> {
                 state.gamesense_overlays.retain(|_, (_, expiry)| *expiry > now);
 
                 // Collect data needed for RGB computation to minimize lock time
-                let keyboards_data: Vec<_> = state
-                    .keyboards
-                    .iter_mut()
-                    .map(|(serial, (_, controller, info))| {
-                        (serial.clone(), controller.compute_colors().to_vec(), info.clone())
-                    })
-                    .collect();
+                // Reuse frame_data_buffer to avoid allocations
+                let needed_capacity = state.keyboards.len();
+                if frame_data_buffer.len() < needed_capacity {
+                    frame_data_buffer.resize(needed_capacity, (String::new(), Vec::new()));
+                }
+
+                let mut count = 0;
+                for (serial, (_, controller, _)) in state.keyboards.iter_mut() {
+                    // Safety check, though resize above ensures capacity
+                    if count >= frame_data_buffer.len() {
+                        break;
+                    }
+
+                    let (buf_serial, buf_colors) = &mut frame_data_buffer[count];
+
+                    // Update serial (reusing String allocation)
+                    buf_serial.clear();
+                    buf_serial.push_str(serial);
+
+                    // Update colors (reusing Vec allocation)
+                    // controller.compute_colors() returns &[Color]
+                    let colors = controller.compute_colors();
+                    buf_colors.clear();
+                    buf_colors.extend_from_slice(colors);
+
+                    count += 1;
+                }
 
                 // Clone overlays only if there are any
                 let overlays = if state.gamesense_overlays.is_empty() {
@@ -2655,11 +2679,11 @@ async fn cmd_daemon(mut manager: DeviceManager) -> Result<()> {
                     state.gamesense_overlays.clone()
                 };
 
-                (keyboards_data, overlays, now)
+                (count, overlays, now)
             };
 
             // Process RGB updates for each keyboard without holding the lock
-            for (serial, mut colors, _info) in keyboards_data {
+            for (serial, colors) in frame_data_buffer.iter_mut().take(processed_count) {
                 // Apply GameSense overlays using simple zone mapping
                 if !overlays.is_empty() {
                     let zone_count = colors.len();
@@ -2685,8 +2709,8 @@ async fn cmd_daemon(mut manager: DeviceManager) -> Result<()> {
                 // Apply colors to hardware - get keyboard reference with minimal lock time
                 {
                     let mut state = daemon_state_anim.write().await;
-                    if let Some((keyboard, _, _)) = state.keyboards.get_mut(&serial) {
-                        if let Err(e) = keyboard.set_zone_colors(&colors) {
+                    if let Some((keyboard, _, _)) = state.keyboards.get_mut(serial.as_str()) {
+                        if let Err(e) = keyboard.set_zone_colors(colors).await {
                             tracing::warn!("Failed to update keyboard {}: {}", serial, e);
                         }
                     }
@@ -3159,8 +3183,8 @@ async fn cmd_verify_performance(
                 let compute_time = compute_start.elapsed();
 
                 // Send to device - use single color for all zones
-                keyboard.set_color(colors[0])?;
-                keyboard.apply()?;
+                keyboard.set_color(colors[0]).await?;
+                keyboard.apply().await?;
 
                 // Record timing
                 let frame_duration = frame_start.elapsed();

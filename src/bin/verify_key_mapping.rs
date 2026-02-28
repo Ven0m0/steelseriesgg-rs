@@ -1,9 +1,9 @@
+use anyhow::{Context, Result};
 use clap::Parser;
 use colored::*;
 use hidapi::{HidApi, HidDevice};
-use std::io::{self, Write};
-use anyhow::{Context, Result};
 use std::ffi::CString;
+use std::io::{self, Write};
 
 /// SteelSeries Key Mapping Verification Tool
 ///
@@ -56,11 +56,12 @@ fn connect_device(api: &HidApi, product_id: u16) -> Result<HidDevice> {
     let mut target_path: Option<CString> = None;
 
     for device in api.device_list() {
-        if device.vendor_id() == VENDOR_ID && device.product_id() == product_id {
-            if device.interface_number() == CONTROL_INTERFACE || device.interface_number() == -1 {
-                target_path = Some(CString::from(device.path()));
-                break;
-            }
+        if device.vendor_id() == VENDOR_ID
+            && device.product_id() == product_id
+            && (device.interface_number() == CONTROL_INTERFACE || device.interface_number() == -1)
+        {
+            target_path = Some(CString::from(device.path()));
+            break;
         }
     }
 
@@ -70,7 +71,8 @@ fn connect_device(api: &HidApi, product_id: u16) -> Result<HidDevice> {
         Ok(device)
     } else {
         println!("Specific interface not found, trying generic open...");
-        api.open(VENDOR_ID, product_id).context(format!("Device {:04x}:{:04x} not found", VENDOR_ID, product_id))
+        api.open(VENDOR_ID, product_id)
+            .context(format!("Device {:04x}:{:04x} not found", VENDOR_ID, product_id))
     }
 }
 
@@ -82,7 +84,7 @@ fn send_packet(device: &HidDevice, packet: &[u8]) -> Result<()> {
         return Err(anyhow::anyhow!("Packet too long (max 64 bytes)"));
     }
 
-    report[1..1+packet.len()].copy_from_slice(packet);
+    report[1..1 + packet.len()].copy_from_slice(packet);
 
     device.write(&report).context("Failed to write HID report")?;
     Ok(())
@@ -106,7 +108,7 @@ fn main() -> Result<()> {
             } else {
                 scan_mode(&device, &args)?;
             }
-        },
+        }
         Err(e) => {
             eprintln!("{} {}", "Error:".red().bold(), e);
             eprintln!("Make sure udev rules are installed and you have permissions.");
@@ -135,8 +137,8 @@ fn fuzz_mode(device: &HidDevice) -> Result<()> {
         println!("\nTesting Command: 0x{:02x} (Pattern: [CMD, 00, 00, FF, 00, 00])", cmd);
 
         if let Err(e) = send_packet(device, &packet_a) {
-             println!("Failed to send: {}", e);
-             continue;
+            println!("Failed to send: {}", e);
+            continue;
         }
 
         print!("Did ESC key turn RED? (y/n/q): ");
@@ -147,7 +149,10 @@ fn fuzz_mode(device: &HidDevice) -> Result<()> {
         let input = input.trim().to_lowercase();
 
         if input == "y" {
-            println!("{}", format!("FOUND CANDIDATE: 0x{:02x} (Pattern A)", cmd).green().bold());
+            println!(
+                "{}",
+                format!("FOUND CANDIDATE: 0x{:02x} (Pattern A)", cmd).green().bold()
+            );
             return Ok(());
         } else if input == "q" {
             return Ok(());
@@ -156,10 +161,13 @@ fn fuzz_mode(device: &HidDevice) -> Result<()> {
         // Try Pattern B: [CMD, 0x00, ROW, COL, R, G, B]
         let packet_b = vec![cmd, 0x00, 0x00, 0x00, 0xFF, 0x00, 0x00];
 
-        println!("Testing Command: 0x{:02x} (Pattern: [CMD, 00, 00, 00, FF, 00, 00])", cmd);
+        println!(
+            "Testing Command: 0x{:02x} (Pattern: [CMD, 00, 00, 00, FF, 00, 00])",
+            cmd
+        );
         if let Err(e) = send_packet(device, &packet_b) {
-             println!("Failed to send: {}", e);
-             continue;
+            println!("Failed to send: {}", e);
+            continue;
         }
 
         print!("Did ESC key turn RED? (y/n/q): ");
@@ -170,7 +178,10 @@ fn fuzz_mode(device: &HidDevice) -> Result<()> {
         let input = input.trim().to_lowercase();
 
         if input == "y" {
-            println!("{}", format!("FOUND CANDIDATE: 0x{:02x} (Pattern B)", cmd).green().bold());
+            println!(
+                "{}",
+                format!("FOUND CANDIDATE: 0x{:02x} (Pattern B)", cmd).green().bold()
+            );
             return Ok(());
         } else if input == "q" {
             return Ok(());
@@ -192,13 +203,19 @@ fn manual_mode(device: &HidDevice, args: &Args) -> Result<()> {
         return Err(e);
     }
 
-    println!("Packet sent. Did the key at ({}, {}) turn RED?", args.start_row, args.start_col);
+    println!(
+        "Packet sent. Did the key at ({}, {}) turn RED?",
+        args.start_row, args.start_col
+    );
     Ok(())
 }
 
 fn scan_mode(device: &HidDevice, args: &Args) -> Result<()> {
     println!("{}", "ENTERING SCAN MODE".bold().yellow());
-    println!("Scanning Matrix from ({}, {}) to ({}, {})", args.start_row, args.start_col, args.end_row, args.end_col);
+    println!(
+        "Scanning Matrix from ({}, {}) to ({}, {})",
+        args.start_row, args.start_col, args.end_row, args.end_col
+    );
     println!("Using Command Byte: 0x{:02x}", args.command_byte);
     println!("Press 'Enter' to confirm key name, 'n' for no light, 'q' to quit, 's' to skip row.");
 
