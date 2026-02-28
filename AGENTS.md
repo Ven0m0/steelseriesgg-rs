@@ -2,342 +2,219 @@
 
 Comprehensive guide for AI assistants (Claude, Gemini, Copilot, etc.) working with **steelseriesgg-rs**.
 
-## Project Overview
+---
 
-**steelseriesgg-rs** is a complete open-source replacement for SteelSeries GG on Linux, providing RGB lighting control, GameSense server, and audio management for SteelSeries keyboards and headsets.
+## Project
+
+**steelseriesgg-rs** is a complete open-source replacement for SteelSeries GG on Linux: RGB lighting control, GameSense HTTP server, and audio management for SteelSeries keyboards and headsets.
+
+**Primary language**: Rust (100% application code)
+**Edition**: 2021 (formatted with edition 2024 style)
+**Toolchain**: 1.93.1 (pinned in `rust-toolchain.toml`)
+**Binary**: `ssgg` — unified CLI + daemon
+**Library**: `steelseries_gg` — public API crate
+**License**: MIT
 
 ### Technology Stack
 
-| Component | Technology | Version |
-|-----------|-----------|---------|
-| **Language** | Rust | 2021 edition (1.70+) |
-| **Binary** | `ssgg` | CLI + daemon |
-| **Library** | `steelseries_gg` | Public API |
-| **Async Runtime** | Tokio | 1.49+ (multi-thread) |
-| **HTTP Server** | Axum | 0.8+ |
-| **HID Layer** | hidapi | 2.6.4 (pinned) |
-| **CLI** | clap | 4.5+ (derive API) |
-| **Config** | TOML | 0.9+ |
-| **Logging** | tracing | 0.1+ |
-| **License** | MIT | - |
-
-### Core Capabilities
-
-- **RGB Control**: 7+ effects (static, breathing, spectrum, wave, reactive, gradient, custom)
-- **Per-Key RGB**: Individual key addressing (experimental, protocol research ongoing)
-- **Actuation Control**: Adjustable actuation points for Apex Pro keyboards (experimental)
-- **GameSense Server**: HTTP API compatible with SteelSeries GameSense protocol (port 27301)
-- **Performance Monitoring**: Real-time CPU, memory, latency tracking with adaptive timing
-- **Resource Validation**: Automatic leak detection and performance regression testing
-- **Profile Management**: Save/load device configurations with TOML
-- **Diagnostic Tools**: HID logging, bug reports, device testing, protocol fuzzing
-- **Audio Mixing**: PulseAudio integration (optional `audio` feature)
-- **Sonar Integration**: SteelSeries Sonar HTTP client (optional `sonar` feature)
+| Component | Crate | Version |
+|-----------|-------|---------|
+| Async runtime | tokio | 1.49+ (rt-multi-thread, macros, signal, fs) |
+| HTTP server | axum | 0.8+ |
+| HID communication | hidapi | **=2.6.5** (pinned — do not change) |
+| CLI parsing | clap | 4.5+ (derive API) |
+| Serialization | serde + serde\_json + toml | 1.0 / 1.0 / 1.0 |
+| Error handling | thiserror (lib) + anyhow (bin) | 2.0 / 1.0 |
+| Logging | tracing + tracing-subscriber | 0.1 / 0.3 |
+| Locks | parking\_lot | 0.12 |
+| HTTP middleware | tower-http (CORS) | 0.6 |
 
 ### Feature Flags
 
-| Flag | Dependencies | Description |
-|------|--------------|-------------|
-| `default` | None | RGB control + GameSense server |
-| `audio` | libpulse-binding 2.30 | PulseAudio mixer integration |
-| `sonar` | reqwest 0.13 | SteelSeries Sonar API client |
+| Flag | Adds | Extra system dep |
+|------|------|-----------------|
+| `default` | (none) | — |
+| `audio` | libpulse-binding 2.30 | libpulse-dev |
+| `sonar` | reqwest 0.13 | — |
 
-**Build examples:**
 ```bash
-cargo build                      # Default features
-cargo build --features audio     # With audio
-cargo build --all-features       # Everything
+cargo build                      # default
+cargo build --features audio     # with PulseAudio
+cargo build --features sonar     # with Sonar HTTP client
+cargo build --all-features       # everything
 ```
 
 ---
 
-## Repository Structure
-
-### Key Files (@ = critical for understanding)
+## Structure
 
 ```
 steelseriesgg-rs/
-├── @Cargo.toml                   # Dependencies, build config, release profile
-├── @README.md                    # User documentation & installation guide
-├── @AGENTS.md                    # This file (AI assistant guide)
-├── @CLAUDE.md → AGENTS.md        # Symlink to this file
-├── @GEMINI.md → AGENTS.md        # Symlink to this file
+├── @Cargo.toml                   # Package manifest, all deps, release profile
+├── rust-toolchain.toml           # Pinned toolchain: 1.93.1 + rustfmt + clippy
+├── rustfmt.toml                  # Edition 2024, max_width 120, Unix newlines
+├── .editorconfig                 # 4 spaces for .rs, 2 spaces elsewhere
 │
 ├── @src/
-│   ├── @main.rs                  # CLI entry point (15+ commands, ~3000 LOC)
-│   ├── @lib.rs                   # Library root, module declarations, prelude
-│   ├── @error.rs                 # Error types (thiserror-based)
+│   ├── @main.rs                  # CLI entry point (~3300 LOC, 15+ subcommands)
+│   ├── @lib.rs                   # Library root: module declarations + prelude
+│   ├── @error.rs                 # Error enum (thiserror) + Result alias
 │   │
 │   ├── @devices/                 # Hardware abstraction layer
-│   │   ├── @mod.rs               # Device trait, DeviceInfo, product IDs (0x1038)
-│   │   ├── @discovery.rs         # DeviceManager with hidapi enumeration
-│   │   ├── @hid_reports.rs       # HID report builders (65/64-byte protocol)
-│   │   ├── diagnostics.rs        # Device health checks & HID logging
+│   │   ├── @mod.rs               # Device trait, DeviceInfo, product IDs
+│   │   ├── @discovery.rs         # DeviceManager — hidapi enumeration
+│   │   ├── @hid_reports.rs       # HidReportBuilder (type-safe 65/64-byte reports)
+│   │   ├── diagnostics.rs        # Health checks & HID logging
 │   │   ├── key_mapping.rs        # Per-key addressing & keyboard layouts
-│   │   ├── zone_mapping.rs       # RGB zone definitions & mappings
-│   │   ├── fuzz.rs               # Protocol fuzzing (developer tool)
+│   │   ├── zone_mapping.rs       # RGB zone definitions
+│   │   ├── fuzz.rs               # Protocol fuzzing (dev tool)
 │   │   ├── keyboards/
 │   │   │   ├── @mod.rs           # Keyboard trait (25+ methods)
 │   │   │   ├── apex.rs           # Generic Apex implementations
-│   │   │   └── @apex_pro_tkl_2023.rs  # Primary device (PID 0x1628)
+│   │   │   └── @apex_pro_tkl_2023.rs  # PID 0x1628 — primary device
 │   │   └── headsets/
 │   │       └── mod.rs            # Headset implementations
 │   │
-│   ├── @rgb/                     # Color & lighting engine
+│   ├── @rgb/
 │   │   ├── @mod.rs               # Color, Effect, EffectEngine, RgbController
-│   │   └── tests.rs              # RGB unit tests (11 tests)
+│   │   └── tests.rs              # 11 unit tests
 │   │
-│   ├── @gamesense/               # GameSense HTTP API
-│   │   ├── mod.rs                # Data structures (GameMetadata, GameEvent)
-│   │   ├── @server.rs            # Axum HTTP server
-│   │   └── @handlers.rs          # Request handlers (CORS-enabled)
+│   ├── @gamesense/
+│   │   ├── mod.rs                # GameMetadata, GameEvent structs
+│   │   ├── @server.rs            # Axum HTTP server (port 27301)
+│   │   └── @handlers.rs          # CORS-enabled request handlers
 │   │
-│   ├── performance.rs            # Real-time monitoring & stats
-│   ├── validation.rs             # Resource leak detection
-│   ├── device_state.rs           # Async state persistence (JSON)
-│   ├── diagnostics_export.rs    # Bug report generation
-│   ├── pollrate.rs               # USB poll rate control (sysfs)
-│   │
-│   ├── profiles/                 # Configuration persistence
+│   ├── profiles/
 │   │   ├── mod.rs                # Profile struct & management
-│   │   └── tests.rs              # Profile serialization tests
-│   │
-│   ├── config/                   # User configuration
-│   │   └── mod.rs                # Config struct (~/.config/ssgg/)
-│   │
-│   ├── audio/                    # Optional audio features
+│   │   └── tests.rs              # Serialization tests
+│   ├── config/mod.rs             # Config (~/.config/ssgg/config.toml)
+│   ├── audio/                    # feature = "audio" | "sonar"
 │   │   ├── mod.rs                # AudioMixer trait
 │   │   ├── pulse.rs              # PulseAudio integration
 │   │   └── sonar.rs              # SonarClient HTTP API
-│   │
-│   └── bin/
-│       ├── discover_actuation.rs # Actuation discovery tool
-│       └── sonar_control.rs      # Sonar control utility
+│   ├── bin/                      # Utility binaries
+│   │   ├── discover_actuation.rs # Actuation point discovery
+│   │   ├── sonar_control.rs      # Sonar control (requires sonar feature)
+│   │   ├── verify_key_mapping.rs # Per-key RGB verification (dev)
+│   │   └── benchmark_rgb_alloc.rs # RGB allocation benchmark (dev)
+│   ├── performance.rs            # Real-time stats & adaptive timing
+│   ├── validation.rs             # Resource leak detection
+│   ├── device_state.rs           # Async state persistence (JSON)
+│   ├── diagnostics_export.rs     # Bug report generation
+│   └── pollrate.rs               # USB poll rate via sysfs
 │
-├── .editorconfig                 # Editor settings (4 spaces for Rust)
-├── rustfmt.toml                  # Rust formatting (edition 2024, 100 char max)
-│
-├── .github/
-│   ├── workflows/
-│   │   ├── @ci.yml               # CI pipeline (fmt, clippy, test, build)
-│   │   └── release-arch.yml      # Arch Linux package release
-│   ├── dependabot.yml            # Dependency updates
-│   └── @copilot-instructions.md  # GitHub Copilot guardrails
+├── tests/
+│   ├── device_readback.rs        # Integration tests
+│   └── cors_security.rs          # CORS security tests
 │
 ├── assets/
 │   ├── 99-steelseries.rules      # udev rules (USB permissions)
 │   └── ssgg.service              # systemd user service
 │
-├── docs/
-│   ├── development/              # Protocol research & development notes
-│   │   ├── APEX_PRO_PROTOCOL.md  # HID protocol research
-│   │   ├── KEY_MAPPING_RESEARCH.md  # Per-key RGB research
-│   │   ├── PROTOCOL_RESEARCH.md  # General protocol findings
-│   │   ├── RGB_CONTROL_ANALYSIS.md  # RGB control analysis
-│   │   ├── OPTIMIZATION_REPORT.md   # Performance optimizations
-│   │   └── todo.md               # Development tasks
-│   └── archive/                  # Historical docs
+├── .github/
+│   ├── workflows/
+│   │   ├── @ci.yml               # Format + Clippy + Test + Build (matrix)
+│   │   └── release-arch.yml      # Arch Linux package release
+│   ├── copilot-instructions.md   # GitHub Copilot guardrails (subset of this file)
+│   └── dependabot.yml            # Weekly dep updates
 │
-├── CONTRIBUTING.md               # Contribution guidelines
-├── PLAN.md                       # Development roadmap (per-key RGB focus)
-├── PROJECT_INDEX.md              # Complete project structure & exports
-├── PERFORMANCE_OPTIMIZATIONS.md  # Optimization findings & benchmarks
-├── LICENSE                       # MIT license
-└── tests/                        # Integration tests
+└── docs/
+    ├── development/              # Protocol research & dev notes
+    │   ├── APEX_PRO_PROTOCOL.md
+    │   ├── KEY_MAPPING_RESEARCH.md
+    │   ├── PROTOCOL_RESEARCH.md
+    │   ├── RGB_CONTROL_ANALYSIS.md
+    │   └── OPTIMIZATION_REPORT.md
+    └── archive/                  # Historical docs
 ```
 
 ---
 
-## Development Workflows
+## Dev Workflow
 
-### Setup
+### System Dependencies
 
-**System dependencies:**
 ```bash
 # Debian/Ubuntu
-sudo apt-get update
 sudo apt-get install -y libudev-dev libhidapi-dev
+# + audio feature: libpulse-dev
 
 # Fedora
 sudo dnf install systemd-devel hidapi-devel
 
-# Arch Linux
+# Arch
 sudo pacman -S hidapi
-
-# Optional: Audio feature
-sudo apt-get install -y libpulse-dev        # Debian/Ubuntu
-sudo dnf install pulseaudio-libs-devel      # Fedora
-sudo pacman -S libpulse                     # Arch
 ```
 
-**Clone & build:**
-```bash
-git clone https://github.com/Ven0m0/steelseriesgg-rs.git
-cd steelseriesgg-rs
-cargo build --release
-```
-
-**Install udev rules (required for device access):**
-```bash
-sudo cp assets/99-steelseries.rules /etc/udev/rules.d/
-sudo udevadm control --reload-rules
-sudo udevadm trigger
-sudo usermod -aG input $USER  # Log out/in to apply
-```
-
-### Build Commands
-
-| Command | Purpose | Build Time |
-|---------|---------|------------|
-| `cargo build` | Debug build | ~5-10s |
-| `cargo build --release` | Optimized release (LTO, strip) | ~30-60s |
-| `cargo build --features audio` | With audio support | ~10-15s |
-| `cargo build --features sonar` | With Sonar API client | ~10-15s |
-| `cargo build --all-features` | All optional features | ~15-20s |
-
-**Release profile optimizations:**
-```toml
-[profile.release]
-strip = true           # Remove debug symbols (~30% size reduction)
-lto = "fat"            # Full link-time optimization (~15% perf gain)
-codegen-units = 1      # Single unit (better optimization)
-panic = "abort"        # No unwinding (~10% size reduction)
-opt-level = 3          # Maximum optimization
-overflow-checks = false
-```
-
-**Result:** ~2-3 MB binary with excellent performance
-
-### Testing
-
-**Run tests:**
-```bash
-cargo test                        # ~77 unit tests (default features)
-cargo test --all-features         # All feature combinations
-cargo test rgb::tests             # Specific module
-cargo test test_color_blending    # Specific test
-cargo test -- --nocapture         # Show test output
-cargo test -- --test-threads=1    # Single-threaded (for debugging)
-```
-
-**Test coverage (~77 tests):**
-| Module | Test Count | Coverage |
-|--------|------------|----------|
-| RGB | 11 tests | Color operations, effects, caching, per-key |
-| HID Reports | 19 tests | Builders, command encoding, padding |
-| Zone Mapping | 8 tests | Zone definitions, fallback logic |
-| Keyboards | 7 tests | Keyboard trait implementations |
-| Profiles | 6 tests | Serialization, defaults, validation |
-| Performance | 6 tests | Stats tracking, threshold detection |
-| Validation | 6 tests | Resource leak detection |
-| Key Mapping | 6 tests | Key addressing, layout support |
-| Pollrate | 5 tests | Conversion, validation |
-| GameSense | 3 tests | Color computation, event handling |
-
-**Hardware tests:**
-Require actual devices or mocking. Use diagnostic commands:
-```bash
-cargo run -- devices              # List connected devices
-cargo run -- validate             # Run validation tests
-cargo run -- test-device <device> # Automated device testing
-```
-
-### Code Quality (REQUIRED before commit)
+### Build
 
 ```bash
-# 1. Format code
-cargo fmt
+cargo build                        # debug (~5-10s)
+cargo build --release              # optimized, LTO, stripped (~30-60s, ~2-3 MB)
+cargo build --features audio       # with PulseAudio
+cargo build --all-features         # all optional features
+```
 
-# 2. Lint with all features
-cargo clippy --all-features -- -D warnings
+### Test
 
-# 3. Run tests
+```bash
+cargo test                         # ~77 unit tests
 cargo test --all-features
-
-# 4. Build release
-cargo build --release
+cargo test rgb::tests              # specific module
+cargo test test_color_blending     # specific test
+cargo test -- --nocapture          # show println! output
+cargo test -- --test-threads=1     # sequential (debugging)
 ```
 
-### CI Pipeline
+### Code Quality (required before every commit)
 
-**GitHub Actions workflow (`.github/workflows/ci.yml`):**
-
-| Job | Matrix | Checks |
-|-----|--------|--------|
-| **Format** | - | `cargo fmt --check` |
-| **Clippy** | default, audio, sonar | `cargo clippy -- -D warnings` |
-| **Test** | default, sonar | `cargo test` |
-| **Build** | default, audio, sonar | `cargo build --release` |
-
-**All CI checks must pass** before merging PRs.
-
-### Deployment
-
-**systemd user service:**
 ```bash
-# Install service (done by package manager)
-cp assets/ssgg.service ~/.config/systemd/user/
-
-# Enable and start
-systemctl --user daemon-reload
-systemctl --user enable --now ssgg.service
-
-# Check status
-systemctl --user status ssgg.service
-journalctl --user -u ssgg.service -f
-
-# Auto-start at boot (no login required)
-sudo loginctl enable-linger $USER
+cargo fmt                                          # 1. format
+cargo clippy --all-features -- -D warnings         # 2. lint (zero warnings)
+cargo test --all-features                          # 3. test
+cargo build --release                              # 4. build
 ```
 
-**Manual daemon:**
+### Install & Run
+
 ```bash
-cargo run --release -- daemon     # Foreground
-RUST_LOG=debug cargo run -- daemon  # With debug logs
+# udev rules (one-time)
+sudo cp assets/99-steelseries.rules /etc/udev/rules.d/
+sudo udevadm control --reload-rules && sudo udevadm trigger
+sudo usermod -aG input $USER   # log out/in to apply
+
+# Run daemon
+cargo run --release -- daemon
+
+# Debug
+RUST_LOG=debug cargo run -- daemon
+RUST_LOG=steelseries_gg::devices=debug cargo run -- devices
 ```
 
 ---
 
-## Code Conventions
+## Conventions
 
-### Naming Conventions
+### Naming
 
-| Item | Convention | Example |
-|------|------------|---------|
-| Functions/variables | `snake_case` | `set_rgb_color()`, `device_manager` |
-| Types/structs/enums | `PascalCase` | `DeviceManager`, `RgbController`, `Effect` |
+| Item | Style | Example |
+|------|-------|---------|
+| Functions / variables | `snake_case` | `set_rgb_color`, `device_manager` |
+| Types / structs / enums | `PascalCase` | `DeviceManager`, `RgbController` |
 | Constants | `SCREAMING_SNAKE_CASE` | `STEELSERIES_VENDOR_ID`, `MAX_RGB_ZONES` |
 | Modules | `snake_case` | `devices`, `gamesense`, `rgb` |
-| Type parameters | `PascalCase` | `T`, `K`, `V` |
-| Lifetimes | `'lowercase` | `'a`, `'static` |
 
-### Style Guidelines
+### Formatting
 
-| Aspect | Standard | Enforcement |
-|--------|----------|-------------|
-| **Indentation** | 4 spaces (Rust), 2 spaces (other) | `.editorconfig`, `rustfmt.toml` |
-| **Line length** | 100 characters max | `rustfmt.toml` |
-| **Format** | `cargo fmt` (edition 2024) | CI check |
-| **Tabs** | Spaces only (no hard tabs) | `.editorconfig` |
-| **Newlines** | Unix (LF) | `.editorconfig` |
-| **Imports** | Auto-reordered by rustfmt | `rustfmt.toml` |
-| **Trailing commas** | Multiline collections | `rustfmt` default |
+- **4 spaces** indentation for Rust (`.editorconfig` + `rustfmt.toml`)
+- **120 chars** max line length (`rustfmt.toml: max_width = 120`)
+- **Unix LF** newlines
+- `cargo fmt` enforced in CI — must pass before merge
 
-### Architecture Patterns
-
-#### 1. Error Handling
+### Error Handling
 
 ```rust
-// For binaries: anyhow::Result
-use anyhow::{Result, Context};
-
-fn cmd_devices() -> Result<()> {
-    let manager = DeviceManager::new()
-        .context("Failed to initialize device manager")?;
-    Ok(())
-}
-
-// For libraries: thiserror::Error
+// Library code → thiserror structured errors
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -348,614 +225,285 @@ pub enum DeviceError {
     HidError(#[from] hidapi::HidError),
 }
 
-// NEVER use .unwrap() or .expect() in production code
-// Use ? operator or proper error handling
-```
+// Binary/CLI code → anyhow for context
+use anyhow::{Context, Result};
 
-#### 2. Device Trait Pattern
-
-```rust
-// Device trait provides common interface for all hardware
-pub trait Device: Send + Sync {
-    fn info(&self) -> &DeviceInfo;
-    fn device_type(&self) -> DeviceType;
-    fn initialize(&mut self) -> Result<()>;
-    fn close(&mut self) -> Result<()>;
-    fn is_connected(&self) -> bool;
-    fn send_report(&mut self, data: &[u8]) -> Result<()>;
-    fn read_report(&mut self, buf: &mut [u8], timeout: i32) -> Result<usize>;
-    // ... 15+ more methods
+fn cmd_devices() -> Result<()> {
+    let manager = DeviceManager::new().context("Failed to init device manager")?;
+    Ok(())
 }
 
-// Keyboard extends Device with RGB-specific methods
-pub trait Keyboard: Device {
-    // RGB Control
-    fn set_color(&mut self, color: Color) -> Result<()>;
-    fn set_zone_colors(&mut self, colors: &[Color]) -> Result<()>;
-    fn set_brightness(&mut self, brightness: u8) -> Result<()>;
-
-    // Per-Key RGB (experimental)
-    fn supports_per_key_rgb(&self) -> bool;
-    fn set_key_color(&mut self, key_id: KeyId, color: Color) -> Result<()>;
-    fn set_key_colors(&mut self, key_colors: &[(KeyId, Color)]) -> Result<()>;
-
-    // ... 20+ more methods
-}
+// NEVER use .unwrap() or .expect() in production code — always use ?
 ```
 
-#### 3. HID Report Builder Pattern (ALWAYS USE)
+### HID Reports — Always Use the Builder
 
 ```rust
-// CORRECT - Type-safe, guaranteed valid reports
+// CORRECT — type-safe, correct sizing
 let report = HidReportBuilder::new(HidDeviceType::Keyboard)
     .command(CommandCode::RgbControl)
     .zone_data(zone, &color)
     .build()?;
 device.send_report(&report)?;
 
-// WRONG - Manual buffer construction (fragile, error-prone)
-let mut report = [0u8; 65];
-report[0] = 0x00;  // Report ID
-report[1] = 0x21;  // Command
-// ... manual padding
+// WRONG — manual buffer (fragile, wrong sizes)
+let mut buf = [0u8; 65];
+buf[0] = 0x00;
+buf[1] = 0x21;
 ```
 
-**HID Report Sizes:**
-- **Keyboards**: 65 bytes (includes report ID)
-- **Headsets**: 64 bytes (no report ID)
+**Report sizes**: Keyboards = 65 bytes (with report ID), Headsets = 64 bytes (no report ID)
 
-**Command Codes:**
-| Code | Name | Purpose |
-|------|------|---------|
-| `0x09` | Apply | Save/apply settings |
-| `0x21` | RgbControl | Zone-based RGB |
-| `0x22` | Brightness | Brightness control |
-| `0x25` | ReactiveMode | Reactive effects |
-| `0x26` | ColorShift | Color shift effects |
-| `0x2A` | PerKeyRgb | Per-key RGB (placeholder, protocol TBD) |
-| `0x2D` | ActuationControl | Actuation point (experimental) |
-
-#### 4. RGB Effect Engine with Caching
+### Async Patterns
 
 ```rust
-// Create effect engine
+use tokio::sync::{Mutex, RwLock};
+
+// Shared state
+let state = Arc::new(Mutex::new(data));
+
+// Background tasks
+tokio::spawn(async move {
+    loop {
+        do_work().await;
+        tokio::time::sleep(Duration::from_secs(1)).await;
+    }
+});
+
+// Axum HTTP server
+let app = Router::new()
+    .route("/game_event", post(handle_game_event))
+    .layer(CorsLayer::permissive())
+    .with_state(state);
+let listener = TcpListener::bind("127.0.0.1:27301").await?;
+axum::serve(listener, app).await?;
+```
+
+### RGB Effect Engine
+
+```rust
 let mut engine = EffectEngine::new(Effect::Breathing {
     color: Color::new(0, 255, 255),
     speed: 2.0,
 });
 
-// Compute colors (cached if Δt < 16ms = ~60 FPS)
-let elapsed = Duration::from_millis(timestamp);
+// Cached if Δt < 16ms (~60 FPS)
 let colors = engine.compute(num_zones, elapsed);
-
-// CRITICAL: First call always computes (last_compute_time == 0)
-// Cache check: last_compute_time != Duration::ZERO
+// IMPORTANT: cache only activates after first call (last_compute_time != Duration::ZERO)
 ```
 
-**Supported effects:**
+Supported effects: `Static`, `Breathing`, `Spectrum`, `Wave`, `Reactive`, `Gradient`, `Custom`, `Off`
+
+### Import Style
+
 ```rust
-pub enum Effect {
-    Static { color: Color },
-    Breathing { color: Color, speed: f32 },
-    Spectrum { speed: f32 },
-    Wave { colors: Vec<Color>, speed: f32, direction: Direction },
-    Reactive { color: Color, decay: f32 },
-    Gradient { start: Color, end: Color },
-    Custom { colors: Vec<Color> },
-    Off,
-}
+// Standard: grouped, reordered by rustfmt automatically
+use std::sync::Arc;
+use anyhow::{Context, Result};
+use tokio::sync::Mutex;
+use crate::devices::DeviceManager;
 ```
 
-#### 5. Async/Tokio Patterns
+---
+
+## Critical Constants
 
 ```rust
-// Use tokio for async operations
-use tokio::sync::{Mutex, RwLock};
-use tokio::time::{sleep, Duration};
-
-// Shared state in async contexts
-let shared = Arc::new(Mutex::new(state));
-
-// Background tasks
-tokio::spawn(async move {
-    loop {
-        // Background work
-        sleep(Duration::from_secs(1)).await;
-    }
-});
-
-// HTTP server (Axum)
-let app = Router::new()
-    .route("/game_event", post(handle_game_event))
-    .layer(CorsLayer::permissive())
-    .with_state(app_state);
-
-let listener = TcpListener::bind("127.0.0.1:27301").await?;
-axum::serve(listener, app).await?;
-```
-
-#### 6. Performance Monitoring
-
-```rust
-// Track performance in critical paths
-let perf = PerformanceManager::new();
-
-perf.start_operation("rgb_update");
-// ... do RGB work
-perf.end_operation("rgb_update");
-
-let stats = perf.get_stats();
-println!("Avg latency: {}ms", stats.avg_latency_ms);
-```
-
-### Critical Constants
-
-```rust
-// USB identifiers
-pub const STEELSERIES_VENDOR_ID: u16 = 0x1038;
+pub const STEELSERIES_VENDOR_ID: u16        = 0x1038;
 pub const APEX_PRO_TKL_2023_PRODUCT_ID: u16 = 0x1628;  // NOT 0x1618!
-
-// HID protocol
-pub const KEYBOARD_REPORT_SIZE: usize = 65;  // With report ID
-pub const HEADSET_REPORT_SIZE: usize = 64;   // Without report ID
-pub const MAX_RGB_ZONES: usize = 12;
-
-// GameSense
-pub const GAMESENSE_DEFAULT_PORT: u16 = 27301;
-
-// Performance
-pub const CACHE_THRESHOLD_MS: u64 = 16;  // ~60 FPS
+pub const KEYBOARD_REPORT_SIZE: usize        = 65;       // includes report ID
+pub const HEADSET_REPORT_SIZE: usize         = 64;       // no report ID
+pub const MAX_RGB_ZONES: usize               = 12;
+pub const GAMESENSE_DEFAULT_PORT: u16        = 27301;
+pub const CACHE_THRESHOLD_MS: u64            = 16;       // ~60 FPS
 ```
 
 ---
 
 ## Dependencies
 
-### Core Dependencies (default features)
+### Core (all builds)
 
-| Crate | Version | Purpose | Size Impact |
-|-------|---------|---------|-------------|
-| **hidapi** | =2.6.4 | HID device communication | ~50 KB (pinned) |
-| **tokio** | 1.49 | Async runtime (rt-multi-thread, macros) | ~500 KB |
-| **axum** | 0.8 | GameSense HTTP server | ~200 KB |
-| **clap** | 4.5 | CLI argument parsing (derive) | ~150 KB |
-| **serde** | 1.0 | Serialization (derive) | ~100 KB |
-| **serde_json** | 1.0 | JSON serialization | ~80 KB |
-| **toml** | 1.0 | Config file parsing | ~60 KB |
-| **thiserror** | 2.0 | Error type macros | ~20 KB |
-| **anyhow** | 1.0 | Error handling (binaries) | ~30 KB |
-| **tracing** | 0.1 | Structured logging | ~80 KB |
-| **tracing-subscriber** | 0.3 | Log formatting (env-filter) | ~120 KB |
-| **colored** | 3.1 | Terminal colors | ~20 KB |
-| **chrono** | 0.4 | Timestamps (serde) | ~100 KB |
-| **tower-http** | 0.6 | HTTP middleware (CORS) | ~80 KB |
-| **directories** | 6.0 | XDG base directories | ~10 KB |
-| **parking_lot** | 0.12 | High-performance locks | ~30 KB |
-| **sysinfo** | 0.38 | System information | ~80 KB |
-| **indicatif** | 0.18 | Progress bars | ~50 KB |
-| **tabled** | 0.20 | Table formatting | ~60 KB |
-| **libc** | 0.2 | C library bindings | ~40 KB |
-| **async-trait** | 0.1 | Async trait support | ~10 KB |
+| Crate | Purpose |
+|-------|---------|
+| **hidapi =2.6.5** | HID device communication — **pinned, do not change** |
+| **tokio 1.49** | Async runtime (multi-thread) |
+| **axum 0.8** | GameSense HTTP server |
+| **clap 4.5** | CLI argument parsing (derive) |
+| **serde + serde\_json + toml** | Serialization: JSON state, TOML config/profiles |
+| **thiserror 2.0** | Library error types |
+| **anyhow 1.0** | Binary error context |
+| **tracing + tracing-subscriber** | Structured logging with env-filter |
+| **parking\_lot 0.12** | High-perf Mutex/RwLock |
+| **tower-http 0.6** | CORS middleware for GameSense |
+| **directories 6.0** | XDG base dirs (~/.config/ssgg/) |
+| **sysinfo 0.38** | System info for diagnostics |
+| **chrono 0.4** | Timestamps with serde |
+| **colored 3.1** | Terminal colors |
+| **tabled 0.20** | Formatted table output |
+| **indicatif 0.18** | Progress bars |
+| **libc 0.2** | `geteuid` root checks |
+| **async-trait 0.1** | Async in traits |
 
-### Optional Dependencies
+### Optional
 
-| Feature | Crate | Version | Purpose |
-|---------|-------|---------|---------|
-| `audio` | libpulse-binding | 2.30 | PulseAudio mixer integration |
-| `sonar` | reqwest | 0.13 | HTTP client for Sonar API |
+| Feature | Crate | Purpose |
+|---------|-------|---------|
+| `audio` | libpulse-binding 2.30 | PulseAudio mixer |
+| `sonar` | reqwest 0.13 | SteelSeries Sonar HTTP client |
 
-### Dependency Management
+### Dev
 
-**Update dependencies:**
-```bash
-cargo update           # Update within Cargo.toml constraints
-cargo outdated         # Check for outdated dependencies (requires cargo-outdated)
-```
-
-**Audit security:**
-```bash
-cargo audit            # Check for security vulnerabilities (requires cargo-audit)
-```
-
-**Dependency tree:**
-```bash
-cargo tree             # Show full dependency tree
-cargo tree -i hidapi   # Show reverse dependencies for hidapi
-```
+| Crate | Purpose |
+|-------|---------|
+| tempfile 3.10 | Temporary files in tests |
 
 ---
 
 ## Common Tasks
 
-### Device Operations
+### Add a new CLI subcommand
 
-```bash
-# List connected devices
-cargo run -- devices
-RUST_LOG=debug cargo run -- devices  # With debug logs
+1. Add variant to the `Commands` enum in `src/main.rs`
+2. Add arm to the `match cli.command` block
+3. Implement the handler function (returns `Result<()>`)
+4. Follow existing patterns: use `anyhow::Context`, print with `colored`
 
-# Test RGB
-cargo run -- rgb color red
-cargo run -- rgb color "#00FFFF"
-cargo run -- rgb effect breathing --color cyan --speed 2.0
-cargo run -- rgb effect spectrum --speed 1.5
-cargo run -- rgb brightness 80
+### Add a new RGB effect
 
-# Check per-key RGB support (experimental)
-cargo run -- rgb perkey status
-cargo run -- rgb perkey set-key escape red
+1. Add variant to `Effect` enum in `src/rgb/mod.rs`
+2. Implement computation in `EffectEngine::compute()`
+3. Add serialization/deserialization (serde `rename_all`)
+4. Add unit test in `src/rgb/tests.rs`
+5. Expose in CLI (`src/main.rs` effect parsing)
 
-# Actuation control (Apex Pro only)
-cargo run -- actuation set 1.0  # 1.0mm
-cargo run -- actuation read     # Not implemented yet
+### Add a new device
+
+1. Create `src/devices/keyboards/<device>.rs` or `headsets/<device>.rs`
+2. Add `pub const <NAME>_PRODUCT_ID: u16 = 0xXXXX;` in `src/devices/mod.rs`
+3. Implement `Device` trait (required) and `Keyboard`/`Headset` trait
+4. Register in `DeviceManager::open_device()` in `src/devices/discovery.rs`
+
+### Add a test
+
+```rust
+// Unit test — co-located with source, in module's tests.rs or inline
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_my_feature() {
+        let result = my_function();
+        assert_eq!(result, expected);
+    }
+}
 ```
 
-### Profile Management
+### Update dependencies
 
 ```bash
-# Save current settings
-cargo run -- profile save gaming
-
-# Load profile
-cargo run -- profile load gaming
-
-# List profiles
-cargo run -- profile list
-
-# Delete profile
-cargo run -- profile delete gaming
-
-# Profile location: ~/.config/ssgg/profiles/<name>.toml
-```
-
-### Daemon & Server
-
-```bash
-# Run daemon (foreground)
-cargo run --release -- daemon
-
-# Start GameSense server only
-cargo run -- server
-
-# Check systemd service
-systemctl --user status ssgg
-journalctl --user -u ssgg -f
-
-# Restart service
-systemctl --user restart ssgg
-
-# Stop service
-systemctl --user stop ssgg
-```
-
-### Diagnostics
-
-```bash
-# Generate bug report
-cargo run -- bug-report --output report.json
-cargo run -- bug-report --include-hid-logs
-
-# View HID communication logs
-cargo run -- hid-logs
-
-# Run validation tests
-cargo run -- validate
-
-# Monitor performance
-cargo run -- performance
-
-# Real-time status
-cargo run -- status
-
-# Test specific device
-cargo run -- test-device "Apex Pro TKL (2023)"
-
-# Verify performance metrics
-cargo run -- verify-performance
-
-# Protocol fuzzing (developer tool, hidden command)
-cargo run -- fuzz --start 0x20 --end 0x30 --delay 200
-```
-
-### Audio Features (requires `--features audio`)
-
-```bash
-# Build with audio support
-cargo build --features audio
-
-# View audio status
-cargo run --features audio -- audio status
-
-# Set volume
-cargo run --features audio -- audio volume --channel master --level 75
-cargo run --features audio -- audio volume --channel game --level 100
-
-# Mute/unmute
-cargo run --features audio -- audio mute --channel game
-cargo run --features audio -- audio unmute --channel game
-
-# List audio devices
-cargo run --features audio -- audio devices
-```
-
-### Sonar Integration (requires `--features sonar`)
-
-```bash
-# Build with sonar support
-cargo build --features sonar
-
-# Discover Sonar port (dynamic)
-cargo run --features sonar -- sonar discover
-
-# Check status
-cargo run --features sonar -- sonar status
-
-# Control volume
-cargo run --features sonar -- sonar volume game 100
-cargo run --features sonar -- sonar volume chat 75
-
-# Using the sonar_control binary
-cargo run --bin sonar_control --features sonar
-```
-
-### USB Poll Rate
-
-```bash
-# Set poll rate (125, 250, 500, 1000, 2000, 4000 Hz)
-cargo run -- pollrate set 1000
-
-# Get current poll rate
-cargo run -- pollrate get
-
-# NOTE: 8000 Hz NOT supported (kernel limitation)
+cargo update              # update within Cargo.toml semver constraints
+cargo outdated            # check for newer versions (cargo-outdated)
+cargo audit               # security vulnerability check (cargo-audit)
+# Always re-run cargo test after dependency updates
 ```
 
 ---
 
-## Debugging
+## CI/CD
 
-### Logging Levels
+### What runs on every PR and push to `main`
+
+**File**: `.github/workflows/ci.yml`
+
+| Job | Matrix | Command |
+|-----|--------|---------|
+| **fmt** | — | `cargo fmt --all -- --check` |
+| **clippy** | `""`, `--features audio`, `--features sonar` | `cargo clippy --all-targets --locked -- -D warnings` |
+| **test** | `""`, `--features sonar` | `cargo test --locked` |
+| **build** | `""`, `--features audio`, `--features sonar` | `cargo build --release --locked` |
+
+System deps installed in CI: `libudev-dev libhidapi-dev` (+ `libpulse-dev` for audio jobs)
+Rust cache: `Swatinem/rust-cache@v2` per feature variant
+
+**All jobs must pass** before a PR can be merged.
+
+### Release
+
+**File**: `.github/workflows/release-arch.yml` — triggered on version tags, produces Arch Linux package.
+
+### Dependency automation
+
+**File**: `.github/dependabot.yml` — weekly updates for GitHub Actions, Cargo deps, Rust toolchain.
+
+---
+
+## Tool Preferences
+
+| Tool | Setting |
+|------|---------|
+| **Formatter** | `cargo fmt` (rustfmt edition 2024, max\_width 120) |
+| **Linter** | `cargo clippy -- -D warnings` (zero-warnings policy) |
+| **Package manager** | `cargo` (Rust standard) |
+| **Runtime** | Tokio multi-thread |
+| **Test runner** | `cargo test` |
+| **Logging env var** | `RUST_LOG=debug\|trace\|info` |
+
+---
+
+## Debugging & Diagnostics
 
 ```bash
-# Enable debug logs
+# Logging
 RUST_LOG=debug cargo run -- devices
-
-# Trace level (verbose)
 RUST_LOG=trace cargo run -- daemon
-
-# Module-specific logging
 RUST_LOG=steelseries_gg::devices=debug cargo run -- devices
-RUST_LOG=steelseries_gg::rgb=trace cargo run -- rgb effect breathing
+cargo run -- --debug-hid devices       # HID-level diagnostics
 
-# Enable HID diagnostics
-cargo run -- --debug-hid devices
+# Device checks
+cargo run -- devices                   # list connected devices
+cargo run -- validate                  # resource leak / validation tests
+cargo run -- test-device "Apex Pro TKL (2023)"
+cargo run -- verify-performance        # RGB performance metrics
+cargo run -- bug-report --output report.json
 ```
 
-### Common Issues & Solutions
+### Common Issues
 
-| Issue | Cause | Solution |
-|-------|-------|----------|
-| Device not detected | udev rules, USB, permissions | Check udev rules, run as root (testing only), verify USB connection |
-| RGB not working | Interface number, HID reports | Verify interface (keyboards=1, headsets=3), check `RUST_LOG=debug` |
-| Per-key RGB not working | Protocol not reverse-engineered | Use zone-based fallback with `simulate_per_key_with_zones()` |
-| GameSense not responding | Port 27301 blocked | Check firewall, verify port availability with `netstat -tuln` |
-| High CPU usage | Effect computation timing | Check performance stats, reduce effect speed, enable caching |
-| Actuation read failing | Read command not implemented | Write-only for now, read is placeholder |
-| Audio not working | PulseAudio not running, feature not enabled | Start PulseAudio, build with `--features audio` |
-| Permission denied | User not in input group | `sudo usermod -aG input $USER`, log out/in |
-| Daemon not auto-starting | systemd linger disabled | `sudo loginctl enable-linger $USER` |
-
-### Diagnostic Commands
-
-```bash
-# Device information
-ssgg devices                    # List all connected devices
-ssgg status                     # Real-time connection status
-
-# HID communication
-ssgg hid-logs                   # View HID communication logs
-ssgg --debug-hid devices        # Enable HID diagnostics
-
-# System diagnostics
-ssgg bug-report                 # Generate comprehensive diagnostic report
-ssgg validate                   # Run validation tests on devices
-ssgg test-device "Apex Pro"     # Automated device testing
-ssgg verify-performance         # Verify RGB performance metrics
-
-# Performance monitoring
-ssgg performance                # Monitor RGB performance in real-time
-```
+| Problem | Cause | Fix |
+|---------|-------|-----|
+| Device not found | udev rules missing | Install rules, reload, re-trigger |
+| Permission denied | Not in `input` group | `sudo usermod -aG input $USER` + re-login |
+| RGB not working | Wrong interface | Interface 1 (keyboards), 3 (headsets); check `RUST_LOG=debug` |
+| Per-key RGB no-op | Protocol not reversed | Use zone fallback `simulate_per_key_with_zones()` |
+| GameSense silent | Port 27301 blocked | Check `netstat -tuln`, firewall |
+| High CPU | Effect timing | Check perf stats, reduce speed, enable caching |
+| Audio missing | Feature not enabled | Build with `--features audio`, ensure PulseAudio running |
+| Service not auto-starting | linger disabled | `sudo loginctl enable-linger $USER` |
 
 ---
 
-## Critical Gotchas & Pitfalls
+## Gotchas & Pitfalls
 
-### 1. HID Report Sizing
-
-**Problem**: Incorrect report size causes communication failures
-
-**Solution**: Always use `HidReportBuilder` - it handles sizing automatically
-- **Keyboards**: 65 bytes (includes report ID byte)
-- **Headsets**: 64 bytes (no report ID)
-
-### 2. Apex Pro TKL 2023 Product ID
-
-**Problem**: Documentation shows `0x1618`, hardware actually uses `0x1628`
-
-**Solution**: Always use `0x1628` (hardware-verified)
-
-### 3. Interface Numbers
-
-**Problem**: Devices have multiple HID interfaces
-
-**Solution**:
-- Keyboards: Interface 1 for control
-- Headsets: Interface 3 for control
-- Use `DeviceManager::open_device()` for automatic selection
-
-### 4. Animated Effects in CLI
-
-**Problem**: `ssgg rgb effect breathing` shows no animation
-
-**Why**: CLI commands are one-shot; animations require continuous updates
-
-**Solution**: Use daemon mode:
-```bash
-ssgg daemon  # Now effects animate continuously
-```
-
-### 5. RGB Caching Bug (Fixed 2026-01-12)
-
-**Problem**: First `EffectEngine::compute()` returned black/empty colors
-
-**Root cause**: Cache returned empty `Vec<Color>` on first call
-
-**Fix**: Check `last_compute_time != Duration::ZERO` before using cache
-
-### 6. Per-Key RGB Status
-
-**Problem**: Per-key RGB commands have no effect
-
-**Why**: HID command `0x2A` is a placeholder - protocol not reverse-engineered
-
-**Workaround**: Use zone-based fallback with `simulate_per_key_with_zones()`
-
-### 7. Actuation Point Reading
-
-**Problem**: `read_actuation_point()` always returns error
-
-**Why**: HID command to read actuation settings has not been discovered
-
-**Status**: Write-only for now (set works, read is placeholder)
-
-### 8. Product ID Conflicts
-
-**Problem**: Some product IDs are shared (e.g., `0x12AD` = Arctis 1 or Arctis 7 2017)
-
-**Solution**: Device name shows "Arctis 1 / Arctis 7" for ambiguous IDs
-
-### 9. udev Permissions
-
-**Problem**: "Permission denied" on device access
-
-**Solution**:
-```bash
-sudo cp assets/99-steelseries.rules /etc/udev/rules.d/
-sudo udevadm control --reload-rules
-sudo udevadm trigger
-sudo usermod -aG input $USER  # Log out and back in
-```
-
-### 10. systemd Service Auto-Start
-
-**Problem**: Service only starts after login
-
-**Solution**: Enable linger for user account
-```bash
-sudo loginctl enable-linger $USER
-```
-
-### 11. Feature Flag Dependencies
-
-**Problem**: `--features sonar` requires audio infrastructure
-
-**Solution**: Use `--features audio,sonar` or `--all-features`
-
-### 12. HID Byte Order
-
-**Problem**: RGB colors wrong (red shows as blue)
-
-**Why**: Some devices use BGR instead of RGB
-
-**Solution**: Most SteelSeries use RGB order; check device docs if issues
+1. **hidapi is pinned at `=2.6.5`** — exact version, do not loosen the constraint.
+2. **Apex Pro TKL 2023 PID is `0x1628`** — not `0x1618`; hardware-verified.
+3. **Interface numbers matter**: keyboards use interface 1, headsets interface 3.
+4. **CLI effects are one-shot** — animations require daemon mode (`ssgg daemon`).
+5. **RGB cache first-call**: `EffectEngine::compute()` cache only activates after the first call (when `last_compute_time != Duration::ZERO`). First call always computes.
+6. **Per-key RGB (`0x2A`) is a placeholder** — actual protocol unknown; use zone fallback.
+7. **Actuation read unimplemented** — write works (`0x2D`), read command unknown.
+8. **Some PIDs are ambiguous** — `0x12AD` = Arctis 1 or Arctis 7 2017; device name reflects this.
+9. **`sonar` feature implicitly needs audio** — use `--features audio,sonar` or `--all-features`.
+10. **HID byte order**: SteelSeries uses RGB order (not BGR); verify if colors appear wrong.
+11. **Never skip `cargo fmt`** — CI will fail on any formatting diff.
+12. **`rustfmt.toml` max_width is 120** — not 100; the `.editorconfig` Rust line is a soft guide.
 
 ---
 
-## Performance & Optimization
+## Configuration
 
-### Release Build Optimization
-
-```toml
-[profile.release]
-strip = true           # Remove debug symbols (~30% size reduction)
-lto = "fat"            # Full link-time optimization (~15% perf gain)
-codegen-units = 1      # Single unit (better optimization)
-panic = "abort"        # No unwinding (~10% size reduction)
-opt-level = 3          # Maximum optimization
-debug = 0              # No debug info
-overflow-checks = false # Disable overflow checks
-```
-
-**Result**:
-- Binary size: ~2-3 MB
-- Startup time: <100ms
-- RGB update latency: <5ms
-- Memory usage: ~10-20 MB
-
-### Performance Best Practices
-
-1. **RGB Updates**: Use caching (16ms threshold = 60 FPS)
-   ```rust
-   let colors = engine.compute(num_zones, elapsed);  // Cached if Δt < 16ms
-   ```
-
-2. **HID Writes**: Batch when possible, reuse buffers
-   ```rust
-   let mut buffer = Vec::with_capacity(MAX_ZONES);
-   loop {
-       buffer.clear();  // Reuse allocation
-       compute_colors(&mut buffer);
-   }
-   ```
-
-3. **Effect Computation**: Leverage `EffectEngine` cache
-   ```rust
-   // Cache automatically used if elapsed < 16ms
-   let colors = engine.compute(num_zones, elapsed);
-   ```
-
-4. **Device Polling**: Adaptive timing in daemon mode
-   ```rust
-   // Adjusts polling interval based on activity
-   let interval = adaptive_interval(last_update);
-   ```
-
-5. **Memory**: Reuse `Vec<Color>` allocations
-   ```rust
-   // GOOD
-   let mut colors = Vec::with_capacity(12);
-   loop { colors.clear(); /* reuse */ }
-
-   // BAD
-   loop { let colors = Vec::new(); /* allocates every time */ }
-   ```
-
-6. **Monitoring**: Enable `PerformanceManager` to track bottlenecks
-   ```rust
-   let perf = PerformanceManager::new();
-   perf.start_operation("rgb_update");
-   // ... work
-   perf.end_operation("rgb_update");
-   ```
-
-### Recent Optimizations
-
-- **20% CPU reduction**: Optimized HID communication protocol
-- **Adaptive timing**: Dynamic effect computation intervals
-- **Resource validation**: Automatic leak detection
-- **Zero-copy**: Per-key RGB buffer reuse
-- **Ring buffer**: Frame timing history for smooth metrics
-- **Write-behind caching**: Async device state persistence
-
----
-
-## Configuration Files
-
-### Config Location
-
-`~/.config/ssgg/config.toml`
-
-### Default Configuration
+### Config file: `~/.config/ssgg/config.toml`
 
 ```toml
 [gamesense]
@@ -977,11 +525,8 @@ debug = false
 log_level = "info"
 ```
 
-### Profile Storage
+### Profiles: `~/.config/ssgg/profiles/<name>.toml`
 
-**Location**: `~/.config/ssgg/profiles/<name>.toml`
-
-**Example profile:**
 ```toml
 [keyboard]
 rgb_effect = "Static"
@@ -995,136 +540,94 @@ rgb_color = "#00FFFF"
 brightness = 100
 ```
 
-### Device State Storage
+### State: `~/.config/ssgg/state.json`
 
-**Location**: `~/.config/ssgg/state.json`
-
-**Purpose**: Tracks last-applied device settings for daemon mode (async persistence)
+Async-persisted device state for daemon mode (last-applied settings).
 
 ---
 
-## Git Workflow
+## Release Build Profile
 
-### Commit Message Convention
+```toml
+[profile.release]
+strip = true            # ~30% size reduction
+lto = "fat"             # ~15% perf gain
+codegen-units = 1       # better optimization
+panic = "abort"         # ~10% size reduction
+opt-level = 3
+debug = 0
+overflow-checks = false
+```
+
+Result: ~2–3 MB binary, <100ms startup, <5ms RGB update latency, ~10–20 MB RSS.
+
+---
+
+## Git Conventions
+
+### Commit message format
 
 ```
-<type>: <description>
+<type>: <short description>
 
 [optional body]
-
-[optional footer]
 ```
 
-**Types:**
-- `feat`: New feature
-- `fix`: Bug fix
-- `refactor`: Code refactoring
-- `docs`: Documentation changes
-- `test`: Test additions/changes
-- `perf`: Performance improvements
-- `chore`: Build/tooling changes
-- `style`: Code style changes (formatting)
+Types: `feat`, `fix`, `refactor`, `docs`, `test`, `perf`, `chore`, `style`
 
-**Examples:**
+Examples:
 ```
-feat: Add per-key RGB fallback using zones
+feat: add per-key RGB fallback using zones
 fix: RGB caching returns black on first compute
-refactor: Extract HID report builder pattern
-docs: Update AGENTS.md with common gotchas
-test: Add unit tests for Color blending
-perf: Optimize HID communication protocol by 20%
+perf: reduce HID communication overhead by 20%
+docs: update AGENTS.md with accurate hidapi version
 ```
 
-### Pre-Commit Checklist
+### Pre-commit checklist
 
 ```bash
-# 1. Format
 cargo fmt
-
-# 2. Lint
 cargo clippy --all-features -- -D warnings
-
-# 3. Test
 cargo test --all-features
-
-# 4. Build
 cargo build --release
-
-# 5. Check documentation
-cargo doc --no-deps --all-features
 ```
-
----
-
-## Additional Resources
-
-### Documentation Files
-
-| File | Purpose | Size |
-|------|---------|------|
-| **AGENTS.md** | This file (AI assistant quick reference) | ~50 KB |
-| **README.md** | User documentation & installation | ~7 KB |
-| **CONTRIBUTING.md** | Contribution guidelines | ~7 KB |
-| **PROJECT_INDEX.md** | Complete project structure & exports | ~17 KB |
-| **PLAN.md** | Development roadmap (per-key RGB focus) | ~3 KB |
-| **PERFORMANCE_OPTIMIZATIONS.md** | Optimization findings & benchmarks | ~8 KB |
-
-### Development Documentation
-
-| File | Purpose |
-|------|---------|
-| **docs/development/APEX_PRO_PROTOCOL.md** | Apex Pro HID protocol research |
-| **docs/development/KEY_MAPPING_RESEARCH.md** | Per-key addressing research |
-| **docs/development/PROTOCOL_RESEARCH.md** | General protocol findings |
-| **docs/development/RGB_CONTROL_ANALYSIS.md** | RGB control analysis |
-| **docs/development/OPTIMIZATION_REPORT.md** | Performance optimization findings |
-| **docs/development/DEPENDENCY_AUDIT_REPORT.md** | Security audit results |
-| **docs/development/todo.md** | Development tasks & roadmap |
-
-### External Resources
-
-- **Repository**: https://github.com/Ven0m0/steelseriesgg-rs
-- **Issues**: https://github.com/Ven0m0/steelseriesgg-rs/issues
-- **Rust Documentation**: https://doc.rust-lang.org/
-- **hidapi Documentation**: https://docs.rs/hidapi/
-- **Tokio Documentation**: https://docs.rs/tokio/
-- **Axum Documentation**: https://docs.rs/axum/
 
 ---
 
 ## Current Development Focus
 
-### Primary: Per-Key RGB Control (Apex Pro TKL 2023)
+### 1. Per-Key RGB (Apex Pro TKL 2023)
 
-**Status**: Protocol reverse engineering in progress
+**Status**: Protocol reverse-engineering in progress
+**Blocker**: HID command `0x2A` is a placeholder; actual sequence unknown
+**Interim**: Zone-based fallback working via `simulate_per_key_with_zones()`
+**Docs**: `docs/development/KEY_MAPPING_RESEARCH.md`
 
-**Challenges**:
-- Command code `0x2A` is placeholder
-- Actual HID command sequence unknown
-- Key addressing scheme not documented
+### 2. Actuation Point Read
 
-**Interim Solution**: Zone-based fallback working
+**Status**: Write works (`set_actuation_point()` via `0x2D`), read not implemented
+**Blocker**: HID read command not discovered
+**Scope**: Apex Pro series only
 
-**Progress**: See `docs/development/KEY_MAPPING_RESEARCH.md`
+---
 
-### Secondary: Actuation Point Control
+## Additional Documentation
 
-**Status**: Partial implementation
-
-**Working**:
-- Write: `set_actuation_point()` using command `0x2D`
-- Write (mm): `set_actuation_point_mm()` (converts mm to raw value)
-
-**Not Working**:
-- Read: `read_actuation_point()` - HID command not discovered
-
-**Limitations**:
-- Apex Pro series only
-- Write-only for now
+| File | Purpose |
+|------|---------|
+| `README.md` | User installation & usage guide |
+| `CONTRIBUTING.md` | Contribution guidelines |
+| `PLAN.md` | Development roadmap |
+| `PROJECT_INDEX.md` | Full module/export index |
+| `PERFORMANCE_OPTIMIZATIONS.md` | Benchmark findings |
+| `docs/development/APEX_PRO_PROTOCOL.md` | HID protocol research |
+| `docs/development/KEY_MAPPING_RESEARCH.md` | Per-key addressing research |
+| `docs/development/PROTOCOL_RESEARCH.md` | General protocol findings |
+| `docs/development/RGB_CONTROL_ANALYSIS.md` | RGB control deep-dive |
+| `docs/development/OPTIMIZATION_REPORT.md` | Performance optimization notes |
 
 ---
 
 **Version**: 0.1.0
-**Last Updated**: 2026-02-10
-**Maintainer**: steelseriesgg-rs contributors
+**Last updated**: 2026-02-28
 **License**: MIT
