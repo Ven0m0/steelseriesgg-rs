@@ -56,11 +56,12 @@ fn connect_device(api: &HidApi, product_id: u16) -> Result<HidDevice> {
     let mut target_path: Option<CString> = None;
 
     for device in api.device_list() {
-        if device.vendor_id() == VENDOR_ID && device.product_id() == product_id {
-            if device.interface_number() == CONTROL_INTERFACE || device.interface_number() == -1 {
-                target_path = Some(CString::from(device.path()));
-                break;
-            }
+        if device.vendor_id() == VENDOR_ID
+            && device.product_id() == product_id
+            && (device.interface_number() == CONTROL_INTERFACE || device.interface_number() == -1)
+        {
+            target_path = Some(CString::from(device.path()));
+            break;
         }
     }
 

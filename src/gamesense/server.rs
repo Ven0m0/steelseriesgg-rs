@@ -8,7 +8,10 @@ use axum::{
 };
 use parking_lot::RwLock;
 use std::collections::HashMap;
+use std::fs::{self, OpenOptions};
 use std::net::SocketAddr;
+#[cfg(unix)]
+use std::os::unix::fs::{DirBuilderExt, MetadataExt, OpenOptionsExt, PermissionsExt};
 use std::sync::Arc;
 use tower_http::cors::{AllowOrigin, CorsLayer};
 use tracing::{debug, info};
@@ -140,12 +143,67 @@ impl GameSenseServer {
         #[cfg(target_os = "macos")]
         let path = std::path::Path::new("/Library/Application Support/SteelSeries Engine 3/coreProps.json");
 
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)?;
+        Self::write_secure_json(path, &props)
+    }
+
+    /// Securely write JSON content to a file, ensuring correct permissions and ownership.
+    fn write_secure_json(path: &std::path::Path, content: &serde_json::Value) -> Result<()> {
+        #[cfg(target_os = "linux")]
+        {
+            // Secure directory creation for /tmp usage
+            if let Some(parent) = path.parent() {
+                if parent.exists() {
+                    let metadata = fs::symlink_metadata(parent)?;
+
+                    // Verify it is a directory and not a symlink
+                    if !metadata.is_dir() {
+                        return Err(Error::GameSense(format!(
+                            "Security error: {:?} is not a directory",
+                            parent
+                        )));
+                    }
+
+                    // Verify ownership (must be owned by us)
+                    if metadata.uid() != unsafe { libc::getuid() } {
+                        return Err(Error::GameSense(format!(
+                            "Security error: {:?} is not owned by the current user",
+                            parent
+                        )));
+                    }
+                } else {
+                    // Create with strict permissions (rwxr-xr-x)
+                    fs::DirBuilder::new().recursive(true).mode(0o755).create(parent)?;
+                }
+            }
+
+            // Secure file write
+            let mut options = OpenOptions::new();
+            options.write(true).create(true).truncate(true);
+
+            // Do not follow symlinks for the file itself
+            options.custom_flags(libc::O_NOFOLLOW);
+
+            let file = options.open(path)?;
+
+            // Set file permissions to 644 (rw-r--r--)
+            let mut perms = file.metadata()?.permissions();
+            perms.set_mode(0o644);
+            file.set_permissions(perms)?;
+
+            // Write content
+            serde_json::to_writer_pretty(file, content)?;
+            debug!("Wrote secure JSON to {:?}", path);
         }
 
-        std::fs::write(path, serde_json::to_string_pretty(&props)?)?;
-        debug!("Wrote coreProps.json to {:?}", path);
+        #[cfg(not(target_os = "linux"))]
+        {
+            if let Some(parent) = path.parent() {
+                std::fs::create_dir_all(parent)?;
+            }
+
+            std::fs::write(path, serde_json::to_string_pretty(content)?)?;
+            debug!("Wrote JSON to {:?}", path);
+        }
 
         Ok(())
     }
@@ -409,5 +467,39 @@ mod tests {
 
         // Test value outside ranges
         assert!(compute_color(&handler, 150).is_none());
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn test_secure_json_write() -> Result<()> {
+        let temp_dir = std::env::temp_dir().join("test_gamesense_secure");
+        let target_path = temp_dir.join("coreProps.json");
+
+        // Cleanup
+        if temp_dir.exists() {
+            std::fs::remove_dir_all(&temp_dir)?;
+        }
+
+        // Write content
+        let props = serde_json::json!({ "test": true });
+
+        // This should create the directory securely and write the file
+        GameSenseServer::write_secure_json(&target_path, &props)?;
+
+        // Verify directory
+        let metadata = std::fs::symlink_metadata(&temp_dir)?;
+        assert!(metadata.is_dir());
+        assert_eq!(metadata.uid(), unsafe { libc::getuid() });
+        assert_eq!(metadata.permissions().mode() & 0o777, 0o755);
+
+        // Verify file
+        let file_metadata = std::fs::symlink_metadata(&target_path)?;
+        assert_eq!(file_metadata.permissions().mode() & 0o777, 0o644);
+        assert!(!file_metadata.file_type().is_symlink());
+
+        // Cleanup
+        std::fs::remove_dir_all(&temp_dir)?;
+
+        Ok(())
     }
 }
