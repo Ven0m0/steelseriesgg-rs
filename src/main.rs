@@ -2377,413 +2377,34 @@ async fn cmd_daemon(mut manager: DeviceManager) -> Result<()> {
     let config = Config::load_async().await?;
 
     // Apply saved polling rates
-    {
-        use steelseries_gg::pollrate::{DeviceType, PollRate, set_poll_rate};
-
-        if let Some(mouse_hz) = config.poll_rate.mouse_hz {
-            if let Ok(rate) = PollRate::from_hz(mouse_hz) {
-                match set_poll_rate(DeviceType::Mouse, rate) {
-                    Ok(()) => info!("Applied mouse poll rate: {} Hz", mouse_hz),
-                    Err(e) => tracing::warn!("Failed to set mouse poll rate: {}", e),
-                }
-            }
-        }
-
-        if let Some(keyboard_hz) = config.poll_rate.keyboard_hz {
-            if let Ok(rate) = PollRate::from_hz(keyboard_hz) {
-                match set_poll_rate(DeviceType::Keyboard, rate) {
-                    Ok(()) => info!("Applied keyboard poll rate: {} Hz", keyboard_hz),
-                    Err(e) => tracing::warn!("Failed to set keyboard poll rate: {}", e),
-                }
-            }
-        }
-    }
+    apply_saved_poll_rates(&config);
 
     // Initialize daemon state
     let daemon_state = Arc::new(RwLock::new(DaemonState::new()?));
 
-    // Set up hot-plug monitoring
-    let hotplug_daemon_state = daemon_state.clone();
-    manager.set_hotplug_callback(move |event| {
-        let state_clone = hotplug_daemon_state.clone();
-        tokio::spawn(async move {
-            if let Ok(mut state) = state_clone.try_write() {
-                // Handle hot-plug events without blocking
-                match event {
-                    HotPlugEvent::DeviceAdded {
-                        fingerprint,
-                        info,
-                        timestamp,
-                    } => {
-                        info!(
-                            "Hot-plug event: Device added at {:.3}s: {} ({})",
-                            timestamp.elapsed().as_secs_f64(),
-                            info.name,
-                            fingerprint.to_id()
-                        );
-
-                        // Note: We can't access the DeviceManager here, so we'll log the event
-                        // and let the periodic refresh handle actual device initialization
-                        debug!("Deferring device initialization to refresh cycle");
-                    }
-                    HotPlugEvent::DeviceRemoved {
-                        fingerprint,
-                        last_seen,
-                        timestamp,
-                    } => {
-                        info!(
-                            "Hot-plug event: Device removed at {:.3}s: {} (last seen {:.3}s ago)",
-                            timestamp.elapsed().as_secs_f64(),
-                            fingerprint.to_id(),
-                            timestamp.duration_since(last_seen).as_secs_f64()
-                        );
-
-                        if let Err(e) = state.handle_device_removed(&fingerprint, last_seen).await {
-                            warn!("Failed to handle device removal: {}", e);
-                        }
-                    }
-                }
-            } else {
-                debug!("Hot-plug event received but daemon state is busy, skipping");
-            }
-        });
-    });
-
-    // Start hot-plug monitoring
-    let hotplug_stop_tx = manager.start_hotplug_monitoring().await?;
+    // Set up and start hot-plug monitoring
+    let hotplug_stop_tx = setup_hotplug_monitoring(&mut manager, daemon_state.clone()).await?;
 
     // Discover and open devices initially
-    let devices_info = manager.devices();
-    if devices_info.is_empty() {
-        info!("No SteelSeries devices found initially");
-    } else {
-        let mut state = daemon_state.write().await;
-        for info in devices_info {
-            let fingerprint = DeviceFingerprint::from_device_info(info);
-            if let Err(e) = state.handle_device_added(&manager, &fingerprint, info).await {
-                warn!("Failed to add initial device {}: {}", info.name, e);
-            }
-        }
-        let device_count = state.device_count();
-        let device_names = state.device_names();
-        info!("Initialized {} device(s): {}", device_count, device_names.join(", "));
-    }
+    initialize_devices(&manager, daemon_state.clone()).await;
 
     // Start GameSense server in background if enabled
-    if config.gamesense.enabled {
-        let gs_bind = config.gamesense.bind_address.clone();
-        let gs_port = config.gamesense.port;
-        let daemon_state_clone = daemon_state.clone();
-
-        tokio::spawn(async move {
-            match GameSenseServer::new(&gs_bind, gs_port) {
-                Ok(server) => {
-                    // Set RGB callback to update overlays with optimized async handling
-                    server
-                        .set_rgb_callback(move |zone: &str, r: u8, g: u8, b: u8| {
-                            let state = &daemon_state_clone; // Use reference instead of double-cloning
-                            let zone_owned = zone.to_string();
-
-                            // Use a more efficient approach - avoid spawning tasks for simple operations
-                            let color = Color::new(r, g, b);
-                            let expiry = std::time::Instant::now() + Duration::from_secs(30);
-
-                            // Use try_write to avoid blocking if the lock is busy
-                            if let Ok(mut state_guard) = state.try_write() {
-                                state_guard
-                                    .gamesense_overlays
-                                    .insert(zone_owned.clone(), (color, expiry));
-                                tracing::debug!("GameSense overlay: {} = {:?}", zone_owned, color);
-                            } else {
-                                // If we can't get the lock immediately, spawn a task
-                                let state_clone = daemon_state_clone.clone();
-                                let zone_deferred = zone_owned.clone();
-                                tokio::spawn(async move {
-                                    let mut state = state_clone.write().await;
-                                    state.gamesense_overlays.insert(zone_deferred.clone(), (color, expiry));
-                                    tracing::debug!("GameSense overlay (deferred): {} = {:?}", zone_deferred, color);
-                                });
-                            }
-                        })
-                        .await;
-
-                    if let Err(e) = server.run().await {
-                        tracing::error!("GameSense server error: {}", e);
-                    }
-                }
-                Err(e) => tracing::error!("Failed to create GameSense server: {}", e),
-            }
-        });
-
-        info!(
-            "GameSense server started on {}:{}",
-            config.gamesense.bind_address, config.gamesense.port
-        );
-    } else {
-        info!("GameSense server disabled in config");
-    }
+    start_gamesense_server(&config, daemon_state.clone());
 
     // Use provided device manager
     print_device_summary(&manager);
 
     // Load default profile if configured
-    if let Some(ref profile_name) = config.default_profile {
-        if let Ok(profile_manager) = ProfileManager::new() {
-            if let Some(profile) = profile_manager.get(profile_name) {
-                info!("Loading default profile: {}", profile.name);
-
-                // Apply keyboard settings if present
-                if let Some(ref keyboard_profile) = profile.keyboard {
-                    let keyboard_state = KeyboardState {
-                        effect: keyboard_profile.effect.clone(),
-                        brightness: keyboard_profile.brightness,
-                    };
-
-                    // Collect device info first to avoid borrow conflicts
-                    let device_infos: Vec<DeviceInfo> = {
-                        let mut state = daemon_state.write().await;
-                        let mut infos = Vec::new();
-
-                        for (_keyboard, controller, info) in state.keyboards.values_mut() {
-                            controller.set_effect(keyboard_profile.effect.clone());
-                            controller.set_brightness(keyboard_profile.brightness as f32 / 100.0);
-                            infos.push(info.clone());
-                            info!("Applied profile to keyboard: {}", info.name);
-                        }
-
-                        infos
-                    };
-
-                    // Update state store separately
-                    {
-                        let state = daemon_state.read().await;
-                        for info in device_infos {
-                            let device_id = DeviceId::from(&info);
-                            let _ = state.state_store.update_keyboard(device_id, keyboard_state.clone());
-                        }
-                    }
-                }
-            }
-        }
-    }
+    load_default_profile(&config, daemon_state.clone()).await;
 
     info!("Daemon running. Press Ctrl+C to stop.");
 
     // Spawn RGB animation loop with adaptive timing and performance monitoring
     let daemon_state_anim = daemon_state.clone();
-    let animation_task = tokio::spawn(async move {
-        use steelseries_gg::performance::{PerformanceMonitor, calculate_effect_complexity, estimate_memory_usage};
-
-        // Initialize performance monitor for adaptive timing
-        let mut performance_monitor = PerformanceMonitor::new();
-
-        // Start with base interval (50ms for compatibility, will be adapted)
-        let mut interval = tokio::time::interval(Duration::from_millis(50));
-        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-
-        // Frame timing tracking
-        let mut last_frame_start = Instant::now();
-        let mut frames_processed = 0u64;
-
-        // Reusable buffer for RGB data to avoid allocations every frame
-        // Stores (serial, colors) for each keyboard
-        let mut frame_data_buffer: Vec<(String, Vec<Color>)> = Vec::new();
-
-        loop {
-            let frame_start = Instant::now();
-            interval.tick().await;
-
-            // Determine current effect complexity by examining active effects
-            let current_complexity = {
-                let state = daemon_state_anim.read().await;
-                let mut max_complexity = steelseries_gg::performance::EffectComplexity::Simple;
-
-                for (_, (_, controller, _)) in state.keyboards.iter() {
-                    let effect = controller.effect();
-                    let effect_complexity = calculate_effect_complexity(effect);
-                    if effect_complexity as u8 > max_complexity as u8 {
-                        max_complexity = effect_complexity;
-                    }
-                }
-                max_complexity
-            };
-
-            // Update performance monitor with current complexity
-            performance_monitor.set_effect_complexity(current_complexity);
-
-            // Track frame timing from previous iteration
-            if frames_processed > 0 {
-                let frame_duration = frame_start.duration_since(last_frame_start);
-                // Estimate computation time (we'll measure actual computation below)
-                let computation_start = Instant::now();
-
-                // Update memory usage periodically
-                if frames_processed.is_multiple_of(60) {
-                    performance_monitor.update_memory_usage(estimate_memory_usage());
-                }
-
-                // Record performance metrics
-                let computation_time = computation_start.elapsed(); // Will be updated with actual time
-                performance_monitor.record_frame_timing(frame_duration, computation_time);
-
-                // Log performance summary periodically
-                if frames_processed.is_multiple_of(300) {
-                    // Every 5 seconds at 60fps
-                    tracing::debug!("RGB Performance: {}", performance_monitor.performance_summary());
-                }
-            }
-
-            let computation_start = Instant::now();
-
-            // Split the work: read operations first, then write operations
-            let (processed_count, overlays, _now) = {
-                let mut state = daemon_state_anim.write().await;
-
-                // Clean up expired overlays while we have the lock
-                let now = std::time::Instant::now();
-                state.gamesense_overlays.retain(|_, (_, expiry)| *expiry > now);
-
-                // Collect data needed for RGB computation to minimize lock time
-                // Reuse frame_data_buffer to avoid allocations
-                let needed_capacity = state.keyboards.len();
-                if frame_data_buffer.len() < needed_capacity {
-                    frame_data_buffer.resize(needed_capacity, (String::new(), Vec::new()));
-                }
-
-                let mut count = 0;
-                for (serial, (_, controller, _)) in state.keyboards.iter_mut() {
-                    // Safety check, though resize above ensures capacity
-                    if count >= frame_data_buffer.len() {
-                        break;
-                    }
-
-                    let (buf_serial, buf_colors) = &mut frame_data_buffer[count];
-
-                    // Update serial (reusing String allocation)
-                    buf_serial.clear();
-                    buf_serial.push_str(serial);
-
-                    // Update colors (reusing Vec allocation)
-                    // controller.compute_colors() returns &[Color]
-                    let colors = controller.compute_colors();
-                    buf_colors.clear();
-                    buf_colors.extend_from_slice(colors);
-
-                    count += 1;
-                }
-
-                // Clone overlays only if there are any
-                let overlays = if state.gamesense_overlays.is_empty() {
-                    HashMap::new()
-                } else {
-                    state.gamesense_overlays.clone()
-                };
-
-                (count, overlays, now)
-            };
-
-            // Process RGB updates for each keyboard without holding the lock
-            for (serial, colors) in frame_data_buffer.iter_mut().take(processed_count) {
-                // Apply GameSense overlays using simple zone mapping
-                if !overlays.is_empty() {
-                    let zone_count = colors.len();
-                    for (zone, (overlay_color, _)) in overlays.iter() {
-                        match parse_zone_number(zone) {
-                            None => {
-                                // Apply to all zones
-                                for c in colors.iter_mut() {
-                                    *c = *overlay_color;
-                                }
-                            }
-                            Some(idx) if idx < zone_count => {
-                                // Apply to specific zone
-                                colors[idx] = *overlay_color;
-                            }
-                            Some(_) => {
-                                // Index out of bounds, ignore
-                            }
-                        }
-                    }
-                }
-
-                // Apply colors to hardware - get keyboard reference with minimal lock time
-                {
-                    let mut state = daemon_state_anim.write().await;
-                    if let Some((keyboard, _, _)) = state.keyboards.get_mut(serial.as_str()) {
-                        if let Err(e) = keyboard.set_zone_colors(colors).await {
-                            tracing::warn!("Failed to update keyboard {}: {}", serial, e);
-                        }
-                    }
-                    // Lock is automatically dropped here
-                }
-            }
-
-            // Record actual computation time
-            let computation_time = computation_start.elapsed();
-            performance_monitor.record_frame_timing(frame_start.elapsed(), computation_time);
-
-            // Calculate optimal timing for next iteration
-            let optimal_interval = performance_monitor.calculate_optimal_timing();
-
-            // Update interval if it has changed significantly (>2ms difference)
-            let current_interval_ms = interval.period().as_millis() as u64;
-            let optimal_interval_ms = optimal_interval.as_millis() as u64;
-
-            if optimal_interval_ms.abs_diff(current_interval_ms) > 2 {
-                // Create new interval with optimal timing
-                interval = tokio::time::interval(optimal_interval);
-                interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-
-                tracing::debug!(
-                    "Adapted RGB timing: {}ms -> {}ms (complexity: {:?})",
-                    current_interval_ms,
-                    optimal_interval_ms,
-                    current_complexity
-                );
-            }
-
-            // Performance degradation detection and recovery
-            if performance_monitor.is_performance_degraded() {
-                tracing::warn!(
-                    "RGB performance degraded, applying recovery measures: {}",
-                    performance_monitor.performance_summary()
-                );
-
-                // Temporary graceful degradation - increase interval by 50%
-                let degraded_interval = optimal_interval.mul_f32(1.5);
-                interval = tokio::time::interval(degraded_interval);
-                interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-            }
-
-            last_frame_start = frame_start;
-            frames_processed += 1;
-        }
-    });
+    let animation_task = tokio::spawn(run_animation_loop(daemon_state_anim));
 
     // Set up graceful shutdown on SIGTERM (systemd stop) and SIGINT (Ctrl+C)
-    #[cfg(unix)]
-    {
-        use tokio::signal::unix::{SignalKind, signal};
-
-        let mut sigterm = signal(SignalKind::terminate())?;
-        let mut sigint = signal(SignalKind::interrupt())?;
-
-        tokio::select! {
-            _ = sigterm.recv() => {
-                info!("Received SIGTERM, shutting down gracefully...");
-            }
-            _ = sigint.recv() => {
-                info!("Received SIGINT, shutting down gracefully...");
-            }
-        }
-    }
-
-    #[cfg(not(unix))]
-    {
-        use tokio::signal;
-        signal::ctrl_c().await?;
-        info!("Received Ctrl+C, shutting down gracefully...");
-    }
+    wait_for_shutdown().await?;
 
     // Stop hot-plug monitoring
     if let Err(e) = hotplug_stop_tx.send(()).await {
@@ -2796,23 +2417,7 @@ async fn cmd_daemon(mut manager: DeviceManager) -> Result<()> {
     animation_task.abort();
 
     // Save final device states
-    {
-        let state = daemon_state.read().await;
-        for (_keyboard, controller, info) in state.keyboards.values() {
-            let device_id = DeviceId::from(info);
-            let final_state = KeyboardState {
-                effect: controller.effect().clone(),
-                brightness: (controller.brightness() * 100.0) as u8,
-            };
-
-            if let Err(e) = state.state_store.update_keyboard(device_id, final_state) {
-                warn!("Failed to save final state for {}: {}", info.name, e);
-            } else {
-                debug!("Saved final state for {}", info.name);
-            }
-        }
-        info!("Saved final states for {} device(s)", state.device_count());
-    }
+    save_final_device_states(daemon_state).await;
 
     info!("Daemon stopped.");
     Ok(())
@@ -3161,8 +2766,8 @@ async fn cmd_verify_performance(
     let mut monitor = PerformanceMonitor::new();
 
     // Determine target FPS for effect
-    use steelseries_gg::performance::calculate_effect_complexity;
-    let complexity = calculate_effect_complexity(&effect);
+
+    let complexity = steelseries_gg::performance::calculate_effect_complexity(&effect);
     monitor.set_effect_complexity(complexity);
 
     let use_colors = io::stdout().is_terminal();
@@ -3281,4 +2886,428 @@ async fn cmd_verify_performance(
     }
 
     Ok(())
+}
+
+fn apply_saved_poll_rates(config: &Config) {
+    use steelseries_gg::pollrate::{DeviceType, PollRate, set_poll_rate};
+
+    if let Some(mouse_hz) = config.poll_rate.mouse_hz {
+        if let Ok(rate) = PollRate::from_hz(mouse_hz) {
+            match set_poll_rate(DeviceType::Mouse, rate) {
+                Ok(()) => info!("Applied mouse poll rate: {} Hz", mouse_hz),
+                Err(e) => tracing::warn!("Failed to set mouse poll rate: {}", e),
+            }
+        }
+    }
+
+    if let Some(keyboard_hz) = config.poll_rate.keyboard_hz {
+        if let Ok(rate) = PollRate::from_hz(keyboard_hz) {
+            match set_poll_rate(DeviceType::Keyboard, rate) {
+                Ok(()) => info!("Applied keyboard poll rate: {} Hz", keyboard_hz),
+                Err(e) => tracing::warn!("Failed to set keyboard poll rate: {}", e),
+            }
+        }
+    }
+}
+
+async fn setup_hotplug_monitoring(
+    manager: &mut DeviceManager,
+    daemon_state: Arc<RwLock<DaemonState>>,
+) -> Result<tokio::sync::mpsc::Sender<()>> {
+    let hotplug_daemon_state = daemon_state;
+    manager.set_hotplug_callback(move |event| {
+        let state_clone = hotplug_daemon_state.clone();
+        tokio::spawn(async move {
+            if let Ok(mut state) = state_clone.try_write() {
+                // Handle hot-plug events without blocking
+                match event {
+                    HotPlugEvent::DeviceAdded {
+                        fingerprint,
+                        info,
+                        timestamp,
+                    } => {
+                        info!(
+                            "Hot-plug event: Device added at {:.3}s: {} ({})",
+                            timestamp.elapsed().as_secs_f64(),
+                            info.name,
+                            fingerprint.to_id()
+                        );
+
+                        // Note: We can't access the DeviceManager here, so we'll log the event
+                        // and let the periodic refresh handle actual device initialization
+                        debug!("Deferring device initialization to refresh cycle");
+                    }
+                    HotPlugEvent::DeviceRemoved {
+                        fingerprint,
+                        last_seen,
+                        timestamp,
+                    } => {
+                        info!(
+                            "Hot-plug event: Device removed at {:.3}s: {} (last seen {:.3}s ago)",
+                            timestamp.elapsed().as_secs_f64(),
+                            fingerprint.to_id(),
+                            timestamp.duration_since(last_seen).as_secs_f64()
+                        );
+
+                        if let Err(e) = state.handle_device_removed(&fingerprint, last_seen).await {
+                            warn!("Failed to handle device removal: {}", e);
+                        }
+                    }
+                }
+            } else {
+                debug!("Hot-plug event received but daemon state is busy, skipping");
+            }
+        });
+    });
+
+    // Start hot-plug monitoring
+    manager.start_hotplug_monitoring().await
+}
+
+async fn initialize_devices(manager: &DeviceManager, daemon_state: Arc<RwLock<DaemonState>>) {
+    let devices_info = manager.devices();
+    if devices_info.is_empty() {
+        info!("No SteelSeries devices found initially");
+    } else {
+        let mut state = daemon_state.write().await;
+        for info in devices_info {
+            let fingerprint = DeviceFingerprint::from_device_info(info);
+            if let Err(e) = state.handle_device_added(manager, &fingerprint, info).await {
+                warn!("Failed to add initial device {}: {}", info.name, e);
+            }
+        }
+        let device_count = state.device_count();
+        let device_names = state.device_names();
+        info!("Initialized {} device(s): {}", device_count, device_names.join(", "));
+    }
+}
+
+fn start_gamesense_server(config: &Config, daemon_state: Arc<RwLock<DaemonState>>) {
+    if config.gamesense.enabled {
+        let gs_bind = config.gamesense.bind_address.clone();
+        let gs_port = config.gamesense.port;
+        let daemon_state_clone = daemon_state.clone();
+
+        tokio::spawn(async move {
+            match GameSenseServer::new(&gs_bind, gs_port) {
+                Ok(server) => {
+                    // Set RGB callback to update overlays with optimized async handling
+                    server
+                        .set_rgb_callback(move |zone: &str, r: u8, g: u8, b: u8| {
+                            let state = &daemon_state_clone; // Use reference instead of double-cloning
+                            let zone_owned = zone.to_string();
+
+                            // Use a more efficient approach - avoid spawning tasks for simple operations
+                            let color = Color::new(r, g, b);
+                            let expiry = std::time::Instant::now() + Duration::from_secs(30);
+
+                            // Use try_write to avoid blocking if the lock is busy
+                            if let Ok(mut state_guard) = state.try_write() {
+                                state_guard
+                                    .gamesense_overlays
+                                    .insert(zone_owned.clone(), (color, expiry));
+                                tracing::debug!("GameSense overlay: {} = {:?}", zone_owned, color);
+                            } else {
+                                // If we can't get the lock immediately, spawn a task
+                                let state_clone = daemon_state_clone.clone();
+                                let zone_deferred = zone_owned.clone();
+                                tokio::spawn(async move {
+                                    let mut state = state_clone.write().await;
+                                    state.gamesense_overlays.insert(zone_deferred.clone(), (color, expiry));
+                                    tracing::debug!("GameSense overlay (deferred): {} = {:?}", zone_deferred, color);
+                                });
+                            }
+                        })
+                        .await;
+
+                    if let Err(e) = server.run().await {
+                        tracing::error!("GameSense server error: {}", e);
+                    }
+                }
+                Err(e) => tracing::error!("Failed to create GameSense server: {}", e),
+            }
+        });
+
+        info!(
+            "GameSense server started on {}:{}",
+            config.gamesense.bind_address, config.gamesense.port
+        );
+    } else {
+        info!("GameSense server disabled in config");
+    }
+}
+
+async fn load_default_profile(config: &Config, daemon_state: Arc<RwLock<DaemonState>>) {
+    if let Some(ref profile_name) = config.default_profile {
+        if let Ok(profile_manager) = ProfileManager::new() {
+            if let Some(profile) = profile_manager.get(profile_name) {
+                info!("Loading default profile: {}", profile.name);
+
+                // Apply keyboard settings if present
+                if let Some(ref keyboard_profile) = profile.keyboard {
+                    let keyboard_state = KeyboardState {
+                        effect: keyboard_profile.effect.clone(),
+                        brightness: keyboard_profile.brightness,
+                    };
+
+                    // Collect device info first to avoid borrow conflicts
+                    let device_infos: Vec<DeviceInfo> = {
+                        let mut state = daemon_state.write().await;
+                        let mut infos = Vec::new();
+
+                        for (_keyboard, controller, info) in state.keyboards.values_mut() {
+                            controller.set_effect(keyboard_profile.effect.clone());
+                            controller.set_brightness(keyboard_profile.brightness as f32 / 100.0);
+                            infos.push(info.clone());
+                            info!("Applied profile to keyboard: {}", info.name);
+                        }
+
+                        infos
+                    };
+
+                    // Update state store separately
+                    {
+                        let state = daemon_state.read().await;
+                        for info in device_infos {
+                            let device_id = DeviceId::from(&info);
+                            let _ = state.state_store.update_keyboard(device_id, keyboard_state.clone());
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+async fn run_animation_loop(daemon_state_anim: Arc<RwLock<DaemonState>>) {
+    // We only need the monitor inside the animation loop
+    let mut performance_monitor = steelseries_gg::performance::PerformanceMonitor::new();
+
+    // Start with base interval (50ms for compatibility, will be adapted)
+    let mut interval = tokio::time::interval(Duration::from_millis(50));
+    interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+    // Frame timing tracking
+    let mut last_frame_start = Instant::now();
+    let mut frames_processed = 0u64;
+
+    // Reusable buffer for RGB data to avoid allocations every frame
+    // Stores (serial, colors) for each keyboard
+    let mut frame_data_buffer: Vec<(String, Vec<Color>)> = Vec::new();
+
+    loop {
+        let frame_start = Instant::now();
+        interval.tick().await;
+
+        // Determine current effect complexity by examining active effects
+        let current_complexity = {
+            let state = daemon_state_anim.read().await;
+            let mut max_complexity = steelseries_gg::performance::EffectComplexity::Simple;
+
+            for (_, (_, controller, _)) in state.keyboards.iter() {
+                let effect = controller.effect();
+                let effect_complexity = steelseries_gg::performance::calculate_effect_complexity(effect);
+                if effect_complexity as u8 > max_complexity as u8 {
+                    max_complexity = effect_complexity;
+                }
+            }
+            max_complexity
+        };
+
+        // Update performance monitor with current complexity
+        performance_monitor.set_effect_complexity(current_complexity);
+
+        // Track frame timing from previous iteration
+        if frames_processed > 0 {
+            let frame_duration = frame_start.duration_since(last_frame_start);
+            // Estimate computation time (we'll measure actual computation below)
+            let computation_start = Instant::now();
+
+            // Update memory usage periodically
+            if frames_processed.is_multiple_of(60) {
+                performance_monitor.update_memory_usage(steelseries_gg::performance::estimate_memory_usage());
+            }
+
+            // Record performance metrics
+            let computation_time = computation_start.elapsed(); // Will be updated with actual time
+            performance_monitor.record_frame_timing(frame_duration, computation_time);
+
+            // Log performance summary periodically
+            if frames_processed.is_multiple_of(300) {
+                // Every 5 seconds at 60fps
+                tracing::debug!("RGB Performance: {}", performance_monitor.performance_summary());
+            }
+        }
+
+        let computation_start = Instant::now();
+
+        // Split the work: read operations first, then write operations
+        let (processed_count, overlays, _now) = {
+            let mut state = daemon_state_anim.write().await;
+
+            // Clean up expired overlays while we have the lock
+            let now = std::time::Instant::now();
+            state.gamesense_overlays.retain(|_, (_, expiry)| *expiry > now);
+
+            // Collect data needed for RGB computation to minimize lock time
+            // Reuse frame_data_buffer to avoid allocations
+            let needed_capacity = state.keyboards.len();
+            if frame_data_buffer.len() < needed_capacity {
+                frame_data_buffer.resize(needed_capacity, (String::new(), Vec::new()));
+            }
+
+            let mut count = 0;
+            for (serial, (_, controller, _)) in state.keyboards.iter_mut() {
+                // Safety check, though resize above ensures capacity
+                if count >= frame_data_buffer.len() {
+                    break;
+                }
+
+                let (buf_serial, buf_colors) = &mut frame_data_buffer[count];
+
+                // Update serial (reusing String allocation)
+                buf_serial.clear();
+                buf_serial.push_str(serial);
+
+                // Update colors (reusing Vec allocation)
+                // controller.compute_colors() returns &[Color]
+                let colors = controller.compute_colors();
+                buf_colors.clear();
+                buf_colors.extend_from_slice(colors);
+
+                count += 1;
+            }
+
+            // Clone overlays only if there are any
+            let overlays = if state.gamesense_overlays.is_empty() {
+                HashMap::new()
+            } else {
+                state.gamesense_overlays.clone()
+            };
+
+            (count, overlays, now)
+        };
+
+        // Process RGB updates for each keyboard without holding the lock
+        for (serial, colors) in frame_data_buffer.iter_mut().take(processed_count) {
+            // Apply GameSense overlays using simple zone mapping
+            if !overlays.is_empty() {
+                let zone_count = colors.len();
+                for (zone, (overlay_color, _)) in overlays.iter() {
+                    match parse_zone_number(zone) {
+                        None => {
+                            // Apply to all zones
+                            for c in colors.iter_mut() {
+                                *c = *overlay_color;
+                            }
+                        }
+                        Some(idx) if idx < zone_count => {
+                            // Apply to specific zone
+                            colors[idx] = *overlay_color;
+                        }
+                        Some(_) => {
+                            // Index out of bounds, ignore
+                        }
+                    }
+                }
+            }
+
+            // Apply colors to hardware - get keyboard reference with minimal lock time
+            {
+                let mut state = daemon_state_anim.write().await;
+                if let Some((keyboard, _, _)) = state.keyboards.get_mut(serial.as_str()) {
+                    if let Err(e) = keyboard.set_zone_colors(colors).await {
+                        tracing::warn!("Failed to update keyboard {}: {}", serial, e);
+                    }
+                }
+                // Lock is automatically dropped here
+            }
+        }
+
+        // Record actual computation time
+        let computation_time = computation_start.elapsed();
+        performance_monitor.record_frame_timing(frame_start.elapsed(), computation_time);
+
+        // Calculate optimal timing for next iteration
+        let optimal_interval = performance_monitor.calculate_optimal_timing();
+
+        // Update interval if it has changed significantly (>2ms difference)
+        let current_interval_ms = interval.period().as_millis() as u64;
+        let optimal_interval_ms = optimal_interval.as_millis() as u64;
+
+        if optimal_interval_ms.abs_diff(current_interval_ms) > 2 {
+            // Create new interval with optimal timing
+            interval = tokio::time::interval(optimal_interval);
+            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+            tracing::debug!(
+                "Adapted RGB timing: {}ms -> {}ms (complexity: {:?})",
+                current_interval_ms,
+                optimal_interval_ms,
+                current_complexity
+            );
+        }
+
+        // Performance degradation detection and recovery
+        if performance_monitor.is_performance_degraded() {
+            tracing::warn!(
+                "RGB performance degraded, applying recovery measures: {}",
+                performance_monitor.performance_summary()
+            );
+
+            // Temporary graceful degradation - increase interval by 50%
+            let degraded_interval = optimal_interval.mul_f32(1.5);
+            interval = tokio::time::interval(degraded_interval);
+            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        }
+
+        last_frame_start = frame_start;
+        frames_processed += 1;
+    }
+}
+
+async fn wait_for_shutdown() -> Result<()> {
+    #[cfg(unix)]
+    {
+        use tokio::signal::unix::{SignalKind, signal};
+
+        let mut sigterm = signal(SignalKind::terminate())?;
+        let mut sigint = signal(SignalKind::interrupt())?;
+
+        tokio::select! {
+            _ = sigterm.recv() => {
+                info!("Received SIGTERM, shutting down gracefully...");
+            }
+            _ = sigint.recv() => {
+                info!("Received SIGINT, shutting down gracefully...");
+            }
+        }
+    }
+
+    #[cfg(not(unix))]
+    {
+        use tokio::signal;
+        signal::ctrl_c().await?;
+        info!("Received Ctrl+C, shutting down gracefully...");
+    }
+
+    Ok(())
+}
+
+async fn save_final_device_states(daemon_state: Arc<RwLock<DaemonState>>) {
+    let state = daemon_state.read().await;
+    for (_keyboard, controller, info) in state.keyboards.values() {
+        let device_id = DeviceId::from(info);
+        let final_state = KeyboardState {
+            effect: controller.effect().clone(),
+            brightness: (controller.brightness() * 100.0) as u8,
+        };
+
+        if let Err(e) = state.state_store.update_keyboard(device_id, final_state) {
+            warn!("Failed to save final state for {}: {}", info.name, e);
+        } else {
+            debug!("Saved final state for {}", info.name);
+        }
+    }
+    info!("Saved final states for {} device(s)", state.device_count());
 }
