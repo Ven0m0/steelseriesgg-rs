@@ -2,7 +2,9 @@
 
 use super::{GenericKeyboard, Keyboard};
 use crate::Result;
-use crate::devices::hid_reports::{ActuationCommand, HidCommand, HidDeviceType, HidReportBuilder};
+use crate::devices::hid_reports::{
+    ActuationCommand, HidCommand, HidDeviceType, HidReportBuilder, KEYBOARD_REPORT_SIZE,
+};
 use crate::devices::key_mapping::{KeyAddress, KeyId, KeyMapping};
 use crate::devices::zone_mapping::{ZoneEffect, ZoneMapping};
 use crate::devices::{Device, DeviceInfo, DeviceType};
@@ -34,10 +36,13 @@ impl ApexProTkl2023 {
         // Use the new command infrastructure for consistent serialization
         let report_builder = HidReportBuilder::new(HidDeviceType::Keyboard);
 
-        let report = report_builder.build_report(command)?;
+        let mut buffer = [0u8; KEYBOARD_REPORT_SIZE];
+        let size = report_builder.build_report(command, &mut buffer)?;
 
-        // Use send_raw from inner Device trait
-        self.inner.send_raw(&report)
+        self.inner.send_raw(&buffer[..size])?;
+
+        self.inner.update_cached_actuation_point(value);
+        Ok(())
     }
 
     /// Set actuation point in millimeters.
@@ -49,10 +54,13 @@ impl ApexProTkl2023 {
         // Use the new command infrastructure for consistent serialization
         let report_builder = HidReportBuilder::new(HidDeviceType::Keyboard);
 
-        let report = report_builder.build_report(command)?;
+        let mut buffer = [0u8; KEYBOARD_REPORT_SIZE];
+        let size = report_builder.build_report(command.clone(), &mut buffer)?;
 
-        // Use send_raw from inner Device trait
-        self.inner.send_raw(&report)
+        self.inner.send_raw(&buffer[..size])?;
+
+        self.inner.update_cached_actuation_point(command.actuation_point);
+        Ok(())
     }
 }
 

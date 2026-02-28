@@ -689,3 +689,104 @@ pub fn print_device_summary(manager: &DeviceManager) {
         println!();
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::devices::{DeviceInfo, DeviceType};
+
+    fn create_test_device_info(serial: Option<String>) -> DeviceInfo {
+        DeviceInfo {
+            name: "Test Device".to_string(),
+            device_type: DeviceType::Keyboard,
+            vendor_id: 0x1038,
+            product_id: 0x1612,
+            interface_number: 1,
+            serial_number: serial,
+            manufacturer: Some("SteelSeries".to_string()),
+            path: "path/to/device".to_string(),
+        }
+    }
+
+    #[test]
+    fn test_fingerprint_creation() {
+        let info = create_test_device_info(Some("serial123".to_string()));
+        let fingerprint = DeviceFingerprint::from_device_info(&info);
+
+        assert_eq!(fingerprint.vendor_id, 0x1038);
+        assert_eq!(fingerprint.product_id, 0x1612);
+        assert_eq!(fingerprint.interface_number, 1);
+        assert_eq!(fingerprint.serial_number, Some("serial123".to_string()));
+    }
+
+    #[test]
+    fn test_fingerprint_to_id_with_serial() {
+        let info = create_test_device_info(Some("serial123".to_string()));
+        let fingerprint = DeviceFingerprint::from_device_info(&info);
+
+        // format: vid(dec):pid(hex):iface(hex):serial
+        // 4152 = 0x1038
+        assert_eq!(fingerprint.to_id(), "4152:1612:0001:serial123");
+    }
+
+    #[test]
+    fn test_fingerprint_to_id_no_serial() {
+        let info = create_test_device_info(None);
+        let fingerprint = DeviceFingerprint::from_device_info(&info);
+
+        assert_eq!(fingerprint.to_id(), "4152:1612:0001:no_serial");
+    }
+
+    #[test]
+    fn test_fingerprint_equality() {
+        let info1 = create_test_device_info(Some("serial1".to_string()));
+        let fp1 = DeviceFingerprint::from_device_info(&info1);
+        let fp2 = DeviceFingerprint::from_device_info(&info1); // Same info
+
+        let mut info2 = info1.clone();
+        info2.serial_number = Some("serial2".to_string());
+        let fp3 = DeviceFingerprint::from_device_info(&info2);
+
+        assert_eq!(fp1, fp2);
+        assert_ne!(fp1, fp3);
+
+        // Test hashing
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+
+        let mut hasher1 = DefaultHasher::new();
+        fp1.hash(&mut hasher1);
+        let hash1 = hasher1.finish();
+
+        let mut hasher2 = DefaultHasher::new();
+        fp2.hash(&mut hasher2);
+        let hash2 = hasher2.finish();
+
+        assert_eq!(hash1, hash2);
+    }
+
+    #[test]
+    fn test_registry_entry_lifecycle() {
+        let info = create_test_device_info(Some("serial1".to_string()));
+        let fingerprint = DeviceFingerprint::from_device_info(&info);
+
+        let mut entry = DeviceRegistryEntry::new(info.clone(), fingerprint.clone());
+
+        assert_eq!(entry.connection_count, 1);
+        let initial_seen = entry.last_seen;
+
+        // Sleep briefly to ensure time passes
+        std::thread::sleep(std::time::Duration::from_millis(10));
+
+        entry.update_seen();
+        assert!(entry.last_seen > initial_seen);
+        assert_eq!(entry.connection_count, 1); // Count shouldn't change
+
+        let after_update = entry.last_seen;
+        std::thread::sleep(std::time::Duration::from_millis(10));
+
+        entry.increment_connection_count();
+        assert_eq!(entry.connection_count, 2);
+        assert!(entry.last_seen > after_update);
+    }
+}
