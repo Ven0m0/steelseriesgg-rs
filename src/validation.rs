@@ -12,7 +12,7 @@
 use crate::devices::key_mapping::KeyId;
 use crate::devices::keyboards::Keyboard;
 use crate::devices::{DeviceInfo, DeviceType};
-use crate::rgb::{Color, PerKeyEffect};
+use crate::rgb::{Color, Effect, EffectEngine, PerKeyEffect};
 
 use colored::Colorize;
 use serde::{Deserialize, Serialize};
@@ -807,14 +807,75 @@ impl RgbValidator {
     }
 
     /// Test zone-based RGB effects.
-    async fn test_zone_rgb_effects(&self, _keyboard: &mut dyn Keyboard) -> ValidationResult {
+    async fn test_zone_rgb_effects(&self, keyboard: &mut dyn Keyboard) -> ValidationResult {
         let start = Instant::now();
         let test_name = "Zone RGB Effects".to_string();
 
-        // For now, this is a placeholder since we don't have direct access to EffectEngine
-        // In a real implementation, this would test various effects
+        let zone_count = keyboard.zone_count();
+        if zone_count == 0 {
+            return ValidationResult::success(test_name, start.elapsed())
+                .with_note("Skipped: No zones supported by this device");
+        }
+
+        let effects = vec![
+            Effect::Breathing {
+                color: Color::RED,
+                speed: 1.0,
+            },
+            Effect::Spectrum { speed: 1.0 },
+        ];
+
+        let mut successful_effects = 0;
+
+        for (i, effect) in effects.into_iter().enumerate() {
+            let mut engine = EffectEngine::new(effect, zone_count);
+
+            // First computation
+            let colors = engine.compute();
+            if let Err(e) = keyboard.set_zone_colors(colors).await {
+                return ValidationResult::failure(
+                    test_name,
+                    start.elapsed(),
+                    format!("Failed to set initial colors for effect {}: {}", i, e),
+                );
+            }
+            if let Err(e) = keyboard.apply().await {
+                return ValidationResult::failure(
+                    test_name,
+                    start.elapsed(),
+                    format!("Failed to apply initial colors for effect {}: {}", i, e),
+                );
+            }
+
+            // Simulate time passing
+            tokio::time::sleep(Duration::from_millis(50)).await;
+
+            // Second computation (time has passed, colors should update)
+            let colors = engine.compute();
+            if let Err(e) = keyboard.set_zone_colors(colors).await {
+                return ValidationResult::failure(
+                    test_name,
+                    start.elapsed(),
+                    format!("Failed to set updated colors for effect {}: {}", i, e),
+                );
+            }
+            if let Err(e) = keyboard.apply().await {
+                return ValidationResult::failure(
+                    test_name,
+                    start.elapsed(),
+                    format!("Failed to apply updated colors for effect {}: {}", i, e),
+                );
+            }
+
+            successful_effects += 1;
+        }
+
         ValidationResult::success(test_name, start.elapsed())
-            .with_note("Zone effects test placeholder - would test breathing, spectrum, wave effects")
+            .with_metric("tested_effects", successful_effects as f64)
+            .with_note(&format!(
+                "Successfully tested {} zone effects on {} zones",
+                successful_effects, zone_count
+            ))
     }
 
     /// Test zone reliability with retry mechanisms.
