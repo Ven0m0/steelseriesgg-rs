@@ -386,7 +386,14 @@ pub enum PerKeyAddressingMode {
     /// Direct matrix addressing: [row] [col] [R] [G] [B] (5 bytes per key)
     Matrix,
     /// Logical key addressing: [key_id] [R] [G] [B] (4 bytes per key)
-    /// Note: key_id is stored in address.col
+    ///
+    /// In this mode we deliberately reuse [`KeyAddress`] for convenience:
+    /// the logical [`KeyId`] is stored in `address.col`, and `address.row`
+    /// must always be set to `0` and is ignored by the device firmware.
+    /// This convention keeps the public API small while still allowing both
+    /// matrix and logical addressing to share the same map key type, and
+    /// avoids ambiguity with [`PerKeyAddressingMode::Matrix`], where both
+    /// `row` and `col` are meaningful.
     Logical,
 }
 
