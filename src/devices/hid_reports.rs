@@ -592,6 +592,13 @@ impl HidCommand for PerKeyRgbCommand {
                         break; // Prevent buffer overflow
                     }
 
+                    // In logical mode, row must be unused/zero; enforce this invariant.
+                    assert_eq!(
+                        address.row,
+                        0,
+                        "PerKeyAddressingMode::Logical expects KeyAddress.row == 0, got {}",
+                        address.row
+                    );
                     data[offset] = address.col;
                     data[offset + 1] = color.r;
                     data[offset + 2] = color.g;
