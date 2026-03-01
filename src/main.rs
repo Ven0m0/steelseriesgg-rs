@@ -3029,7 +3029,7 @@ fn start_gamesense_server(config: &Config, daemon_state: Arc<RwLock<DaemonState>
         });
 
         info!(
-            "GameSense server started on {}:{}",
+            "GameSense server starting on {}:{}",
             config.gamesense.bind_address, config.gamesense.port
         );
     } else {
