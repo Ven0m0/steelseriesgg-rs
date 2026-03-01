@@ -1,16 +1,8 @@
-import re
+"""
+This file previously contained a one-off patching script that modified `src/validation.rs`
+to update an import statement. That migration has been applied and the script has been
+intentionally removed to avoid keeping ad-hoc maintenance artifacts in the repository.
 
-with open("src/validation.rs", "r") as f:
-    content = f.read()
-
-# Replace the specific import line for rgb
-# From: use crate::rgb::{Color, PerKeyEffect};
-# To: use crate::rgb::{Color, Effect, EffectEngine, PerKeyEffect};
-content = re.sub(
-    r"use crate::rgb::\{Color, PerKeyEffect\};",
-    "use crate::rgb::{Color, Effect, EffectEngine, PerKeyEffect};",
-    content
-)
-
-with open("src/validation.rs", "w") as f:
-    f.write(content)
+If you need to see or re-run the original logic, refer to the project history for this
+file in version control.
+"""
