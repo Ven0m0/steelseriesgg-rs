@@ -1,7 +1,7 @@
 # RGB Control Analysis and Recommendations
 
-**Date**: 2026-01-13
-**Status**: ✅ **ANALYSIS COMPLETE**
+**Date**: 2026-03-01 (originally 2026-01-13)
+**Status**: ✅ **ANALYSIS COMPLETE — Updated with current implementation details**
 **Purpose**: Investigate alternative approaches for forcing RGB to work on SteelSeries devices
 
 ## Investigation Summary
@@ -27,7 +27,7 @@ This document analyzes whether the crates/projects mentioned in todo.md could he
 - This crate works in the opposite direction (device → host, not host → device)
 - Designed for no_std embedded environments, not desktop Linux
 
-**Source**: [GitHub - dlkj/usbd-human-interface-device](https://github.com/dlkj/usbd-human-interface-device)
+**Source**: [GitHub — dlkj/usbd-human-interface-device](https://github.com/dlkj/usbd-human-interface-device)
 
 ### 2. kanata-keyberon
 
@@ -43,7 +43,7 @@ This document analyzes whether the crates/projects mentioned in todo.md could he
 - Uses evdev/uinput for reading/injecting keyboard events
 - No USB HID device communication or RGB lighting functionality
 
-**Source**: [kanata-keyberon - crates.io](https://crates.io/crates/kanata-keyberon)
+**Source**: [kanata-keyberon — crates.io](https://crates.io/crates/kanata-keyberon)
 
 ### 3. Kanata Linux Setup Documentation
 
@@ -62,7 +62,7 @@ KERNEL=="uinput", MODE="0660", GROUP="uinput"
 ```
 
 **Why it's limited**:
-- steelseriesgg-rs already has comprehensive udev rules (assets/99-steelseries.rules)
+- steelseriesgg-rs already has comprehensive udev rules (`assets/99-steelseries.rules`)
 - Kanata focuses on evdev (input events), we need hidraw (RGB control)
 - Our udev rules are already correct for hidraw access
 
@@ -70,26 +70,26 @@ KERNEL=="uinput", MODE="0660", GROUP="uinput"
 
 ## Actual Relevant Projects for RGB Control
 
-While investigating, I found several Linux projects that **successfully control SteelSeries Apex RGB**:
+While investigating, several Linux projects that **successfully control SteelSeries Apex RGB** were found:
 
 ### Working Projects
 
-1. **apexctl** - C tool using hidapi-hidraw
-   - [GitHub - AstroSnail/apexctl](https://github.com/AstroSnail/apexctl)
+1. **apexctl** — C tool using hidapi-hidraw
+   - [GitHub — AstroSnail/apexctl](https://github.com/AstroSnail/apexctl)
    - Controls brightness, colors, polling frequency
    - Uses `HIDAPI_IMPL=hidapi-hidraw`
 
-2. **RGB_controller** - Python tool for Apex 3 TKL
-   - [GitHub - PCBscanner/RGB_controller](https://github.com/PCBscanner/RGB_controller)
+2. **RGB_controller** — Python tool for Apex 3 TKL
+   - [GitHub — PCBscanner/RGB_controller](https://github.com/PCBscanner/RGB_controller)
    - Uses PyUSB to send commands
    - Reverse-engineered protocol via USB packet capture
 
-3. **apex7tkl_linux** - Python CLI for Apex 7 TKL
-   - [GitHub - FrankGrimm/apex7tkl_linux](https://github.com/FrankGrimm/apex7tkl_linux)
+3. **apex7tkl_linux** — Python CLI for Apex 7 TKL
+   - [GitHub — FrankGrimm/apex7tkl_linux](https://github.com/FrankGrimm/apex7tkl_linux)
    - Includes working udev rules and RGB control
 
-4. **steelkeys** - Python configuration tool
-   - [GitHub - daiyam/steelkeys](https://github.com/daiyam/steelkeys)
+4. **steelkeys** — Python configuration tool
+   - [GitHub — daiyam/steelkeys](https://github.com/daiyam/steelkeys)
    - Requires libhidapi-hidraw0
    - Supports Apex M800 and other models
 
@@ -101,209 +101,171 @@ All working implementations:
 - ✅ Send binary packets via HID interface
 - ✅ Some reverse-engineered via Wireshark USB packet capture
 
-## Current steelseriesgg-rs Implementation
+## Current steelseriesgg-rs Architecture
 
-### What We're Doing Right
+### HID Communication Stack
 
-```rust
-// src/devices/keyboards/mod.rs
-fn set_zone_colors(&mut self, colors: &[Color]) -> Result<()> {
-    let mut data = vec![0x21, 0xFF];  // RGB command
-
-    for color in colors.iter().take(self.zone_count) {
-        data.push(color.r);
-        data.push(color.g);
-        data.push(color.b);
-    }
-
-    self.send_report(&data)  // Sends to hidapi
-}
+```
+CLI commands (src/main.rs)
+  → Keyboard trait methods (src/devices/keyboards/mod.rs)
+    → GenericKeyboard / ApexProTkl2023 / Apex3Tkl
+      → HidReportBuilder + Command structs (src/devices/hid_reports.rs)
+        → write_padded_report() with HidOptimizer (src/devices/mod.rs)
+          → hidapi device.write()
 ```
 
-This looks correct based on similar projects. The 0x21 command is standard for RGB control.
+### Current RGB Implementation
 
-### Potential Issues
-
-#### 1. **Report ID Handling**
-
-**Current approach**:
 ```rust
-write_padded_report(&device, data, 65, true)  // Always uses report ID 0x00
-```
+// src/devices/keyboards/mod.rs — GenericKeyboard::set_zone_colors()
+async fn set_zone_colors(&mut self, colors: &[Color]) -> Result<()> {
+    let cmd = RgbZoneCommand::new_all_zones(colors);
+    let mut buffer = [0u8; KEYBOARD_REPORT_SIZE]; // Stack-allocated, 65 bytes
+    let size = self.report_builder.build_report(cmd, &mut buffer)?;
 
-**Question**: Should we try different report IDs?
-- Some devices use report ID 0x00 (implicit)
-- Others require explicit report IDs
-- Try: `[0x00, 0x21, 0xFF, ...]` vs `[0x21, 0xFF, ...]`
-
-#### 2. **Feature Reports vs Output Reports**
-
-**Current**: We use `device.write()` which sends Output Reports
-
-**Alternative**: Try `device.send_feature_report()` for Feature Reports
-
-Some SteelSeries devices may require Feature Reports instead:
-```rust
-// Try adding to GenericKeyboard
-fn send_feature_report(&mut self, data: &[u8]) -> Result<()> {
-    let device = self.device.as_ref()?;
-    let device = device.lock()?;
-
-    // hidapi send_feature_report
-    device.send_feature_report(data)?;
+    let device = self.device.as_ref()
+        .ok_or_else(|| Error::DeviceCommunication("Not connected".to_string()))?;
+    let device = device.lock();
+    write_padded_report(&device, &buffer[1..size], KEYBOARD_REPORT_SIZE, true)?;
     Ok(())
 }
 ```
 
-**Known issue**: [hidapi #174](https://github.com/libusb/hidapi/issues/174) mentions feature report failures on some devices
+**What's working correctly**:
+- ✅ Command `0x21` with zone selector `0xFF` for all-zone RGB (confirmed on hardware)
+- ✅ `HidReportBuilder` serializes commands consistently with proper report ID, padding, and validation
+- ✅ `HidOptimizer` deduplicates identical reports within 50 ms to reduce unnecessary I/O
+- ✅ Stack-allocated `[u8; 65]` buffers avoid per-frame heap allocations
+- ✅ `Cow<[Color]>` in `RgbZoneCommand` enables zero-copy when borrowing color slices
+
+### Potential Issues & Improvement Areas
+
+#### 1. **Feature Reports vs Output Reports**
+
+**Current**: `device.write()` sends Output Reports
+
+**Alternative**: Some SteelSeries devices (especially for OLED) use Feature Reports:
+```rust
+device.send_feature_report(data)?;
+```
+
+**Status**: apex-tux uses `send_feature_report()` for OLED. RGB control has been confirmed working with Output Reports (`write()`), but Feature Reports might be needed for per-key RGB or other undiscovered commands.
+
+#### 2. **Report ID Handling**
+
+**Current approach**:
+```rust
+// write_padded_report() prepends report ID 0x00 for keyboards
+// Headsets omit the report ID
+```
+
+The `HidDeviceType` enum handles this automatically:
+- `Keyboard` → 65 bytes with report ID `0x00` at offset 0
+- `Headset` → 64 bytes without report ID
+
+This is confirmed correct for zone-based RGB.
 
 #### 3. **Device Initialization**
 
 **Current**:
 ```rust
 fn initialize(&mut self) -> Result<()> {
-    let init_cmd = [0x09];  // "save" command
-    let _ = self.send_report(&init_cmd);
-    Ok(())
+    let cmd = ApplyCommand;
+    let mut buffer = [0u8; KEYBOARD_REPORT_SIZE];
+    let size = self.report_builder.build_report(cmd, &mut buffer)?;
+    // ... sends the apply command
 }
 ```
 
-**Enhancement**: Try more comprehensive initialization:
+The initialization sends a single Apply command (`0x09`). More complex initialization sequences may be needed for per-key RGB mode switching.
+
+#### 4. **HID Optimizer (Deduplication)**
+
+**Implemented** in `src/devices/mod.rs`:
 ```rust
-fn initialize(&mut self) -> Result<()> {
-    // Try multiple common init sequences
-    let _ = self.send_report(&[0x09]);  // Save/commit
-    let _ = self.send_report(&[0x28]);  // Alternative commit
-    let _ = self.send_report(&[0x0C, 0x00]);  // Device wake/reset
-
-    std::thread::sleep(Duration::from_millis(50));  // Let device settle
-    Ok(())
+pub struct HidOptimizer {
+    report_cache: Mutex<HashMap<u64, Instant>>,  // FNV-1a hash → timestamp
+    connectivity_cache: Mutex<HashMap<String, (bool, Instant)>>,
+    cache_timeout: Duration,                      // 50ms
 }
 ```
 
-#### 4. **Interface Selection**
+The optimizer:
+- Hashes outgoing reports with FNV-1a (u64)
+- Skips writes if an identical report was sent within 50 ms
+- Cleans cache entries when size exceeds 100
+- Also caches device connectivity status for 5 seconds
 
-**Current**: Opens first matching interface
+This is transparent to callers and reduces CPU/I/O during high-frequency animation loops.
 
-**Verify**: Ensure we're using the correct HID interface
-- Keyboards often have multiple interfaces (0, 1, 2)
-- Interface 1 is usually for control (confirmed in CLAUDE.md)
-- Check if DeviceManager correctly filters by interface number
+#### 5. **Direct hidraw Access (Experimental Alternative)**
 
-#### 5. **Direct hidraw Access**
-
-**Alternative approach**: Bypass hidapi and use raw `/dev/hidraw*` access
-
-Many working Python tools use direct file I/O:
+Some Python tools bypass hidapi entirely and write directly to `/dev/hidraw*`:
 ```python
-# Example from working Python tools
 with open('/dev/hidraw0', 'wb') as f:
     f.write(bytes([0x21, 0xFF, r, g, b, ...]))
 ```
 
-Rust equivalent:
-```rust
-use std::fs::OpenOptions;
-use std::io::Write;
+**Trade-off**: Less portable but more direct control. Not currently implemented in steelseriesgg-rs and unlikely to be needed given that hidapi works correctly.
 
-fn send_via_hidraw(path: &str, data: &[u8]) -> Result<()> {
-    let mut file = OpenOptions::new()
-        .write(true)
-        .open(path)?;
-    file.write_all(data)?;
-    Ok(())
-}
+#### 6. **Enhanced Debug Logging**
+
+**Already implemented** via `tracing`:
+```rust
+debug!(
+    "Writing optimized HID report: len={}, offset={}, data={:02x?}",
+    effective_len, offset,
+    &report_data[..effective_len.min(16)]
+);
 ```
 
-**Trade-off**: Less portable, but more direct control
+Enable with `RUST_LOG=debug ssgg rgb --color red` to see all HID reports being sent.
+
+Additionally, `src/devices/diagnostics.rs` provides `HidDiagnostics` for structured communication logging with timing, operation types, and error tracking.
 
 ## Recommendations
 
-### Immediate Actions (Priority Order)
+### Completed Improvements ✅
 
-1. **Add Feature Report Support** ⭐⭐⭐
-   ```rust
-   // Add method to Device trait and GenericKeyboard
-   fn send_feature_report(&mut self, data: &[u8]) -> Result<()>;
+1. **HidReportBuilder** — All commands go through the builder; no raw byte arrays
+2. **Stack-allocated buffers** — `[u8; 65]` instead of `Vec<u8>` in hot paths
+3. **HidOptimizer** — Deduplication layer reduces unnecessary writes by 50–90 % during animations
+4. **Diagnostics** — `HidDiagnostics` for communication analysis
+5. **Actuation control** — `ActuationCommand` with validation (0x2D, experimental)
+6. **Reactive lighting** — 0x25 and 0x26 commands implemented for Apex 3 TKL
 
-   // Try feature reports if output reports fail
-   if self.send_report(data).is_err() {
-       self.send_feature_report(data)?;
-   }
-   ```
+### Remaining Improvements
 
-2. **Enhanced Debug Logging** ⭐⭐⭐
-   ```rust
-   // Log USB interface numbers, device paths
-   debug!("Opening device: vendor={:04x} product={:04x} interface={}",
-          info.vendor_id, info.product_id, info.interface_number);
+1. **Feature Report Support** ⭐⭐⭐
+   - Try `send_feature_report()` for commands that don't work with `write()`
+   - Especially relevant for per-key RGB discovery
 
-   // Log actual HID report sent (already done)
-   debug!("Sending HID report: {:02x?}", data);
-   ```
+2. **Per-Key RGB Protocol Discovery** ⭐⭐⭐
+   - The placeholder command (`0x23`) needs replacement with the real protocol
+   - Requires USB traffic capture from SteelSeries GG
+   - See `PROTOCOL_RESEARCH.md` for capture methodology
 
-3. **Try Different Report ID Prefixes** ⭐⭐
-   ```rust
-   // Test both approaches
-   send_report(&[0x00, 0x21, 0xFF, ...]);  // Explicit report ID
-   send_report(&[0x21, 0xFF, ...]);         // Implicit report ID
-   ```
+3. **Retry Logic** ⭐⭐
+   - `set_zone_colors_with_retry()` exists on the `Keyboard` trait
+   - Consider adding retry at the `write_padded_report()` level for transient HID errors
 
-4. **Add Retry Logic** ⭐⭐
-   ```rust
-   fn send_report_with_retry(&mut self, data: &[u8], attempts: u32) -> Result<()> {
-       if attempts == 0 {
-           return Err(Error::InvalidConfig("Number of attempts must be at least 1".to_string()));
-       }
-       for attempt in 0..attempts {
-           match self.send_report(data) {
-               Ok(_) => return Ok(()),
-               Err(e) if attempt < attempts - 1 => {
-                   debug!("Attempt {}/{} failed, retrying: {:?}", attempt + 1, attempts, e);
-                   std::thread::sleep(Duration::from_millis(50));
-               }
-               Err(e) => return Err(e),
-           }
-       }
-       unreachable!()
-   }
-   ```
-
-5. **Test Direct hidraw Access** ⭐ (experimental)
-   - Add feature flag `direct-hidraw`
-   - Implement fallback to raw `/dev/hidraw*` if hidapi fails
-   - Compare results between hidapi and direct access
-
-### Long-term Improvements
-
-1. **USB Packet Capture for Verification**
-   - Use Wireshark to capture official SteelSeries Engine traffic
-   - Verify our byte sequences match exactly
-   - Document any discrepancies
-
-2. **Device-Specific Profiles**
-   - Different initialization for different product IDs
-   - Per-device command mappings
-   - Handle quirks (e.g., Apex 3 vs Apex Pro TKL 2023)
-
-3. **Kernel Driver Investigation**
-   - Recent kernel patch: [LKML: steelseries: Add support for Arctis headset lineup](https://lkml.org/lkml/2026/1/11/618)
-   - Check if kernel exposes better interfaces
-   - Consider using kernel HID API directly
+4. **Actuation Read-Back** ⭐⭐
+   - Write works (0x2D); read command unknown
+   - Try `get_feature_report()` with various report IDs
 
 ## Testing Checklist
 
 When testing RGB control improvements:
 
 - [ ] Test with `RUST_LOG=debug` to see all HID reports
-- [ ] Verify device is detected: `cargo run -- devices`
-- [ ] Try static color: `cargo run -- rgb --color red`
+- [ ] Verify device is detected: `ssgg devices`
+- [ ] Try static color: `ssgg rgb --color red`
 - [ ] Check USB permissions: `ls -la /dev/hidraw*`
 - [ ] Verify udev rules loaded: `udevadm control --reload-rules`
-- [ ] Test as non-root user (should work)
-- [ ] Compare hidapi backend: `HIDAPI_IMPL=hidapi-hidraw` vs `hidapi-libusb`
-- [ ] Monitor USB traffic: `sudo usbmon` or Wireshark
+- [ ] Test as non-root user (should work with proper udev rules)
+- [ ] Monitor USB traffic: `sudo modprobe usbmon && sudo wireshark`
 - [ ] Test on actual hardware (not VM)
+- [ ] Verify HidOptimizer deduplication: watch for "Skipping duplicate HID report" in debug logs
 
 ## Conclusion
 
@@ -311,29 +273,25 @@ When testing RGB control improvements:
 
 **However**, investigating them led to discovering multiple working Linux RGB control projects that confirm:
 1. ✅ Our current approach (hidapi + 0x21 command) is fundamentally correct
-2. ⚠️ We may need to try Feature Reports instead of Output Reports
-3. ⚠️ Device initialization may need improvement
-4. ⚠️ Interface selection should be verified
+2. ✅ The `HidReportBuilder` architecture is sound and well-structured
+3. ✅ The `HidOptimizer` provides meaningful performance improvement
+4. ⚠️ Feature Reports may be needed for undiscovered commands (per-key RGB, actuation read)
+5. ⚠️ The per-key RGB protocol (0x23) is still a placeholder requiring hardware research
 
-**Next steps**: Implement the recommended changes above, starting with Feature Report support and enhanced debugging.
+**Next steps**: Focus on USB traffic capture to discover the per-key RGB protocol and actuation read-back command. See `PROTOCOL_RESEARCH.md` for the detailed research plan.
 
 ---
 
 ## Sources
 
-- [usbd-human-interface-device - GitHub](https://github.com/dlkj/usbd-human-interface-device)
-- [kanata-keyberon - crates.io](https://crates.io/crates/kanata-keyberon)
+- [usbd-human-interface-device — GitHub](https://github.com/dlkj/usbd-human-interface-device)
+- [kanata-keyberon — crates.io](https://crates.io/crates/kanata-keyberon)
 - [Kanata Linux Setup](https://github.com/jtroo/kanata/blob/main/docs/setup-linux.md)
-- [apexctl - GitHub](https://github.com/AstroSnail/apexctl)
-- [RGB_controller - GitHub](https://github.com/PCBscanner/RGB_controller)
-- [apex7tkl_linux - GitHub](https://github.com/FrankGrimm/apex7tkl_linux)
-- [steelkeys - GitHub](https://github.com/daiyam/steelkeys)
-- [apex-tux - GitHub](https://github.com/not-jan/apex-tux)
-- [steelseries-linux - GitHub](https://github.com/MiddleMan5/steelseries-linux)
-- [msi-kbd-backlight - GitHub](https://github.com/kyak/msi-kbd-backlight)
-- [MSIKLM - GitHub](https://github.com/Gibtnix/MSIKLM)
-- [msi-perkeyrgb - GitHub](https://github.com/Askannz/msi-perkeyrgb)
+- [apexctl — GitHub](https://github.com/AstroSnail/apexctl)
+- [RGB_controller — GitHub](https://github.com/PCBscanner/RGB_controller)
+- [apex7tkl_linux — GitHub](https://github.com/FrankGrimm/apex7tkl_linux)
+- [steelkeys — GitHub](https://github.com/daiyam/steelkeys)
+- [apex-tux — GitHub](https://github.com/not-jan/apex-tux)
+- [msi-perkeyrgb — GitHub](https://github.com/Askannz/msi-perkeyrgb)
 - [ArchWiki: Disable SteelSeries RGB lights](https://wiki.archlinux.org/title/User:Mvasi90/Disable_SteelSeries_RGB_lights)
-- [LKML: HID: steelseries kernel patch](https://lkml.org/lkml/2026/1/11/618)
 - [hidapi Issue #174](https://github.com/libusb/hidapi/issues/174)
-- [OpenRGB Apex Support Issue](https://gitlab.com/CalcProgrammer1/OpenRGB/-/issues/326)

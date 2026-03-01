@@ -1,7 +1,7 @@
-# Protocol Research Findings - Apex Pro TKL 2023
+# Protocol Research Findings — Apex Pro TKL 2023
 
-**Last Updated**: 2026-01-15
-**Status**: Active Testing Phase - Bulk Command Discovery
+**Last Updated**: 2026-03-01 (originally 2026-01-15)
+**Status**: Active Testing Phase — Bulk Command Discovery
 
 ---
 
@@ -9,14 +9,16 @@
 
 This document compiles reverse engineering resources and protocol discoveries for implementing full SteelSeries Apex Pro TKL 2023 support in steelseriesgg-rs. Key findings include:
 
-- ✅ **WINE/Lutris compatibility** - SteelSeries GG can run on Linux via Lutris
-- ✅ **Existing protocol implementations** - Multiple open-source projects with working Rust/Python code
-- ✅ **RGB protocol documentation** - Detailed packet structures from MSI keyboard research
-- ✅ **Systematic command testing** - Automated bulk testing system implemented (0x20-0x2F range)
-- ✅ **Confirmed RGB commands** - 0x21 (colors), 0x22 (brightness), 0x23 (effects)
-- ✅ **OSD navigation discovered** - 0x24 brings up actuation menu
-- 🔄 **Actuation control** - In progress: identifying value-setting commands
-- ❌ **Rapid Trigger protocol** - Not yet tested (planned for 0x30-0x3F range)
+- ✅ **WINE/Lutris compatibility** — SteelSeries GG can run on Linux via Lutris
+- ✅ **Existing protocol implementations** — Multiple open-source projects with working Rust/Python code
+- ✅ **RGB protocol documentation** — Detailed packet structures from MSI keyboard research
+- ✅ **Systematic command testing** — Automated bulk testing system implemented (0x20–0x2F range)
+- ✅ **Confirmed RGB commands** — 0x21 (zone colors), 0x22 (brightness), 0x23 (per-key placeholder)
+- ✅ **Reactive & color shift** — 0x25 (reactive mode), 0x26 (color shift effect)
+- ✅ **OSD navigation discovered** — 0x24 brings up actuation menu on keyboard OLED
+- ✅ **Actuation control** — 0x2D write works (experimental); read command unknown
+- 🔄 **Per-key RGB protocol** — Command `0x23` is a placeholder; actual protocol undiscovered
+- ❌ **Rapid Trigger protocol** — Not yet tested (planned for 0x30–0x3F range)
 
 ---
 
@@ -24,14 +26,14 @@ This document compiles reverse engineering resources and protocol discoveries fo
 
 ### Testing Methodology
 
-**Device**: Apex Pro TKL 2023 (VID:0x1038, PID:0x1628)
+**Device**: Apex Pro TKL 2023 (VID:`0x1038`, PID:`0x1628`)
 **Approach**: Systematic bulk HID command testing with automated harness
 **Test Tool**: `bulk_test` binary in `src/bin/bulk_test.rs`
 
 ### Bulk Testing Results (2026-01-15)
 
 **Test Execution**:
-- Command range: 0x20-0x2F (16 commands)
+- Command range: 0x20–0x2F (16 commands)
 - Value patterns: 0x00, 0x04, 0x08, 0x14, 0x24, 0x30
 - Total tests: 96 (16 commands × 6 values)
 - Save command: 0x09 sent after each test
@@ -40,37 +42,44 @@ This document compiles reverse engineering resources and protocol discoveries fo
 
 ### Confirmed Commands
 
-| Command | Function | Status | Value Range | Notes |
-|---------|----------|--------|-------------|-------|
-| 0x09 | Save/apply settings | ✅ Confirmed | N/A (parameterless) | Must be sent after configuration commands |
-| 0x21 | RGB zone colors | ✅ Confirmed | 3 bytes per zone (RGB) | Sets individual zone colors |
-| 0x22 | RGB brightness | ✅ Confirmed | 0x00-0x64 (0-100) | Global brightness control |
-| 0x23 | RGB effects | ✅ Confirmed | Effect ID + params | Changes lighting effects |
-| 0x24 | OSD navigation | ✅ Confirmed | Menu position | Brings up actuation menu in keyboard OSD |
+| Command | Function | Rust Type / Impl | Status | Value Range | Notes |
+|---------|----------|-------------------|--------|-------------|-------|
+| `0x09` | Save/apply | `ApplyCommand` | ✅ Confirmed | N/A (parameterless) | Must follow config commands |
+| `0x21` | RGB zone colors | `RgbZoneCommand` | ✅ Confirmed | 3 bytes per zone (RGB) | Zone selector byte precedes color data |
+| `0x22` | RGB brightness | `BrightnessCommand` | ✅ Confirmed | 0x00–0x64 (0–100) | Global brightness control |
+| `0x23` | Per-key RGB | `PerKeyRgbCommand` | ⚠️ Placeholder | Unknown | Actual protocol not discovered |
+| `0x24` | OSD navigation | `Apex3Tkl::CMD_OSD_NAV` | ✅ Confirmed | Menu position | Brings up actuation menu |
+| `0x25` | Reactive mode | `Apex3Tkl::set_reactive_mode()` | ✅ Implemented | 0x00=off, 0x01=on | Confirmed on Apex 3 TKL |
+| `0x26` | Color shift | `Apex3Tkl::set_color_shift()` | ✅ Implemented | R G B R G B speed | Two-color transition |
+| `0x2D` | Actuation control | `ActuationCommand` | ✅ Experimental | 1–40 (0.1 mm units) | Write works; read unknown |
 
-### Commands Under Investigation (0x20, 0x25-0x2F)
+### Commands Under Investigation (0x20, 0x27–0x2C, 0x2E–0x2F)
 
-**Status**: Tested, awaiting observation analysis
+**Status**: Tested with value patterns; functions not yet identified through observable behavior.
 
-These commands were systematically tested with value patterns but their functions have not been identified through observable keyboard behavior yet. Possible functions:
-- Direct actuation point setting
+Possible functions include:
+- Direct actuation point setting (alternative to 0x2D)
 - Per-key actuation configuration
 - Rapid Trigger controls
 - Additional OSD/menu commands
-- Advanced RGB controls
+- Advanced RGB controls (effect speed, direction, etc.)
 
 **Next Steps**:
 1. Manual observation review of bulk test execution
-2. Annotation of `test-results-1768466614.json` with observed effects
+2. Annotation of test results JSON with observed effects
 3. Focused retesting of promising commands
 4. USB capture comparison with SteelSeries GG commands
 
 ### HID Communication Pattern
 
-**Report Structure**:
+**Report Structure** (Keyboards — 65 bytes):
 ```
-[Report ID: 0x00] [Command: 0xXX] [Data: variable] [Padding: to 64 bytes]
-Total: 65 bytes
+[Report ID: 0x00] [Command: 0xXX] [Data: variable] [Padding: zeros to 65 bytes]
+```
+
+**Report Structure** (Headsets — 64 bytes):
+```
+[Command: 0xXX] [Data: variable] [Padding: zeros to 64 bytes]
 ```
 
 **Example Commands**:
@@ -79,7 +88,8 @@ Total: 65 bytes
 ```rust
 [0x00, 0x21, 0xFF, R1, G1, B1, R2, G2, B2, ..., 0x00, 0x00, ...]
        ^^^^  ^^^^  ^^^^^^^^^^^^^^^^^^^^^^^
-       CMD   Zone  RGB data (9 zones × 3 bytes)
+       CMD   Zone  RGB data (up to 12 zones × 3 bytes)
+             sel
 ```
 
 **Set Brightness** (Command 0x22):
@@ -103,25 +113,48 @@ Total: 65 bytes
        CMD   Position/menu parameter
 ```
 
-### Actuation Point Hypothesis
+**Reactive Mode** (Command 0x25):
+```rust
+[0x00, 0x25, 0x01, 0x00, ...]  // Enable
+[0x00, 0x25, 0x00, 0x00, ...]  // Disable
+```
 
-**Encoding**: Likely 0.1mm increments
-- 0x04 = 0.4mm (minimum)
-- 0x08 = 0.8mm (default)
-- 0x14 = 2.0mm
-- 0x24 = 3.6mm (maximum)
+**Color Shift** (Command 0x26):
+```rust
+[0x00, 0x26, R1, G1, B1, R2, G2, B2, speed, 0x00, ...]
+       ^^^^  ^^^^^^^^^  ^^^^^^^^^  ^^^^^
+       CMD   Color 1    Color 2    Speed (0-100)
+```
 
-**Command Pattern**: Not yet identified
-- **Option 1**: Direct write command (e.g., `[0x2X, value]`)
-- **Option 2**: Sequence-based (navigate with 0x24, then set with another command)
-- **Option 3**: Multi-byte command (e.g., `[0x2X, zone/key, value]`)
+**Actuation Point** (Command 0x2D):
+```rust
+[0x00, 0x2D, value, 0x00, 0x00, ...]
+       ^^^^  ^^^^^
+       CMD   0.1mm increments (1=0.1mm, 36=3.6mm, max 40=4.0mm)
+```
 
-**Discovery Strategy**:
-1. ✅ Systematic testing completed (0x20-0x2F range)
-2. 🔄 Manual observation analysis in progress
-3. ⏳ USB capture with SteelSeries GG (if needed)
-4. ⏳ Command sequence testing
-5. ⏳ Focused value pattern testing on identified commands
+### Actuation Point Details
+
+**Encoding**: 0.1 mm increments
+- 4 = 0.4 mm (typical minimum for competitive gaming)
+- 8 = 0.8 mm (default)
+- 20 = 2.0 mm
+- 36 = 3.6 mm (maximum per SteelSeries spec)
+- Max internal value: 40 = 4.0 mm (clamped by `ActuationCommand`)
+
+**Implementation**:
+```rust
+// Via ActuationCommand struct
+let cmd = ActuationCommand::new(8);     // 0.8mm
+let cmd = ActuationCommand::from_mm(1.5); // Converts to 15 (1.5mm)
+cmd.to_mm();                             // → 1.5
+
+// Via ApexProTkl2023 wrapper
+apex.set_actuation_point(8)?;           // Raw value
+apex.set_actuation_point_mm(1.5)?;      // Millimeters
+```
+
+**Read-back**: Not implemented. The `Keyboard::read_actuation_point()` trait method always returns an error. The HID command to read the current actuation setting has not been discovered.
 
 ### Testing Tools
 
@@ -156,11 +189,6 @@ cargo run --release --bin bulk_test -- \
 - JSON result logging with timestamp
 - Manual observation annotation via `"notes"` field
 
-**Documentation**:
-- Test guide: `docs/sessions/20260115-bulk-testing-guide.md`
-- Analysis: `docs/sessions/20260115-bulk-test-analysis.md`
-- Progress log: `progress-bulk-testing.txt`
-
 ---
 
 ## 2. WINE Compatibility for Protocol Capture
@@ -170,7 +198,7 @@ cargo run --release --bin bulk_test -- \
 **Status**: Functional with caveats
 
 **Installation Method**:
-- Use Lutris installer: [SteelSeries GG - Lutris](https://lutris.net/games/steelseries-gg/)
+- Use Lutris installer: [SteelSeries GG — Lutris](https://lutris.net/games/steelseries-gg/)
 - Requires additional setup from: https://github.com/asheriif/steelseries-linux-lutris
 
 **Known Issues**:
@@ -184,12 +212,12 @@ cargo run --release --bin bulk_test -- \
 - Can test and validate discovered commands against official software behavior
 
 **References**:
-- [SteelSeries GG - Lutris](https://lutris.net/games/steelseries-gg/)
-- [WineHQ Forums - SteelSeries Engine 3](https://forum.winehq.org/viewtopic.php?t=30879)
+- [SteelSeries GG — Lutris](https://lutris.net/games/steelseries-gg/)
+- [WineHQ Forums — SteelSeries Engine 3](https://forum.winehq.org/viewtopic.php?t=30879)
 
 ---
 
-## 2. Official Resources
+## 3. Official Resources
 
 ### GameSense SDK (High-Level API)
 
@@ -216,7 +244,8 @@ curl -X POST http://127.0.0.1:27301/game_event ...
 ```
 
 **Implementation Notes**:
-- steelseriesgg-rs already implements GameSense server in `src/gamesense/`
+- steelseriesgg-rs already implements a GameSense-compatible server in `src/gamesense/server.rs`
+- Uses Axum HTTP server on 127.0.0.1:27301 with CORS protection
 - This is a higher-level abstraction; doesn't reveal underlying HID protocol
 
 **References**:
@@ -225,9 +254,9 @@ curl -X POST http://127.0.0.1:27301/game_event ...
 
 ---
 
-## 3. Existing Linux Implementations
+## 4. Existing Linux Implementations
 
-### 3.1 apex-tux (Rust - OLED Support)
+### 4.1 apex-tux (Rust — OLED Support)
 
 **Repository**: [not-jan/apex-tux](https://github.com/not-jan/apex-tux)
 
@@ -270,7 +299,7 @@ Apex5: 0x161C
 
 ---
 
-### 3.2 apex7tkl_linux (Python - RGB + OLED)
+### 4.2 apex7tkl_linux (Python — RGB + OLED)
 
 **Repository**: [FrankGrimm/apex7tkl_linux](https://github.com/FrankGrimm/apex7tkl_linux)
 
@@ -281,14 +310,14 @@ Apex5: 0x161C
 - Multiple key group definitions (FKEYS, ALPHA, NUMERIC)
 
 **Protocol Approach**:
-"Raw and unpolished code" - reverse engineered through trial and error. No formal protocol documentation included, but working Python implementation reveals command structures.
+"Raw and unpolished code" — reverse engineered through trial and error. No formal protocol documentation included, but working Python implementation reveals command structures.
 
 **Key Modules**:
-- `device.py` - HID communication layer
-- `payload.py` - Command packet construction
-- `colors.py` - RGB command generation
-- `oled.py` - OLED protocol
-- `keys.py` - Key mapping tables
+- `device.py` — HID communication layer
+- `payload.py` — Command packet construction
+- `colors.py` — RGB command generation
+- `oled.py` — OLED protocol
+- `keys.py` — Key mapping tables
 
 **Implementation Language**: Python
 **Library**: hidapi Python bindings
@@ -300,7 +329,7 @@ Apex5: 0x161C
 
 ---
 
-### 3.3 msi-perkeyrgb (Python - Comprehensive Protocol Docs)
+### 4.3 msi-perkeyrgb (Python — Comprehensive Protocol Docs)
 
 **Repository**: [Askannz/msi-perkeyrgb](https://github.com/Askannz/msi-perkeyrgb)
 
@@ -313,12 +342,12 @@ Apex5: 0x161C
 
 **Packet Types**:
 
-1. **0x0b Packet** - Effect Definition
-   - Size: 533 bytes (0x00-0x20C)
+1. **0x0b Packet** — Effect Definition
+   - Size: 533 bytes (0x00–0x20C)
    - Defines animation effects
    - Can be assigned to multiple keys
 
-2. **0x0e Packet** - Key Assignment
+2. **0x0e Packet** — Key Assignment
    - Maps effects and colors to individual keys
    - Structure: `[Base RGB] [Reactive RGB] [Reactive Duration] [Effect ID] [Mode] 0x00 [Keycode]`
 
@@ -326,17 +355,17 @@ Apex5: 0x161C
 
 | Byte Range | Purpose | Notes |
 |------------|---------|-------|
-| 0x00-0x01 | Packet header | `[0x0b 0x00]` |
-| 0x02-0x81 | Transition blocks | 16 max, 8 bytes each |
-| 0x82-0x83 | Filler | `[0x00 0x00]` |
-| 0x84-0x89 | Starting color | RGB, 2 bytes each (nibble-swapped) |
-| 0x8a-0x8b | Separator | `[0xFF 0x00]` |
-| 0x8c-0x95 | Wave mode params | Origin, direction, wavelength |
+| 0x00–0x01 | Packet header | `[0x0b 0x00]` |
+| 0x02–0x81 | Transition blocks | 16 max, 8 bytes each |
+| 0x82–0x83 | Filler | `[0x00 0x00]` |
+| 0x84–0x89 | Starting color | RGB, 2 bytes each (nibble-swapped) |
+| 0x8a–0x8b | Separator | `[0xFF 0x00]` |
+| 0x8c–0x95 | Wave mode params | Origin, direction, wavelength |
 | 0x96 | Transition count | Max 16 |
 | 0x97 | Separator | `[0x00]` |
-| 0x98-0x99 | Effect duration | Milliseconds, little-endian |
+| 0x98–0x99 | Effect duration | Milliseconds, little-endian |
 | 0x9a | Wave direction | 0=outward, 1=inward |
-| 0x9b-0x20C | Padding | All zeros |
+| 0x9b–0x20C | Padding | All zeros |
 
 #### Color Encoding (Nibble Swap)
 ```python
@@ -356,12 +385,12 @@ encoded_color = (color & 0x0F) << 4 + (color & 0xF0) >> 4
 ```
 
 **Mode Values**:
-- `0` - Effect without refresh
-- `1` - Inline static color
-- `2` - Effect with auto-refresh
-- `8` - Reactive (responds to key press)
+- `0` — Effect without refresh
+- `1` — Inline static color
+- `2` — Effect with auto-refresh
+- `8` — Reactive (responds to key press)
 
-**Reactive Duration**: 100-1000ms in vendor software
+**Reactive Duration**: 100–1000 ms in vendor software
 
 **Implementation Language**: Python
 **Library**: hidapi
@@ -374,7 +403,7 @@ encoded_color = (color & 0x0F) << 4 + (color & 0xF0) >> 4
 
 ---
 
-## 4. Product ID Mapping
+## 5. Product ID Mapping
 
 ### Known Apex Keyboard Product IDs
 
@@ -385,40 +414,45 @@ encoded_color = (color & 0x0F) << 4 + (color & 0xF0) >> 4
 | Apex 7 | 0x1612 | |
 | Apex 7 TKL | 0x1618 | |
 | Apex 5 | 0x161C | |
-| **Apex Pro TKL 2023** | **0x1628** | **Target device** |
+| Apex 3 | 0x161A | 10-zone RGB |
+| Apex 3 TKL | 0x1622 | 9-zone RGB, dedicated struct |
+| **Apex Pro TKL 2023** | **0x1628** | **Primary target device** |
 
 **Vendor ID**: 0x1038 (all SteelSeries devices)
 
 **Interface Numbers**:
 - Interface 0: Keyboard HID (standard keypress reporting)
 - Interface 1: Control interface (RGB, actuation, OLED)
-- Interface 2-3: Additional interfaces (device-specific)
+- Interface 2–3: Additional interfaces (device-specific, headsets use interface 3)
 
-**Note**: Apex Pro TKL 2023 (0x1628) is NOT documented in existing projects. Protocol must be discovered independently, but can build on patterns from 0x1614 (original Apex Pro TKL).
+> **Note**: Apex Pro TKL 2023 (0x1628) is NOT documented in existing open-source projects. Protocol must be discovered independently, but can build on patterns from 0x1614 (original Apex Pro TKL).
 
 ---
 
-## 5. Actuation & Rapid Trigger Protocol
+## 6. Actuation & Rapid Trigger Protocol
 
-### Current Status: Unknown
+### Current Status
 
-**Official Documentation**: None available
-**Community Research**: None found publicly
+| Feature | Status | Command | Notes |
+|---------|--------|---------|-------|
+| Actuation write | ✅ Experimental | `0x2D` | Write confirmed; value = 0.1mm units |
+| Actuation read | ❌ Unknown | ? | No query command discovered |
+| Rapid Trigger | ❌ Unknown | ? | Not yet tested |
 
 ### What We Know (Feature Behavior)
 
-**Actuation Point Adjustment**:
-- Range: 0.4mm to 3.6mm (per SteelSeries specs)
-- Can be set globally or per-key
-- Uses OmniPoint Hall Effect sensors
-- Measurement precision: ~0.1mm increments
+**Actuation Point Adjustment** (OmniPoint Hall Effect):
+- Range: 0.1 mm to 4.0 mm (internal limit; SteelSeries spec says 0.4–3.6 mm)
+- Can be set globally via `ApexProTkl2023::set_actuation_point()`
+- Per-key actuation: not yet implemented (command format unknown)
+- Measurement precision: 0.1 mm increments
 
 **Rapid Trigger**:
 - Firmware update (2023) added this feature
 - Eliminates fixed reset point
-- Key releases as soon as movement detected upward
-- Response time: 0.54ms (claimed)
-- 11x faster than traditional mechanical switches
+- Key releases as soon as upward movement detected
+- Response time: 0.54 ms (claimed)
+- Protocol: completely unknown — not yet tested
 
 ### Discovery Strategy
 
@@ -426,7 +460,7 @@ encoded_color = (color & 0x0F) << 4 + (color & 0xF0) >> 4
 1. Install SteelSeries GG via Lutris
 2. Configure device detection (per community guides)
 3. Start Wireshark/usbmon capture on Linux
-4. Change actuation settings in SteelSeries GG
+4. Change actuation/Rapid Trigger settings in SteelSeries GG
 5. Analyze USB traffic for command patterns
 
 **Tools**:
@@ -441,10 +475,10 @@ sudo cat /sys/kernel/debug/usb/usbmon/1u > capture.log
 ```
 
 #### Method 2: Systematic HID Command Testing
-1. Start with known RGB command structures (0x0b, 0x0e patterns)
-2. Test variations with different command bytes
-3. Monitor keyboard behavior (actuation feel, rapid trigger responsiveness)
-4. Document successful commands
+1. Use `bulk_test` binary to sweep remaining command ranges (0x30–0x3F, 0x10–0x1F)
+2. Monitor keyboard behavior (actuation feel, Rapid Trigger responsiveness)
+3. Document successful commands
+4. Cross-reference with known patterns
 
 **Safety**: Avoid firmware-related command ranges (likely 0xF0+). Stick to configuration commands.
 
@@ -453,111 +487,106 @@ sudo cat /sys/kernel/debug/usb/usbmon/1u > capture.log
 - Use tools like Ghidra for reverse engineering
 - Look for command parsing routines
 
-**Risk**: High complexity, low success rate without insider knowledge
+**Risk**: High complexity, low success rate without insider knowledge.
 
 ---
 
-## 6. Recommended Implementation Plan
+## 7. Recommended Implementation Plan
 
 ### Phase 1: Setup & Validation
 1. ✅ Install Lutris + SteelSeries GG (via WINE)
 2. ✅ Verify device detection in official software
 3. ✅ Set up usbmon/Wireshark for USB capture
-4. Test existing RGB commands from steelseriesgg-rs
+4. ✅ Test existing RGB commands from steelseriesgg-rs
+5. ✅ Implement actuation write (0x2D)
+6. ✅ Implement reactive mode (0x25) and color shift (0x26)
 
 ### Phase 2: RGB Protocol Reverse Engineering
-1. Capture USB traffic during RGB changes (SteelSeries GG → device)
+1. Capture USB traffic during per-key RGB changes (SteelSeries GG → device)
 2. Compare with known protocol structures (msi-perkeyrgb, apex-tux)
 3. Test captured commands via steelseriesgg-rs
-4. Document working commands in PROTOCOL.md
-5. Extend RGB implementation in `src/rgb/` and `src/devices/keyboards/`
+4. Document working commands in this file
+5. Replace `PerKeyRgbCommand` placeholder with verified protocol
 
-### Phase 3: Actuation Protocol Discovery
+### Phase 3: Actuation & Rapid Trigger Discovery
 1. Capture USB traffic during actuation adjustments
-2. Identify command byte patterns
-3. Test commands systematically on hardware
+2. Discover actuation read-back command
+3. Test Rapid Trigger enable/disable packets
 4. Validate actuation changes (physical testing)
-5. Implement API in `Keyboard` trait
+5. Add per-key actuation support if protocol allows
 
-### Phase 4: Rapid Trigger Protocol Discovery
-1. Capture USB traffic during Rapid Trigger toggle
-2. Identify enable/disable commands
-3. Test on hardware (rapid keypress tests)
-4. Document protocol
-5. Implement API in `Keyboard` trait
-
-### Phase 5: Integration & Testing
+### Phase 4: Integration & Testing
 1. Add profile persistence for new features
-2. Create CLI commands
+2. Create CLI commands for actuation and Rapid Trigger
 3. Write integration tests
 4. Update documentation
 
 ---
 
-## 7. Key Insights for Implementation
-
-### USB Communication Patterns (From Existing Projects)
-
-**Common Patterns**:
-- **Interface 1** used for control commands (RGB, OLED)
-- **Feature reports** (`send_feature_report()`) for configuration
-- **Output reports** (`write()`) for real-time effects
-- **Report ID** usually 0x00 for SteelSeries devices
-- **Padding** to fixed packet sizes (65 bytes typical)
-
-**HID Report Structure** (General):
-```
-[Report ID: 1 byte]
-[Command Byte: 1 byte]
-[Data Payload: N bytes]
-[Padding: to 65 bytes total]
-```
-
-### Byte Order Considerations
-- MSI/SteelSeries RGB uses **nibble swapping** for colors
-- Duration values are **little-endian**
-- Multi-byte values need endianness testing
-
-### Command Discovery Heuristics
-Based on MSI protocol:
-- `0x0b` = RGB effect definition
-- `0x0d` = Preview/save (?)
-- `0x0e` = Key assignment
-
-**Hypothesis**: Apex Pro TKL 2023 may use:
-- `0x0A-0x0F` range for RGB/lighting commands
-- `0x20-0x2F` range for actuation commands (unknown)
-- `0x30-0x3F` range for Rapid Trigger (unknown)
-
-*These are speculative - requires testing!*
-
----
-
 ## 8. Existing Code in steelseriesgg-rs
 
-### Current RGB Implementation (src/devices/keyboards/generic.rs)
+### Current Architecture
+
+The HID communication stack follows this pattern:
+
+```
+CLI (src/main.rs)
+  → Keyboard trait (src/devices/keyboards/mod.rs)
+    → GenericKeyboard / ApexProTkl2023 / Apex3Tkl
+      → HidReportBuilder + Command structs (src/devices/hid_reports.rs)
+        → write_padded_report() with HidOptimizer (src/devices/mod.rs)
+          → hidapi device.write()
+```
+
+### Current RGB Implementation
 
 ```rust
-pub fn set_color(&mut self, zone: u8, color: Color) -> Result<()> {
-    let mut report = vec![0u8; 65];
-    report[0] = 0x00; // Report ID
-    report[1] = 0x21; // Command byte (RGB)
-    // ... color data
-    write_padded_report(&self.device, &report, 65, true)?;
+// src/devices/keyboards/mod.rs — GenericKeyboard
+async fn set_zone_colors(&mut self, colors: &[Color]) -> Result<()> {
+    let cmd = RgbZoneCommand::new_all_zones(colors);
+    let mut buffer = [0u8; KEYBOARD_REPORT_SIZE];
+    let size = self.report_builder.build_report(cmd, &mut buffer)?;
+    // ... writes via write_padded_report()
+}
+```
+
+**Key Design Decisions**:
+- All commands go through `HidReportBuilder` — never raw byte arrays
+- Stack-allocated `[u8; 65]` buffers avoid heap allocation in hot paths
+- `HidOptimizer` deduplicates identical reports within 50 ms windows (FNV-1a hashing)
+- `Cow<[Color]>` in `RgbZoneCommand` allows zero-copy when borrowing color slices
+
+### Actuation Implementation
+
+```rust
+// src/devices/keyboards/apex_pro_tkl_2023.rs
+pub fn set_actuation_point(&mut self, value: u8) -> Result<()> {
+    let command = ActuationCommand::new(value);
+    command.validate()?;  // Range check: 1–40
+
+    let report_builder = HidReportBuilder::new(HidDeviceType::Keyboard);
+    let mut buffer = [0u8; KEYBOARD_REPORT_SIZE];
+    let size = report_builder.build_report(command, &mut buffer)?;
+
+    self.inner.send_raw(&buffer[..size])?;
+    self.inner.update_cached_actuation_point(value);
     Ok(())
 }
 ```
 
-**Current Command Byte**: `0x21` for RGB commands
+### Command Code Map (from `CommandCode` enum)
 
-**Next Steps**:
-1. Verify if `0x21` works for Apex Pro TKL 2023 (product ID 0x1628)
-2. Test if different command bytes exist for:
-   - Static color (`0x21`)
-   - Effects (`0x22`?)
-   - Per-key RGB (`0x23`?)
-   - Actuation (`0x30`??)
-   - Rapid Trigger (`0x40`??)
+```rust
+pub enum CommandCode {
+    Apply         = 0x09, // Save/commit settings
+    RgbControl    = 0x21, // Zone-based RGB
+    Brightness    = 0x22, // Global brightness
+    PerKeyRgb     = 0x23, // Per-key (placeholder)
+    ReactiveMode  = 0x25, // Reactive lighting toggle
+    ColorShift    = 0x26, // Two-color shift effect
+    ActuationControl = 0x2D, // Actuation point (experimental)
+}
+```
 
 ---
 
@@ -572,7 +601,7 @@ pub fn set_color(&mut self, zone: u8, color: Color) -> Result<()> {
 
 ### Capture Workflow
 1. Start USB capture
-2. Make ONE change in SteelSeries GG (e.g., set actuation to 1.0mm)
+2. Make ONE change in SteelSeries GG (e.g., set actuation to 1.0 mm)
 3. Stop capture
 4. Filter packets by device address
 5. Identify HID output/feature reports from host → device
@@ -589,7 +618,7 @@ pub fn set_color(&mut self, zone: u8, color: Color) -> Result<()> {
 ## 10. Safety Considerations
 
 ### What to Avoid
-- ❌ Commands in `0xF0-0xFF` range (likely firmware/bootloader)
+- ❌ Commands in `0xF0–0xFF` range (likely firmware/bootloader)
 - ❌ Sending random data without validation
 - ❌ Overwriting device configuration without backup
 - ❌ Testing without ability to restore defaults
@@ -600,6 +629,7 @@ pub fn set_color(&mut self, zone: u8, color: Color) -> Result<()> {
 - ✅ Start with read-only operations (queries)
 - ✅ Verify commands are reversible
 - ✅ Keep official software available for recovery
+- ✅ Use `ActuationCommand::validate()` to enforce safe ranges
 
 ### Recovery Plan
 1. If device becomes unresponsive:
@@ -617,20 +647,17 @@ pub fn set_color(&mut self, zone: u8, color: Color) -> Result<()> {
 ## 11. Next Actions
 
 ### Immediate Next Steps
-1. **Update PRD.md** with WINE/Lutris approach
-2. **Set up capture environment**:
-   - Install Lutris + SteelSeries GG
-   - Configure usbmon/Wireshark
-   - Test device detection
-3. **Begin RGB capture** (baseline before actuation work)
+1. **Sweep remaining command ranges**: 0x30–0x3F (Rapid Trigger hypothesis), 0x10–0x1F
+2. **Capture per-key RGB traffic**: SteelSeries GG via WINE → Wireshark
+3. **Discover actuation read command**: Test `get_feature_report()` with various report IDs
 4. **Clone reference repositories** for code study:
    - `git clone https://github.com/not-jan/apex-tux`
    - `git clone https://github.com/Askannz/msi-perkeyrgb`
 
 ### Development Workflow
 1. Capture → Analyze → Test → Document → Implement
-2. Focus on one feature at a time (RGB → Actuation → Rapid Trigger)
-3. Commit protocol findings to `docs/PROTOCOL.md` incrementally
+2. Focus on one feature at a time (Per-Key RGB → Actuation Read → Rapid Trigger)
+3. Commit protocol findings to this document incrementally
 4. Update steelseriesgg-rs implementation as commands are validated
 
 ---
@@ -651,9 +678,9 @@ pub fn set_color(&mut self, zone: u8, color: Color) -> Result<()> {
 - [apexctl (Rust)](https://github.com/AstroSnail/apexctl)
 
 ### WINE/Lutris
-- [SteelSeries GG - Lutris](https://lutris.net/games/steelseries-gg/)
+- [SteelSeries GG — Lutris](https://lutris.net/games/steelseries-gg/)
 - [SteelSeries Linux Lutris Setup](https://github.com/asheriif/steelseries-linux-lutris)
-- [WineHQ - SteelSeries Engine Issues](https://forum.winehq.org/viewtopic.php?t=30879)
+- [WineHQ — SteelSeries Engine Issues](https://forum.winehq.org/viewtopic.php?t=30879)
 
 ### Protocol Analysis Resources
 - [MSI Keyboard Effect Protocol](https://github.com/Askannz/msi-perkeyrgb/blob/master/documentation/0b_packet_information/msi-kb-effectdoc)
@@ -662,6 +689,6 @@ pub fn set_color(&mut self, zone: u8, color: Color) -> Result<()> {
 
 ---
 
-**Document Version**: 1.0
-**Contributors**: Research compiled from web sources and existing open-source projects
+**Document Version**: 2.0
+**Contributors**: Research compiled from web sources, hardware testing, and open-source projects
 **License**: MIT (same as steelseriesgg-rs project)

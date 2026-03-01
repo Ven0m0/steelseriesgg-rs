@@ -1,7 +1,7 @@
 # SteelSeries Apex Pro Key Mapping Research
 
-**Date**: 2026-01-16
-**Status**: PLACEHOLDER MAPPINGS - Requires Hardware Research
+**Date**: 2026-03-01 (originally 2026-01-16)
+**Status**: PLACEHOLDER MAPPINGS — Requires Hardware Research
 **Priority**: Critical for per-key RGB implementation
 
 ## Overview
@@ -10,9 +10,9 @@ This document outlines the current state of key-to-address mapping research for 
 
 ## ⚠️ CRITICAL DISCLAIMER
 
-**The key mappings currently implemented are PLACEHOLDER data based on standard keyboard layouts and educated guesses. They are NOT accurate for real hardware and should NOT be used in production.**
+**The key mappings currently implemented are PLACEHOLDER data based on standard keyboard layouts and educated guesses. They are NOT verified against real hardware and must NOT be relied upon for production use.**
 
-To use per-key RGB control, accurate HID key addresses must be discovered through hardware research and reverse engineering.
+Accurate HID key addresses must be discovered through hardware research and reverse engineering before per-key RGB can work correctly. In the meantime, the codebase falls back to zone-based RGB via `simulate_per_key_with_zones()`.
 
 ## Current Implementation
 
@@ -20,27 +20,61 @@ To use per-key RGB control, accurate HID key addresses must be discovered throug
 
 The key mapping system is implemented in `src/devices/key_mapping.rs` with:
 
-- **KeyId enum**: Physical key identifiers (e.g., `KeyId::A`, `KeyId::F1`)
-- **KeyAddress struct**: Matrix coordinates `(row, col)` for HID addressing
-- **KeyMapping struct**: Complete mapping for a specific keyboard model
-- **KeyMappingDatabase**: Database of all supported keyboard mappings
+- **`KeyId` enum**: 87 physical key identifiers covering function row, letter rows, bottom row, arrow cluster, navigation cluster, numpad, and SteelSeries-specific keys (`SteelSeriesKey`, `VolumeWheel`)
+- **`KeyAddress` struct**: Matrix coordinates `(row, col)` for HID addressing
+- **`KeyboardLayout` enum**: `FullSize`, `TenKeyLess`, `Compact`
+- **`KeyMapping` struct**: Complete mapping for a specific keyboard model, including a `key_map: HashMap<KeyId, KeyAddress>`, declared matrix dimensions, and cached key lists for efficient iteration
+- **`KeyMappingStats` struct**: Statistics about a mapping (total keys, matrix utilization, actual vs. declared dimensions)
+- **`KeyMappingDatabase`**: Database of all supported keyboard mappings, populated at construction with placeholder data
+
+### `KeyMapping` API
+
+```rust
+let mut mapping = KeyMapping::new(
+    product_id,
+    KeyboardLayout::TenKeyLess,
+    "Apex Pro TKL (2023)".to_string(),
+    6,   // matrix rows
+    17,  // matrix columns
+);
+
+mapping.add_key(KeyId::A, KeyAddress::new(3, 1));
+mapping.get_key_address(KeyId::A);    // → Some(KeyAddress { row: 3, col: 1 })
+mapping.supports_key(KeyId::A);       // → true
+mapping.get_all_keys();               // → &[KeyId] (stable iteration order)
+mapping.get_stats();                  // → KeyMappingStats
+```
 
 ### Supported Models (PLACEHOLDER)
 
-| Model | Product ID | Layout | Matrix Size | Status |
-|-------|------------|--------|-------------|---------|
-| Apex Pro TKL (2023) | 0x1628 | TenKeyLess | 6×17 | PLACEHOLDER |
-| Apex Pro | 0x1610 | Full-size | 6×21 | PLACEHOLDER |
-| Apex Pro TKL | 0x1614 | TenKeyLess | 6×17 | PLACEHOLDER |
+| Model | Product ID | Layout | Matrix Size | Mapped Keys | Utilization | Status |
+|-------|------------|--------|-------------|-------------|-------------|--------|
+| Apex Pro TKL (2023) | `0x1628` | TenKeyLess | 6×17 | ~87 | ~85 % | PLACEHOLDER |
+| Apex Pro | `0x1610` | Full-size | 6×21 | ~104 | ~82 % | PLACEHOLDER |
+| Apex Pro TKL | `0x1614` | TenKeyLess | 6×17 | ~87 | ~85 % | PLACEHOLDER |
 
-### Current Structure
+### Placeholder Matrix Layout (Apex Pro TKL 2023)
 
-```rust
-// Example placeholder mapping
-mapping.add_key(KeyId::A, KeyAddress::new(3, 1));      // Row 3, Col 1
-mapping.add_key(KeyId::Enter, KeyAddress::new(3, 13)); // Row 3, Col 13
-mapping.add_key(KeyId::Space, KeyAddress::new(5, 6));  // Row 5, Col 6
 ```
+Row 0 (Function):  ESC _ F1 F2 F3 F4 F5 F6 F7 F8 F9 F10 F11 F12   INS HOM PGU
+Row 1 (Numbers):    `  1  2  3  4  5  6  7  8  9  0   -   =  BKSP  DEL END PGD
+Row 2 (QWERTY):   TAB  Q  W  E  R  T  Y  U  I  O  P   [   ]   \
+Row 3 (Home):     CAPS  A  S  D  F  G  H  J  K  L  ;   '  _  ENTER        ↑
+Row 4 (Shift):    LSHF  _  Z  X  C  V  B  N  M  ,  .   /  RSHF       ←   ↓   →
+Row 5 (Bottom):   LCTL LWIN LALT _ _ _ SPC _ _ _ RALT RWIN MENU RCTL
+```
+
+> `_` indicates unused matrix positions (gaps). Real hardware matrices are typically 40–60 % utilized.
+
+## Zone-Based Fallback (Working Alternative)
+
+While per-key mapping uses placeholder data, the **zone fallback system** (`src/devices/zone_mapping.rs`) provides a working approximation:
+
+- **`ZoneMapping`** associates zones with `ZonePosition` identifiers (`MainKeys`, `FunctionRow`, `ArrowKeys`, etc.)
+- **`ZoneFallback`** maps individual `KeyId` values to their nearest zone
+- **`simulate_per_key_with_zones()`** on the `Keyboard` trait converts per-key color requests into zone-based updates
+
+This is the **recommended approach** until accurate per-key addresses are discovered.
 
 ## Research Requirements
 
@@ -49,12 +83,12 @@ mapping.add_key(KeyId::Space, KeyAddress::new(5, 6));  // Row 5, Col 6
 **Objective**: Understand the device's HID report structure
 
 **Methods**:
-1. **Linux**: `lsusb -v` to dump HID descriptors
+1. **Linux**: `lsusb -v -d 1038:1628` to dump HID descriptors
 2. **Analysis**: Parse HID report descriptor to find input/output report structure
-3. **Tools**: `hidapi` test programs, `usbhid-dump`
+3. **Tools**: `usbhid-dump -d 1038:1628`, hidapi test programs
 
 **Expected Findings**:
-- Report size (already known: 65 bytes for keyboards)
+- Report size (known: 65 bytes for keyboards)
 - Input/output report types
 - Usage pages and usage IDs
 - Possible key addressing hints
@@ -64,27 +98,27 @@ mapping.add_key(KeyId::Space, KeyAddress::new(5, 6));  // Row 5, Col 6
 **Objective**: Discover per-key RGB commands by analyzing existing software
 
 **Methods**:
-1. **USB Traffic Capture**: Use Wireshark/USBPcap to monitor SteelSeries Engine
-2. **HID Report Analysis**: Decode captured HID reports
-3. **Pattern Recognition**: Identify per-key command patterns
+1. **USB Traffic Capture**: Use Wireshark/usbmon to monitor SteelSeries GG (via WINE/Lutris)
+2. **HID Report Analysis**: Decode captured HID output reports to the device
+3. **Pattern Recognition**: Identify per-key vs. zone command patterns
 
 **Expected Findings**:
-- Per-key RGB command format (likely different from current 0x21 zone command)
-- Key addressing scheme
-- Command validation and acknowledgment
+- Per-key RGB command format (likely different from the zone command `0x21`)
+- Key addressing scheme (sequential, matrix row/col, or other)
+- Command validation and acknowledgment patterns
 
 ### Phase 3: Hardware Testing
 
 **Objective**: Empirically discover key addresses through controlled testing
 
 **Methods**:
-1. **Systematic Testing**: Send test commands to individual matrix positions
+1. **Systematic Testing**: Send test commands to individual matrix positions via `bulk_test` binary
 2. **Visual Verification**: Observe which physical keys light up
-3. **Matrix Mapping**: Build accurate row/column to physical key mapping
+3. **Matrix Mapping**: Build accurate row/column → physical key mapping
 
 **Tools Needed**:
-- Apex Pro hardware (preferably multiple variants)
-- Test RGB commands with single-key targeting
+- Apex Pro hardware (preferably TKL 2023, PID `0x1628`)
+- The `bulk_test` binary (`src/bin/bulk_test.rs`) for automated command sweeps
 - Physical observation and documentation
 
 ### Phase 4: Reverse Engineering
@@ -92,18 +126,18 @@ mapping.add_key(KeyId::Space, KeyAddress::new(5, 6));  // Row 5, Col 6
 **Objective**: Understand SteelSeries proprietary protocol extensions
 
 **Methods**:
-1. **Firmware Analysis**: If possible, analyze keyboard firmware
-2. **Driver Analysis**: Reverse engineer Windows/macOS drivers
-3. **Documentation**: Search for leaked protocol specifications
+1. **Traffic Capture**: Compare official software commands with our implementation
+2. **Code Analysis**: Study apex-tux, apex7tkl_linux, msi-perkeyrgb Python/Rust code
+3. **Documentation**: Search for leaked or published protocol specifications
 
-**Risk**: May violate terms of service or IP rights
+**Risk**: May have IP/licensing implications — proceed with caution.
 
 ## Known Protocol Information
 
 ### Current Zone-Based RGB (Working)
 
 ```
-Command: 0x21 0xFF [R G B] [R G B] ... (9 zones)
+Command 0x21: [0x00] [0x21] [0xFF] [R G B] [R G B] ... (up to 12 zones)
 - Works for zone-based lighting
 - Controls groups of keys, not individual keys
 - Limited precision for effects
@@ -111,122 +145,93 @@ Command: 0x21 0xFF [R G B] [R G B] ... (9 zones)
 
 ### Hypothetical Per-Key RGB (Unknown)
 
-```
-Possible formats:
-1. 0x21 [key_id] [R G B]           # Single key
-2. 0x21 [row] [col] [R G B]        # Matrix addressing
-3. 0x2X [key_matrix_data...]       # Bulk key update
-4. Different command code entirely  # Not 0x21
+The placeholder `PerKeyRgbCommand` (command `0x23`) supports three addressing modes that **have not been verified**:
+
+```rust
+pub enum PerKeyAddressingMode {
+    Sequential,    // Keys indexed 0..N
+    MatrixRowCol,  // Keys addressed by (row, col)
+    DirectIndex,   // Keys addressed by a single index
+}
 ```
 
-### Missing Commands
+Possible real formats (speculative):
+1. `0x23 [key_index] [R G B]` — Single key by index
+2. `0x23 [row] [col] [R G B]` — Matrix addressing
+3. `0x2X [batch_data...]` — Bulk key update
+4. Completely different command code
 
-- **Key Query**: Read current key state/color
-- **Matrix Info**: Get matrix dimensions
-- **Key Capability**: Which keys support RGB
-- **Firmware Info**: Protocol version/capabilities
+### Actuation Point (Discovered)
+
+```
+Command 0x2D: [0x00] [0x2D] [value] [padding]
+- value: 0.1mm increments (1 = 0.1mm, 36 = 3.6mm)
+- Valid range: 1–40
+- Write confirmed working; read command unknown
+```
 
 ## Implementation Strategy
 
-### Immediate (Development Structure)
+### Immediate (Development Structure) ✅ Completed
 
-✅ **Completed**:
-- Key mapping data structure (`KeyId`, `KeyAddress`, `KeyMapping`)
-- Database system for multiple keyboard variants
-- Placeholder mappings for development
-- Comprehensive test coverage
+- [x] Key mapping data structures (`KeyId`, `KeyAddress`, `KeyMapping`, `KeyMappingDatabase`)
+- [x] Database system for multiple keyboard variants
+- [x] Placeholder mappings for development
+- [x] Comprehensive test coverage
+- [x] Integration with HID report system (`PerKeyRgbBuilder`, `PerKeyRgbCommand`)
+- [x] Zone-based fallback system (`ZoneMapping`, `ZoneFallback`)
 
-### Short-term (Research Phase)
+### Short-term (Research Phase) 🔄 In Progress
 
-🔄 **Next Steps**:
-1. Create HID research tools in `src/devices/research/`
-2. Implement USB traffic capture analysis
-3. Build systematic key testing utilities
-4. Document findings in this research log
+1. Complete observation analysis of bulk test results (0x20–0x2F range)
+2. Capture USB traffic with SteelSeries GG via WINE/Lutris
+3. Identify per-key command byte(s) from captured traffic
+4. Build systematic key testing utilities
+5. Document findings in this research log
 
-### Long-term (Production Ready)
+### Long-term (Production Ready) ⏸️ Pending
 
-⏸️ **Future Work**:
-1. Replace placeholder mappings with accurate data
-2. Implement per-key RGB commands in HID reports system
+1. Replace placeholder mappings with verified hardware data
+2. Implement actual per-key RGB commands in `PerKeyRgbCommand`
 3. Add runtime key mapping discovery
 4. Create validation tools for mapping accuracy
-
-## Research Tools Needed
-
-### HID Analysis Tools
-
-```rust
-// Proposed: src/devices/research/hid_analyzer.rs
-pub struct HidAnalyzer {
-    device: HidDevice,
-    capture_log: Vec<HidReport>,
-}
-
-impl HidAnalyzer {
-    pub fn capture_traffic(&mut self, duration: Duration) -> Result<()>;
-    pub fn analyze_patterns(&self) -> Vec<ProtocolPattern>;
-    pub fn test_key_matrix(&mut self, start_row: u8, end_row: u8) -> Result<()>;
-}
-```
-
-### Traffic Capture Integration
-
-```rust
-// Proposed: Integration with existing diagnostic system
-use crate::devices::diagnostics::HidDiagnostics;
-
-// Enhance diagnostics to capture per-key test patterns
-diagnostics.start_key_mapping_research()?;
-```
-
-### Systematic Testing Framework
-
-```rust
-// Proposed: src/devices/research/key_tester.rs
-pub struct KeyMatrixTester {
-    keyboard: Box<dyn Keyboard>,
-    results: HashMap<KeyAddress, TestResult>,
-}
-
-impl KeyMatrixTester {
-    pub fn test_matrix_position(&mut self, addr: KeyAddress) -> Result<TestResult>;
-    pub fn discover_all_keys(&mut self) -> Result<Vec<(KeyAddress, KeyId)>>;
-    pub fn validate_mapping(&self, mapping: &KeyMapping) -> ValidationReport;
-}
-```
+5. Support ANSI and ISO layout variants
 
 ## Current Limitations
 
 ### Functional Limitations
 
-- ❌ **No per-key control**: Only zone-based RGB
-- ❌ **Inaccurate mappings**: Placeholder data only
-- ❌ **No key discovery**: Cannot detect available keys
-- ❌ **No validation**: Cannot verify mapping accuracy
+- ❌ **No per-key control**: Zone-based RGB only (per-key uses placeholder protocol)
+- ❌ **Inaccurate mappings**: Placeholder data only — not verified against hardware
+- ❌ **No key discovery**: Cannot detect available keys at runtime
+- ❌ **No validation**: Cannot verify mapping accuracy without hardware
 
 ### Research Limitations
 
-- ❌ **No hardware access**: Development without physical devices
+- ❌ **Limited hardware access**: Development primarily without physical devices
 - ❌ **No protocol docs**: Proprietary SteelSeries protocol
-- ❌ **No reference impl**: Cannot analyze official software behavior
-- ❌ **Legal constraints**: Reverse engineering restrictions
+- ❌ **Legal constraints**: Reverse engineering restrictions may apply
 
-## Expected Challenges
+## Integration Points
 
-### Technical Challenges
+### Current Integration
 
-1. **Matrix Complexity**: Real key matrices may be non-linear or have gaps
-2. **Model Variations**: Different Apex Pro models may use different addressing
-3. **Protocol Evolution**: Newer firmware may change command formats
-4. **Error Handling**: Invalid addresses may cause device lockup/reset
+| Component | File | Status |
+|-----------|------|--------|
+| HID Reports | `src/devices/hid_reports.rs` — `PerKeyRgbBuilder`, `PerKeyRgbCommand` | ✅ Ready (placeholder protocol) |
+| Keyboard Trait | `src/devices/keyboards/mod.rs` — `set_key_color()`, `set_key_colors()`, `set_key_color_direct()` | ✅ API defined |
+| Zone Fallback | `src/devices/zone_mapping.rs` — `simulate_per_key_with_zones()` | ✅ Working |
+| Device Discovery | `src/devices/discovery.rs` — product ID based mapping selection | ✅ Working |
+| Diagnostics | `src/devices/diagnostics.rs` — HID communication logging | ✅ Working |
+| RGB Effects | `src/rgb/mod.rs` — `PerKeyEffect`, `PerKeyRgbController` | ✅ Ready |
 
-### Legal/Ethical Challenges
+### Future Integration (When Accurate Mappings Available)
 
-1. **IP Rights**: Key mapping data may be considered IP
-2. **DMCA**: Reverse engineering may violate software licenses
-3. **ToS Violation**: Analyzing official software may breach terms
-4. **Hardware Warranty**: Testing may void device warranty
+- 🔄 **RGB Controller**: Per-key effect rendering with real matrix addresses
+- 🔄 **GameSense Server**: Individual key reactive lighting
+- 🔄 **Profiles**: Save/load per-key color configurations
+- 🔄 **CLI Tools**: Per-key testing and debugging commands
+- 🔄 **Device State**: Persist per-key colors in state file
 
 ## Research Log
 
@@ -236,13 +241,13 @@ impl KeyMatrixTester {
 - ✅ Complete key mapping data structure
 - ✅ Database for multiple keyboard models
 - ✅ Placeholder mappings (development only)
-- ✅ Comprehensive test coverage (6/6 tests passing)
+- ✅ Comprehensive test coverage (all tests passing)
 - ✅ Integration with existing HID report system
 
 **Findings**:
-- Standard matrix addressing is typically 6-8 rows × 15-21 columns
+- Standard matrix addressing is typically 6–8 rows × 15–21 columns
 - TKL keyboards usually use fewer columns than full-size
-- Matrix utilization is typically 40-60% (many positions unused)
+- Matrix utilization is typically 40–60 % (many positions unused)
 - SteelSeries likely uses sparse matrix addressing
 
 **Next Priority**: Create HID analysis tools for traffic capture
@@ -264,95 +269,71 @@ impl KeyMatrixTester {
 
 | Test | Status | Notes |
 |------|--------|-------|
-| Data structures | ✅ PASS | All 6 tests passing |
-| Database loading | ✅ PASS | Known products detected |
+| Data structures | ✅ PASS | KeyId, KeyAddress, KeyMapping |
+| Database loading | ✅ PASS | Known products detected via product_ids |
 | Mapping stats | ✅ PASS | Statistics calculation works |
-| Key identification | ✅ PASS | KeyId display formats correct |
+| Key identification | ✅ PASS | KeyId Display formatting verified |
+| Zone fallback | ✅ PASS | simulate_per_key_with_zones() works |
 
 ### Hardware Testing (Future)
 
 | Test | Status | Hardware Required |
 |------|--------|-------------------|
-| Matrix addressing | ❌ TODO | Apex Pro TKL 2023 |
+| Matrix addressing | ❌ TODO | Apex Pro TKL 2023 (`0x1628`) |
 | Per-key RGB commands | ❌ TODO | Any Apex Pro model |
 | Command validation | ❌ TODO | Multiple Apex variants |
 | Error handling | ❌ TODO | Test invalid addresses |
-
-## Integration Points
-
-### Current Integration
-
-The key mapping system integrates with:
-
-- ✅ **HID Reports**: `HidReportBuilder` ready for per-key commands
-- ✅ **Diagnostics**: Can log key mapping test results
-- ✅ **Device Discovery**: Product ID based mapping selection
-- ✅ **Keyboard Traits**: Ready for per-key methods
-
-### Future Integration
-
-When accurate mappings are available:
-
-- 🔄 **RGB Controller**: Per-key effect rendering
-- 🔄 **GameSense**: Individual key reactive lighting
-- 🔄 **Profiles**: Save/load per-key configurations
-- 🔄 **CLI Tools**: Per-key testing and debugging
+| ANSI vs ISO layout | ❌ TODO | Both layout variants |
 
 ## Success Criteria
 
-### Phase 1 Success (Research Structure)
-
-✅ **COMPLETED**: All requirements met
+### Phase 1 Success (Research Structure) ✅ COMPLETED
 
 - [x] Complete key mapping data structure
 - [x] Database system for multiple keyboards
 - [x] Placeholder mappings for development
 - [x] Comprehensive test coverage
 - [x] Integration with HID system
+- [x] Zone-based fallback system
 
-### Phase 2 Success (Research Tools)
-
-⏸️ **PENDING**: Hardware access required
+### Phase 2 Success (Research Tools) ⏸️ PENDING
 
 - [ ] HID traffic analysis tools
 - [ ] Systematic matrix testing
 - [ ] Protocol pattern recognition
 - [ ] Research documentation
 
-### Phase 3 Success (Accurate Mappings)
-
-⏸️ **PENDING**: Requires Phase 2 completion
+### Phase 3 Success (Accurate Mappings) ⏸️ PENDING
 
 - [ ] Accurate key addresses for at least one Apex Pro model
 - [ ] Validated per-key RGB command format
 - [ ] Error handling for invalid addresses
 - [ ] Production-ready key mapping database
 
-### Phase 4 Success (Full Implementation)
+### Phase 4 Success (Full Implementation) ⏸️ PENDING
 
-⏸️ **PENDING**: Long-term goal
-
-- [ ] Per-key RGB control in user interface
+- [ ] Per-key RGB control in CLI
 - [ ] Advanced lighting effects (ripple, reactive, etc.)
 - [ ] GameSense per-key integration
 - [ ] Support for multiple Apex Pro variants
+- [ ] ANSI and ISO layout support
 
 ## Conclusion
 
-**Current Status**: US-004 architecture and structure are complete. The key mapping system provides a solid foundation for per-key RGB control once accurate HID addresses are discovered.
+**Current Status**: Key mapping infrastructure is complete with placeholder data. The `ZoneFallback` system provides a working approximation of per-key effects using zone-based control while the actual HID per-key protocol remains unknown.
 
-**Critical Path**: Hardware research is the blocking factor. All software infrastructure is ready to support per-key control once the protocol is reverse-engineered.
+**Critical Path**: Hardware research is the blocking factor. All software infrastructure — `KeyMapping`, `PerKeyRgbBuilder`, `PerKeyRgbCommand`, `ZoneFallback` — is ready to support per-key control once the protocol is reverse-engineered.
 
-**Risk Assessment**: High dependency on hardware access and reverse engineering success. Alternative: Focus on improved zone-based effects while researching per-key capabilities.
+**Risk Assessment**: High dependency on hardware access and reverse engineering success. The zone-based fallback ensures the project remains usable while research continues.
 
 **Next Actions**:
-1. Complete US-004 documentation and testing
-2. Move to US-005 (per-key RGB command builder) with placeholder data
-3. Prioritize hardware acquisition for research
-4. Build research tools for future protocol analysis
+1. Capture USB traffic with SteelSeries GG (WINE/Lutris) to identify per-key command format
+2. Run focused bulk tests in the 0x10–0x1F and 0x28–0x2C ranges
+3. Analyze traffic patterns from community projects (apex-tux, msi-perkeyrgb)
+4. Prioritize hardware acquisition for research
 
 ---
 
 **Document Status**: Complete for current development phase
-**Last Updated**: 2026-01-16
-**Next Review**: When hardware access is available
+**Last Updated**: 2026-03-01
+**Next Review**: When hardware access is available or new protocol information is discovered
