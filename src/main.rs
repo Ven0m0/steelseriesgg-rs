@@ -3209,15 +3209,21 @@ async fn run_animation_loop(daemon_state_anim: Arc<RwLock<DaemonState>>) {
                 }
             }
 
-            // Apply colors to hardware - get keyboard reference with minimal lock time
-            {
+            // Apply colors to hardware without holding the global state lock across I/O
+            // First, remove the keyboard entry from the map while holding the lock
+            let keyboard_entry = {
                 let mut state = daemon_state_anim.write().await;
-                if let Some((keyboard, _, _)) = state.keyboards.get_mut(serial.as_str()) {
-                    if let Err(e) = keyboard.set_zone_colors(colors).await {
-                        tracing::warn!("Failed to update keyboard {}: {}", serial, e);
-                    }
+                state.keyboards.remove(serial.as_str())
+            };
+
+            if let Some((mut keyboard, controller, other)) = keyboard_entry {
+                if let Err(e) = keyboard.set_zone_colors(colors).await {
+                    tracing::warn!("Failed to update keyboard {}: {}", serial, e);
                 }
-                // Lock is automatically dropped here
+
+                // Reinsert the keyboard entry after the async operation completes
+                let mut state = daemon_state_anim.write().await;
+                state.keyboards.insert(serial.clone(), (keyboard, controller, other));
             }
         }
 
