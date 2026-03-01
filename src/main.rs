@@ -2892,19 +2892,37 @@ fn apply_saved_poll_rates(config: &Config) {
     use steelseries_gg::pollrate::{DeviceType, PollRate, set_poll_rate};
 
     if let Some(mouse_hz) = config.poll_rate.mouse_hz {
-        if let Ok(rate) = PollRate::from_hz(mouse_hz) {
-            match set_poll_rate(DeviceType::Mouse, rate) {
-                Ok(()) => info!("Applied mouse poll rate: {} Hz", mouse_hz),
-                Err(e) => tracing::warn!("Failed to set mouse poll rate: {}", e),
+        match PollRate::from_hz(mouse_hz) {
+            Ok(rate) => {
+                match set_poll_rate(DeviceType::Mouse, rate) {
+                    Ok(()) => info!("Applied mouse poll rate: {} Hz", mouse_hz),
+                    Err(e) => tracing::warn!("Failed to set mouse poll rate: {}", e),
+                }
+            }
+            Err(e) => {
+                tracing::warn!(
+                    "Configured mouse poll rate {} Hz is invalid or unsupported: {}",
+                    mouse_hz,
+                    e
+                );
             }
         }
     }
 
     if let Some(keyboard_hz) = config.poll_rate.keyboard_hz {
-        if let Ok(rate) = PollRate::from_hz(keyboard_hz) {
-            match set_poll_rate(DeviceType::Keyboard, rate) {
-                Ok(()) => info!("Applied keyboard poll rate: {} Hz", keyboard_hz),
-                Err(e) => tracing::warn!("Failed to set keyboard poll rate: {}", e),
+        match PollRate::from_hz(keyboard_hz) {
+            Ok(rate) => {
+                match set_poll_rate(DeviceType::Keyboard, rate) {
+                    Ok(()) => info!("Applied keyboard poll rate: {} Hz", keyboard_hz),
+                    Err(e) => tracing::warn!("Failed to set keyboard poll rate: {}", e),
+                }
+            }
+            Err(e) => {
+                tracing::warn!(
+                    "Configured keyboard poll rate {} Hz is invalid or unsupported: {}",
+                    keyboard_hz,
+                    e
+                );
             }
         }
     }
