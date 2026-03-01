@@ -77,10 +77,6 @@ tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }
 anyhow = "1.0.102"
 async-trait = "0.1.89"
 
-# Future enhancement dependencies:
-# - parking_lot: High-performance synchronization primitives (performance optimization)
-# - evdev: Linux input event interface (advanced device interaction)
-
 [profile.release]
 strip = true           # Remove debug symbols
 lto = "fat"            # Full link-time optimization across all crates

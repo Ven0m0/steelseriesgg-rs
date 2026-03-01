@@ -429,8 +429,6 @@ struct EffectCacheKey {
 struct EffectCacheEntry {
     colors: Vec<Color>,
     timestamp: Instant,
-    #[allow(dead_code)]
-    computation_time: Duration,
     access_count: u32,
 }
 
@@ -505,7 +503,7 @@ impl EffectComputationCache {
         effect: &PerKeyEffect,
         elapsed_time: Duration,
         colors: Vec<Color>,
-        computation_time: Duration,
+        _computation_time: Duration,
     ) {
         // Enforce cache size limit
         if self.cache.len() >= self.max_size {
@@ -521,7 +519,6 @@ impl EffectComputationCache {
         let entry = EffectCacheEntry {
             colors,
             timestamp: Instant::now(),
-            computation_time,
             access_count: 1,
         };
 

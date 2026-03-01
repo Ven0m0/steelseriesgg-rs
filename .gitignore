@@ -37,3 +37,9 @@ ralph.yml
 .worktrees/
 .security-key
 logs/security/
+
+# Mock udev library for CI builds
+mock_udev/lib/
+mock_udev/pkgconfig/
+mock_udev/mock_udev.c
+mock_udev/mock_udev.o
