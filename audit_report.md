@@ -8,7 +8,7 @@ An extensive audit was performed using `cargo audit`. **No vulnerabilities (CVEs
 
 - All dependencies specified in `Cargo.toml` are imported and actively used within the codebase.
 - The crates selected (e.g., `tokio`, `serde`, `axum`, `clap`, `chrono`) are standard, memory-safe, lightweight, and provide optimal performance for Rust projects. There are no redundant dependencies that warrant replacing with builtin alternatives (as Rust's standard library intentionally defers many utilities to external crates).
-- No duplicated packages were detected in the dependency graph (`cargo tree -d` returned empty).
+- `cargo tree -d` was reviewed: while the full dependency graph includes multiple versions of some transitive crates (e.g., `getrandom`, `thiserror`) due to upstream semver-major differences, there are no redundant duplicates among this project's direct dependencies.
 
 ## Outdated Packages & Updates
 
