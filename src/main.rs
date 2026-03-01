@@ -2916,46 +2916,43 @@ async fn setup_hotplug_monitoring(
 ) -> Result<tokio::sync::mpsc::Sender<()>> {
     let hotplug_daemon_state = daemon_state;
     manager.set_hotplug_callback(move |event| {
-        let state_clone = hotplug_daemon_state.clone();
+        let _state_clone = hotplug_daemon_state.clone();
         tokio::spawn(async move {
-            if let Ok(mut state) = state_clone.try_write() {
-                // Handle hot-plug events without blocking
-                match event {
-                    HotPlugEvent::DeviceAdded {
-                        fingerprint,
-                        info,
-                        timestamp,
-                    } => {
-                        info!(
-                            "Hot-plug event: Device added at {:.3}s: {} ({})",
-                            timestamp.elapsed().as_secs_f64(),
-                            info.name,
-                            fingerprint.to_id()
-                        );
+            // Handle hot-plug events without blocking
+            match event {
+                HotPlugEvent::DeviceAdded {
+                    fingerprint,
+                    info,
+                    timestamp,
+                } => {
+                    info!(
+                        "Hot-plug event: Device added at {:.3}s: {} ({})",
+                        timestamp.elapsed().as_secs_f64(),
+                        info.name,
+                        fingerprint.to_id()
+                    );
 
-                        // Note: We can't access the DeviceManager here, so we'll log the event
-                        // and let the periodic refresh handle actual device initialization
-                        debug!("Deferring device initialization to refresh cycle");
-                    }
-                    HotPlugEvent::DeviceRemoved {
-                        fingerprint,
-                        last_seen,
-                        timestamp,
-                    } => {
-                        info!(
-                            "Hot-plug event: Device removed at {:.3}s: {} (last seen {:.3}s ago)",
-                            timestamp.elapsed().as_secs_f64(),
-                            fingerprint.to_id(),
-                            timestamp.duration_since(last_seen).as_secs_f64()
-                        );
-
-                        if let Err(e) = state.handle_device_removed(&fingerprint, last_seen).await {
-                            warn!("Failed to handle device removal: {}", e);
-                        }
-                    }
+                    // Note: We can't access the DeviceManager here, so we'll log the event
+                    // and let the periodic refresh handle actual device initialization
+                    debug!("Deferring device initialization to refresh cycle");
                 }
-            } else {
-                debug!("Hot-plug event received but daemon state is busy, skipping");
+                HotPlugEvent::DeviceRemoved {
+                    fingerprint,
+                    last_seen,
+                    timestamp,
+                } => {
+                    info!(
+                        "Hot-plug event: Device removed at {:.3}s: {} (last seen {:.3}s ago)",
+                        timestamp.elapsed().as_secs_f64(),
+                        fingerprint.to_id(),
+                        timestamp.duration_since(last_seen).as_secs_f64()
+                    );
+
+                    // Note: Similar to device addition, we rely on the periodic refresh cycle
+                    // to reconcile state after device removal, instead of mutating daemon state
+                    // directly from this hot-plug callback.
+                    debug!("Deferring device removal handling to refresh cycle");
+                }
             }
         });
     });
