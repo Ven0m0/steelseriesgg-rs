@@ -1,10 +1,7 @@
-use std::io::{Read, Write};
-use std::net::TcpStream;
 use steelseries_gg::gamesense::GameSenseServer;
 use tokio::net::TcpListener;
 
 #[tokio::test]
-#[ignore]
 async fn test_cors_vulnerability() {
     println!("Starting test_cors_vulnerability");
     // Bind to port 0 to get a free port
@@ -24,8 +21,9 @@ async fn test_cors_vulnerability() {
 
     // Wait for server to start
     let mut attempts = 0;
+    let client = reqwest::Client::new();
     loop {
-        if TcpStream::connect(format!("127.0.0.1:{}", port)).is_ok() {
+        if let Ok(_) = client.get(format!("http://127.0.0.1:{}/", port)).send().await {
             println!("Connected to server!");
             break;
         }
@@ -38,23 +36,18 @@ async fn test_cors_vulnerability() {
 
     // 1. Test with Evil Origin
     println!("Sending evil request...");
-    let request = format!(
-        "POST /game_metadata HTTP/1.1\r\n         Host: 127.0.0.1:{}\r\n         Origin: http://evil.com\r\n         Content-Type: application/json\r\n         Content-Length: 2\r\n         Connection: close\r\n         \r\n         {{}}",
-        port
-    );
+    let response = client
+        .post(format!("http://127.0.0.1:{}/game_metadata", port))
+        .header("Origin", "http://evil.com")
+        .header("Content-Type", "application/json")
+        .json(&serde_json::json!({}))
+        .send()
+        .await
+        .unwrap();
 
-    let mut stream = TcpStream::connect(format!("127.0.0.1:{}", port)).unwrap();
-    stream.write_all(request.as_bytes()).unwrap();
+    println!("Response from evil.com origin: {:?}", response);
 
-    let mut response = String::new();
-    stream.read_to_string(&mut response).unwrap();
-
-    println!("Response from evil.com origin:\n{}", response);
-
-    let allows_evil = response
-        .to_lowercase()
-        .contains("access-control-allow-origin: http://evil.com")
-        || response.to_lowercase().contains("access-control-allow-origin: *");
+    let allows_evil = response.headers().get("access-control-allow-origin").is_some();
 
     if allows_evil {
         panic!("SECURITY FAILURE: Server allowed CORS request from http://evil.com");
@@ -62,20 +55,18 @@ async fn test_cors_vulnerability() {
 
     // 2. Test with Localhost Origin
     println!("Sending localhost request...");
-    let request_local = format!(
-        "POST /game_metadata HTTP/1.1\r\n         Host: 127.0.0.1:{}\r\n         Origin: http://localhost:{}\r\n         Content-Type: application/json\r\n         Content-Length: 2\r\n         Connection: close\r\n         \r\n         {{}}",
-        port, port
-    );
+    let response_local = client
+        .post(format!("http://127.0.0.1:{}/game_metadata", port))
+        .header("Origin", format!("http://localhost:{}", port))
+        .header("Content-Type", "application/json")
+        .json(&serde_json::json!({}))
+        .send()
+        .await
+        .unwrap();
 
-    let mut stream_local = TcpStream::connect(format!("127.0.0.1:{}", port)).unwrap();
-    stream_local.write_all(request_local.as_bytes()).unwrap();
+    println!("Response from localhost origin: {:?}", response_local);
 
-    let mut response_local = String::new();
-    stream_local.read_to_string(&mut response_local).unwrap();
-
-    println!("Response from localhost origin:\n{}", response_local);
-
-    let allows_local = response_local.to_lowercase().contains("access-control-allow-origin");
+    let allows_local = response_local.headers().get("access-control-allow-origin").is_some();
     // Assert strictly
     assert!(allows_local, "Server should allow localhost origin");
 }

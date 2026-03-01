@@ -101,6 +101,7 @@ impl GameSenseServer {
                             || origin_bytes.starts_with(b"https://localhost")
                             || origin_bytes.starts_with(b"http://127.0.0.1")
                             || origin_bytes.starts_with(b"https://127.0.0.1")
+                            || origin_bytes == b"null"
                     })),
             )
             .with_state(state)

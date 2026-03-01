@@ -1,0 +1,10 @@
+   Compiling steelseries-gg-linux v0.1.0 (/app)
+    Finished `test` profile [unoptimized] target(s) in 4.10s
+     Running tests/cors_security.rs (target/debug/deps/cors_security-e8badd6ea3affc61)
+
+running 1 test
+Starting test_cors_vulnerability
+Selected port: 41687
+Server task started
+Connected to server!
+Sending evil request...
