@@ -1,5 +1,6 @@
 #include "include/libudev.h"
 #include <stddef.h>
+#include <stdarg.h>
 
 struct udev *udev_new(void) { return NULL; }
 struct udev *udev_ref(struct udev *udev) { return udev; }
@@ -33,3 +34,7 @@ int udev_monitor_enable_receiving(struct udev_monitor *udev_monitor) { return 0;
 int udev_monitor_get_fd(struct udev_monitor *udev_monitor) { return -1; }
 struct udev_device *udev_monitor_receive_device(struct udev_monitor *udev_monitor) { return NULL; }
 int udev_monitor_filter_add_match_subsystem_devtype(struct udev_monitor *udev_monitor, const char *subsystem, const char *devtype) { return 0; }
+
+// Dummy stubs to prevent link errors
+void __assert_fail(const char *__assertion, const char *__file, unsigned int __line, const char *__function) {}
+
