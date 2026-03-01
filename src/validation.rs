@@ -851,8 +851,34 @@ impl RgbValidator {
             tokio::time::sleep(Duration::from_millis(50)).await;
 
             // Second computation (time has passed, colors should update)
-            let colors = engine.compute();
-            if let Err(e) = keyboard.set_zone_colors(colors).await {
+            let _ = engine.compute();
+
+            // Verify EffectEngine state correctly
+            if engine.last_compute_time() == Duration::ZERO {
+                return ValidationResult::failure(
+                    test_name,
+                    start.elapsed(),
+                    format!(
+                        "EffectEngine state validation failed: last_compute_time was ZERO after second computation for effect {}",
+                        i
+                    ),
+                );
+            }
+            if engine.get_cached_colors().len() != zone_count {
+                return ValidationResult::failure(
+                    test_name,
+                    start.elapsed(),
+                    format!(
+                        "EffectEngine state validation failed: cached colors length mismatch for effect {}",
+                        i
+                    ),
+                );
+            }
+
+            // Get colors again to avoid borrow checker errors
+            let colors = engine.get_cached_colors().to_vec();
+
+            if let Err(e) = keyboard.set_zone_colors(&colors).await {
                 return ValidationResult::failure(
                     test_name,
                     start.elapsed(),

@@ -406,7 +406,21 @@ impl EffectEngine {
         self.cache_threshold = self.calculate_frame_budget();
     }
 
-    /// Get the current effect.
+    /// Get the current cached colors.
+    pub fn get_cached_colors(&self) -> &[Color] {
+        &self.cached_colors
+    }
+
+    /// Get the time when the effect was started.
+    pub fn start_time(&self) -> Instant {
+        self.start_time
+    }
+
+    /// Get the last time colors were computed.
+    pub fn last_compute_time(&self) -> Duration {
+        self.last_compute_time
+    }
+
     pub fn effect(&self) -> &Effect {
         &self.effect
     }
@@ -1136,6 +1150,7 @@ impl RgbController {
     }
 
     /// Get the current effect.
+
     pub fn effect(&self) -> &Effect {
         self.engine.effect()
     }
