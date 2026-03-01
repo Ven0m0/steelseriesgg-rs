@@ -97,10 +97,14 @@ impl GameSenseServer {
                     .allow_headers([header::CONTENT_TYPE])
                     .allow_origin(AllowOrigin::predicate(|origin: &HeaderValue, _parts: &_| {
                         let origin_bytes = origin.as_bytes();
-                        origin_bytes.starts_with(b"http://localhost")
-                            || origin_bytes.starts_with(b"https://localhost")
-                            || origin_bytes.starts_with(b"http://127.0.0.1")
-                            || origin_bytes.starts_with(b"https://127.0.0.1")
+                        origin_bytes == b"http://localhost"
+                            || origin_bytes.starts_with(b"http://localhost:")
+                            || origin_bytes == b"https://localhost"
+                            || origin_bytes.starts_with(b"https://localhost:")
+                            || origin_bytes == b"http://127.0.0.1"
+                            || origin_bytes.starts_with(b"http://127.0.0.1:")
+                            || origin_bytes == b"https://127.0.0.1"
+                            || origin_bytes.starts_with(b"https://127.0.0.1:")
                     })),
             )
             .with_state(state)
