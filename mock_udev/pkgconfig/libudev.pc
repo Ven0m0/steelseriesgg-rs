@@ -1,0 +1,5 @@
+Name: libudev
+Description: Library to access udev device information
+Version: 247
+Libs: -L${pcfiledir}/../lib -ludev
+Cflags: -I${pcfiledir}/../include
