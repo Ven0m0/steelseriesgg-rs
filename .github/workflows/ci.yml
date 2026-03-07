@@ -40,21 +40,21 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
-      
+
       - name: Install system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y libudev-dev libhidapi-dev
-      
+
       - name: Install audio dependencies (for audio feature)
         if: contains(matrix.features, 'audio')
         run: sudo apt-get install -y libpulse-dev
-      
+
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
         with:
           key: ${{ matrix.features }}
-      
+
       - name: Run clippy
         run: cargo clippy --all-targets --locked ${{ matrix.features }} -- -D warnings
 
@@ -69,17 +69,17 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
-      
+
       - name: Install system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y libudev-dev libhidapi-dev
-      
+
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
         with:
           key: ${{ matrix.features }}
-      
+
       - name: Run tests
         run: cargo test --locked ${{ matrix.features }}
 
@@ -95,23 +95,23 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
-      
+
       - name: Install system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y libudev-dev libhidapi-dev
-      
+
       - name: Install audio dependencies (for audio feature)
         if: contains(matrix.features, 'audio')
         run: sudo apt-get install -y libpulse-dev
-      
+
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
         with:
           key: ${{ matrix.features }}
-      
+
       - name: Build release binary
         run: cargo build --release --locked ${{ matrix.features }}
-      
+
       - name: Check binary exists
         run: test -f target/release/ssgg
