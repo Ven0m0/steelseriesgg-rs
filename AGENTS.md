@@ -50,7 +50,7 @@ cargo clippy --all-features -- -D warnings  # lint (zero warnings required)
 
 - **CORS Configuration**: When configuring CORS via `AllowOrigin::predicate`, avoid `starts_with` checks for `localhost` or `127.0.0.1` as they are vulnerable to prefix-matching bypasses. Use strict exact string or domain matching.
 - **Shared Directories**: File operations in shared directories (e.g., `/tmp`) must mitigate symlink and TOCTOU attacks by verifying directory ownership (`uid == getuid`), ensuring no symlinks exist in the path, and using `O_NOFOLLOW` with restrictive permissions (`0o644`/`0o755`).
-- **GameSense Limits**: The GameSense server implements security limits to prevent resource exhaustion: 128 max games, 256 max events per game, 32 max handlers per event, 64-character string limits for identifiers, and a 64KB global request body limit. Ensure `game_event` only stores values if a corresponding binding exists.
+- **GameSense Limits**: The current GameSense server implementation does **not** yet enforce hard limits on games, events, handlers, identifier length, or request body size. When adding or modifying GameSense functionality, introduce server-side limits (for example: 128 max games, 256 max events per game, 32 max handlers per event, 64-character identifier limits, and a 64KB global request body limit), and keep this document in sync with the code. Be aware that `game_event` currently stores every event value in `event_values` regardless of whether a corresponding binding exists; if that behavior is changed, update these notes accordingly.
 
 ## Testing Conventions
 
