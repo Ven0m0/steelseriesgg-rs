@@ -26,7 +26,7 @@ src/
 ## Conventions
 
 - **Naming**: `snake_case` functions/vars, `PascalCase` types, `SCREAMING_SNAKE` constants
-- **Formatting**: 4-space indent, 120-char max line, Unix LF (`rustfmt.toml`). Formatting in `src/audio/sonar.rs` is strictly enforced by the CI's `cargo fmt`.
+- **Formatting**: 4-space indent, 120-char max line, Unix LF (`rustfmt.toml`). Formatting is CI-enforced project-wide via `cargo fmt`.
 - **Errors**: `thiserror` in library code, `anyhow` + `.context()` in binary code; idiomatic Rust pattern matching (`match` or `if let`) is preferred over `.unwrap()`/`.expect()`.
 - **HID reports**: always use `HidReportBuilder` — keyboards 65 bytes (with report ID), headsets 64 bytes.
 
