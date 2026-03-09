@@ -38,7 +38,7 @@ mod snake_case_module {}             // modules
 
 ---
 
-## Error Handling
+## Error Handling & Reliability
 
 ```rust
 // Library code — thiserror
@@ -58,8 +58,11 @@ fn cmd() -> Result<()> {
     Ok(())
 }
 
-// NEVER .unwrap() or .expect() in production — always use ?
+// NEVER .unwrap() or .expect() in production — always use match, if let, or ?
 ```
+
+- **Unwraps**: Idiomatic Rust pattern matching (`match` or `if let`) is strongly preferred over `.unwrap()` or `.expect()`.
+- **reqwest::Error**: Does not support `.is_request()`. Use `.is_timeout()` and `.is_connect()`. It is not `Clone`.
 
 ---
 
@@ -82,7 +85,7 @@ buf[1] = 0x21;
 
 ---
 
-## Async Patterns
+## Async Patterns & File I/O
 
 ```rust
 use tokio::sync::{Mutex, RwLock};
@@ -95,6 +98,17 @@ tokio::spawn(async move {
     }
 });
 ```
+
+- **tokio::fs**: Always use `tokio::fs` for file operations to prevent blocking the async runtime.
+- **Exists checks**: Replace `Path::exists()` with `tokio::fs` operations that gracefully handle `ErrorKind::NotFound`.
+- **Mutexes**: Structs containing `parking_lot::Mutex` prevent `Clone` derivation; wrap them in `Arc` or `OnceLock`.
+
+---
+
+## Security Guardrails
+
+- **CORS Exact Matching**: Avoid `.starts_with("http://localhost")` checks for CORS origins, as they bypass security (e.g., `localhost.evil.com`). Use strict exact string or domain matching.
+- **Shared Directories**: Use `O_NOFOLLOW`, restrictive permissions (`0o644`/`0o755`), and verify directory ownership when writing to `/tmp` to avoid symlink/TOCTOU attacks.
 
 ---
 
@@ -129,3 +143,4 @@ cargo build --release
 - Per-key RGB (`0x2A`) is a placeholder — protocol not reversed
 - CLI effect commands are one-shot; animations need `ssgg daemon`
 - `rustfmt` max\_width is **120** (not 100)
+- **Dependencies**: Managed by Dependabot and Renovate (`.github/renovate.json`).

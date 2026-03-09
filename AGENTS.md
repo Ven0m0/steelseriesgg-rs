@@ -248,7 +248,7 @@ Main binary `ssgg` (via `clap` derive):
 
 ---
 
-## Critical Facts
+## Architecture & Concurrency Rules
 
 - `hidapi` is pinned at **`=2.6.5`** (`Cargo.toml`) — do not change this constraint
 - Apex Pro TKL 2023 product ID is **`0x1628`** (not `0x1618`)
