@@ -1150,7 +1150,6 @@ impl RgbController {
     }
 
     /// Get the current effect.
-
     pub fn effect(&self) -> &Effect {
         self.engine.effect()
     }
