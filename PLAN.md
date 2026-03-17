@@ -2,23 +2,23 @@
 goal: Turn the current TODO backlog into an evidence-driven execution plan for a follow-up agent.
 date_created: 2026-03-17
 status: Planned
-source: /home/runner/work/steelseriesgg-rs/steelseriesgg-rs/TODO.md
+source: TODO.md
 ---
 
 # PLAN: TODO backlog research and implementation
 
-This file translates `/home/runner/work/steelseriesgg-rs/steelseriesgg-rs/TODO.md` into a concrete plan for the next agent.
+This file translates `TODO.md` into a concrete plan for the next agent.
 
 The goal is not to implement everything at once. The goal is to research first, verify assumptions against the current repository state, and then make the smallest safe code and documentation changes needed for each TODO item.
 
 ## 1. Ground rules for the follow-up agent
 
-- Read `/home/runner/work/steelseriesgg-rs/steelseriesgg-rs/AGENTS.md` before editing code.
+- Read `AGENTS.md` before editing code.
 - Treat the following files as the source of truth when they disagree with prose docs:
-  - `/home/runner/work/steelseriesgg-rs/steelseriesgg-rs/Cargo.toml`
-  - `/home/runner/work/steelseriesgg-rs/steelseriesgg-rs/rust-toolchain.toml`
-  - `/home/runner/work/steelseriesgg-rs/steelseriesgg-rs/.github/workflows/ci.yml`
-  - `/home/runner/work/steelseriesgg-rs/steelseriesgg-rs/src/devices/hid_reports.rs`
+  - `Cargo.toml`
+  - `rust-toolchain.toml`
+  - `.github/workflows/ci.yml`
+  - `src/devices/hid_reports.rs`
 - Do not hand-build HID buffers when existing typed helpers already exist. Use `HidReportBuilder` and the current command abstractions.
 - Do not loosen GameSense localhost CORS restrictions while working adjacent code.
 - Preserve the exact `hidapi = "=2.6.5"` dependency pin unless a task explicitly proves that a change is required.
@@ -34,15 +34,15 @@ The goal is not to implement everything at once. The goal is to research first, 
 - The current protocol docs explicitly say per-key RGB is still a placeholder and actuation read-back is not implemented.
 - The protocol docs also reference a `src/bin/bulk_test.rs` harness that is not present in the current tree. Before relying on those instructions, reconcile the docs with the actual tooling in `src/bin/`.
 - Existing protocol-related docs to review before making changes:
-  - `/home/runner/work/steelseriesgg-rs/steelseriesgg-rs/docs/development/APEX_PRO_PROTOCOL.md`
-  - `/home/runner/work/steelseriesgg-rs/steelseriesgg-rs/docs/development/PROTOCOL_RESEARCH.md`
-  - `/home/runner/work/steelseriesgg-rs/steelseriesgg-rs/docs/development/KEY_MAPPING_RESEARCH.md`
-  - `/home/runner/work/steelseriesgg-rs/steelseriesgg-rs/docs/development/RGB_CONTROL_ANALYSIS.md`
+  - `docs/development/APEX_PRO_PROTOCOL.md`
+  - `docs/development/PROTOCOL_RESEARCH.md`
+  - `docs/development/KEY_MAPPING_RESEARCH.md`
+  - `docs/development/RGB_CONTROL_ANALYSIS.md`
 - Existing helper binaries that are actually present:
-  - `/home/runner/work/steelseriesgg-rs/steelseriesgg-rs/src/bin/discover_actuation.rs`
-  - `/home/runner/work/steelseriesgg-rs/steelseriesgg-rs/src/bin/verify_key_mapping.rs`
-  - `/home/runner/work/steelseriesgg-rs/steelseriesgg-rs/src/bin/benchmark_rgb_alloc.rs`
-  - `/home/runner/work/steelseriesgg-rs/steelseriesgg-rs/src/bin/sonar_control.rs`
+  - `src/bin/discover_actuation.rs`
+  - `src/bin/verify_key_mapping.rs`
+  - `src/bin/benchmark_rgb_alloc.rs`
+  - `src/bin/sonar_control.rs`
 
 ## 3. Global execution strategy
 
@@ -66,11 +66,11 @@ Create a reliable starting point so later changes are based on the live repo, li
 ### Tasks
 
 - Read and summarize:
-  - `/home/runner/work/steelseriesgg-rs/steelseriesgg-rs/TODO.md`
-  - `/home/runner/work/steelseriesgg-rs/steelseriesgg-rs/AGENTS.md`
+  - `TODO.md`
+  - `AGENTS.md`
   - issue `#6`: `https://github.com/Ven0m0/steelseriesgg-rs/issues/6`
   - issue `#120`: `https://github.com/Ven0m0/steelseriesgg-rs/issues/120`
-- Confirm current build and test behavior from `/home/runner/work/steelseriesgg-rs/steelseriesgg-rs/.github/workflows/ci.yml`.
+- Confirm current build and test behavior from `.github/workflows/ci.yml`.
 - Create a dedicated research note for the backlog, preferably under a tracking directory if one is acceptable for the current task, otherwise under `docs/development/`.
 - Record what is confirmed, what is unverified, and what requires hardware.
 
@@ -101,9 +101,9 @@ Make sure future protocol work points at real files and current workflows.
 ### Tasks
 
 - Audit these files for references to tools or flows that no longer exist:
-  - `/home/runner/work/steelseriesgg-rs/steelseriesgg-rs/docs/development/APEX_PRO_PROTOCOL.md`
-  - `/home/runner/work/steelseriesgg-rs/steelseriesgg-rs/docs/development/PROTOCOL_RESEARCH.md`
-  - `/home/runner/work/steelseriesgg-rs/steelseriesgg-rs/docs/development/KEY_MAPPING_RESEARCH.md`
+  - `docs/development/APEX_PRO_PROTOCOL.md`
+  - `docs/development/PROTOCOL_RESEARCH.md`
+  - `docs/development/KEY_MAPPING_RESEARCH.md`
 - Specifically resolve references to `src/bin/bulk_test.rs`, because the current tree does not contain that binary.
 - Decide whether the correct fix is:
   - restore the missing tool,
@@ -153,11 +153,11 @@ Produce a short comparison table with:
 
 ### Likely local integration points
 
-- `/home/runner/work/steelseriesgg-rs/steelseriesgg-rs/src/devices/discovery.rs`
-- `/home/runner/work/steelseriesgg-rs/steelseriesgg-rs/src/devices/mod.rs`
-- `/home/runner/work/steelseriesgg-rs/steelseriesgg-rs/src/devices/hid_reports.rs`
-- `/home/runner/work/steelseriesgg-rs/steelseriesgg-rs/src/audio/mod.rs`
-- `/home/runner/work/steelseriesgg-rs/steelseriesgg-rs/src/audio/pulse.rs`
+- `src/devices/discovery.rs`
+- `src/devices/mod.rs`
+- `src/devices/hid_reports.rs`
+- `src/audio/mod.rs`
+- `src/audio/pulse.rs`
 
 ### Implementation rule
 
@@ -183,11 +183,11 @@ Resolve the compile/build problem tracked in `https://github.com/Ven0m0/steelser
   - Arch-like environment if possible
   - otherwise a controlled Linux environment with matching toolchain assumptions
 - Compare the issue against the current repo state:
-  - `/home/runner/work/steelseriesgg-rs/steelseriesgg-rs/PKGBUILD`
-  - `/home/runner/work/steelseriesgg-rs/steelseriesgg-rs/ssgg.install`
-  - `/home/runner/work/steelseriesgg-rs/steelseriesgg-rs/Cargo.toml`
-  - `/home/runner/work/steelseriesgg-rs/steelseriesgg-rs/rust-toolchain.toml`
-  - `/home/runner/work/steelseriesgg-rs/steelseriesgg-rs/.github/workflows/ci.yml`
+  - `PKGBUILD`
+  - `ssgg.install`
+  - `Cargo.toml`
+  - `rust-toolchain.toml`
+  - `.github/workflows/ci.yml`
 - Decide whether the fix belongs in:
   - Rust code
   - packaging metadata
@@ -231,9 +231,9 @@ Resolve the hang tracked in `https://github.com/Ven0m0/steelseriesgg-rs/issues/1
 
 ### Highest-priority files to inspect
 
-- `/home/runner/work/steelseriesgg-rs/steelseriesgg-rs/src/audio/pulse.rs`
-- `/home/runner/work/steelseriesgg-rs/steelseriesgg-rs/src/audio/mod.rs`
-- `/home/runner/work/steelseriesgg-rs/steelseriesgg-rs/src/main.rs`
+- `src/audio/pulse.rs`
+- `src/audio/mod.rs`
+- `src/main.rs`
 
 ### Tasks
 
@@ -289,11 +289,11 @@ Advance the Apex Pro TKL 2023 implementation, but only where the next step is su
 ### First tasks before changing code
 
 - Compare the current implementation against the latest protocol docs:
-  - `/home/runner/work/steelseriesgg-rs/steelseriesgg-rs/src/devices/hid_reports.rs`
-  - `/home/runner/work/steelseriesgg-rs/steelseriesgg-rs/src/devices/keyboards/mod.rs`
-  - `/home/runner/work/steelseriesgg-rs/steelseriesgg-rs/src/devices/keyboards/apex_pro_tkl_2023.rs`
-  - `/home/runner/work/steelseriesgg-rs/steelseriesgg-rs/src/devices/key_mapping.rs`
-  - `/home/runner/work/steelseriesgg-rs/steelseriesgg-rs/src/devices/zone_mapping.rs`
+  - `src/devices/hid_reports.rs`
+  - `src/devices/keyboards/mod.rs`
+  - `src/devices/keyboards/apex_pro_tkl_2023.rs`
+  - `src/devices/key_mapping.rs`
+  - `src/devices/zone_mapping.rs`
 - Reconcile any drift between the docs and the current code.
 - Decide which single next protocol goal is most realistic:
   - per-key RGB discovery
@@ -311,15 +311,15 @@ Advance the Apex Pro TKL 2023 implementation, but only where the next step is su
 
 ### Potential implementation targets
 
-- `/home/runner/work/steelseriesgg-rs/steelseriesgg-rs/src/devices/hid_reports.rs`
-- `/home/runner/work/steelseriesgg-rs/steelseriesgg-rs/src/devices/key_mapping.rs`
-- `/home/runner/work/steelseriesgg-rs/steelseriesgg-rs/src/devices/zone_mapping.rs`
-- `/home/runner/work/steelseriesgg-rs/steelseriesgg-rs/src/devices/keyboards/apex_pro_tkl_2023.rs`
-- `/home/runner/work/steelseriesgg-rs/steelseriesgg-rs/src/rgb/mod.rs`
-- `/home/runner/work/steelseriesgg-rs/steelseriesgg-rs/src/rgb/tests.rs`
-- `/home/runner/work/steelseriesgg-rs/steelseriesgg-rs/docs/development/APEX_PRO_PROTOCOL.md`
-- `/home/runner/work/steelseriesgg-rs/steelseriesgg-rs/docs/development/KEY_MAPPING_RESEARCH.md`
-- `/home/runner/work/steelseriesgg-rs/steelseriesgg-rs/docs/development/PROTOCOL_RESEARCH.md`
+- `src/devices/hid_reports.rs`
+- `src/devices/key_mapping.rs`
+- `src/devices/zone_mapping.rs`
+- `src/devices/keyboards/apex_pro_tkl_2023.rs`
+- `src/rgb/mod.rs`
+- `src/rgb/tests.rs`
+- `docs/development/APEX_PRO_PROTOCOL.md`
+- `docs/development/KEY_MAPPING_RESEARCH.md`
+- `docs/development/PROTOCOL_RESEARCH.md`
 
 ### Guardrails
 
