@@ -146,7 +146,7 @@ When performing a code review, verify test quality:
 
 ### Examples
 <examples>
-  
+
 ```typescript
 // ❌ BAD: Vague name and assertion
 test('test1', () => {
@@ -179,7 +179,7 @@ When performing a code review, check for performance issues:
 
 ### Examples
 <examples>
-  
+
 ```python
 # ❌ BAD: N+1 query problem
 users = User.query.all()
