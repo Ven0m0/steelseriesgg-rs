@@ -20,21 +20,21 @@ use super::*;
 use crate::{Error, Result};
 
 /// Type alias for RGB callback functions.
-pub type RgbCallback = Box<dyn Fn(&str, u8, u8, u8) + Send + Sync>;
+type RgbCallback = Box<dyn Fn(&str, u8, u8, u8) + Send + Sync>;
 
 /// Shared server state.
-pub struct ServerState {
+struct ServerState {
     /// Registered games - pre-allocate capacity for typical usage
-    pub games: HashMap<String, GameMetadata>,
+    games: HashMap<String, GameMetadata>,
 
     /// Event bindings per game - use nested HashMap with better initial capacity
-    pub bindings: HashMap<String, HashMap<String, EventBinding>>,
+    bindings: HashMap<String, HashMap<String, EventBinding>>,
 
     /// Last event values - optimize for frequent access
-    pub event_values: HashMap<String, HashMap<String, i32>>,
+    event_values: HashMap<String, HashMap<String, i32>>,
 
     /// Callback for RGB updates.
-    pub rgb_callback: Option<RgbCallback>,
+    rgb_callback: Option<RgbCallback>,
 }
 
 impl Default for ServerState {
