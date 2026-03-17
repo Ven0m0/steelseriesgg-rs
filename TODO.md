@@ -9,4 +9,3 @@ Fix the hidapi dependency
 # Use linux-native-basic-udev to avoid pkg-config dependency on libudev-dev
 hidapi = { version = "2.6", default-features = false, features = ["linux-native-basic-udev"] }
 ```
-
