@@ -25,7 +25,7 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends libudev-dev libhidapi-dev libpulse-dev
+          sudo apt-get install -y --no-install-recommends libpulse-dev
       - name: Restore modification times
         uses: chetan/git-restore-mtime-action@v2
       - name: Build release binary

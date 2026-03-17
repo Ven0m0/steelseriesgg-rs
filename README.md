@@ -52,22 +52,8 @@ systemctl --user enable --now ssgg.service
 
 - Linux with udev
 - Rust 1.70+ (for source builds)
-- HID development libs (`libhidapi-dev` / `hidapi`)
 
-**Debian/Ubuntu**
-```bash
-sudo apt install libudev-dev libhidapi-dev
-```
-
-**Fedora**
-```bash
-sudo dnf install systemd-devel hidapi-devel
-```
-
-**Arch Linux**
-```bash
-sudo pacman -S hidapi
-```
+No extra HID development packages are required for the default source build.
 
 ### Arch package
 
@@ -93,6 +79,12 @@ For boot without login: `sudo loginctl enable-linger $USER`.
 git clone https://github.com/Ven0m0/steelseriesgg-rs.git
 cd steelseriesgg-rs
 cargo build --release
+```
+
+For the optional `audio` feature on Debian/Ubuntu, install `libpulse-dev` first:
+
+```bash
+sudo apt install libpulse-dev
 ```
 
 Binary: `target/release/ssgg`.

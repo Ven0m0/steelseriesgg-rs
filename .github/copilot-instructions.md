@@ -25,4 +25,4 @@ Use [`AGENTS.md`](../AGENTS.md) as the canonical project handbook. Keep this fil
 
 - Run the smallest relevant existing checks for the files you changed.
 - For Rust changes, mirror the CI commands in `.github/workflows/ci.yml`.
-- For local builds, note that `libudev-dev` is required even for the default feature set; `libpulse-dev` is only needed for `--features audio`.
+- For local builds, the default feature set does not require extra HID development packages; `libpulse-dev` is only needed for `--features audio`.

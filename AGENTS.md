@@ -142,7 +142,7 @@ Arctis 1, Arctis 1 Wireless, Arctis 5, Arctis 7 (2019), Arctis 9, Arctis Pro, Ar
 
 ```bash
 # Local prerequisites
-sudo apt-get install -y libudev-dev libhidapi-dev
+# No extra packages are required for the default build.
 sudo apt-get install -y libpulse-dev            # only for --features audio
 ./setup_mock_udev.sh                            # optional fallback in CI-like environments
 
@@ -189,7 +189,7 @@ cargo run -- bug-report                 # generate JSON diagnostic report
 
 **System packages** needed for full build (Ubuntu/Debian):
 ```bash
-sudo apt-get install -y libudev-dev libhidapi-dev libpulse-dev
+sudo apt-get install -y libpulse-dev
 ```
 
 ---
