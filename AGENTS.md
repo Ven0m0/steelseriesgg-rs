@@ -2,9 +2,20 @@
 
 Open-source Linux replacement for SteelSeries GG: RGB lighting control, GameSense HTTP server (port 27301), and audio management for SteelSeries keyboards and headsets.
 
-**Language**: Rust 2021 · **Toolchain**: 1.93.1 (pinned in `rust-toolchain.toml`) · **License**: MIT
+**Language**: Rust 2021 · **Toolchain**: pinned in `rust-toolchain.toml` (currently `1.94.0`) · **License**: MIT
 **Binary**: `ssgg` (`src/main.rs`) · **Library**: `steelseries_gg` (`src/lib.rs`)
 **Features**: `audio` (libpulse), `sonar` (reqwest) — default build has neither
+
+---
+
+## Source of Truth
+
+When prose in this file drifts, prefer the live repo configuration:
+
+- `Cargo.toml` — dependency versions, features, package metadata
+- `rust-toolchain.toml` — pinned Rust toolchain and components
+- `.github/workflows/*.yml` — CI triggers, matrices, and required commands
+- `src/devices/hid_reports.rs` — current HID report serialization details
 
 ---
 
@@ -130,21 +141,29 @@ Arctis 1, Arctis 1 Wireless, Arctis 5, Arctis 7 (2019), Arctis 9, Arctis Pro, Ar
 ## Essential Commands
 
 ```bash
+# Local prerequisites
+sudo apt-get install -y libudev-dev libhidapi-dev
+sudo apt-get install -y libpulse-dev            # only for --features audio
+./setup_mock_udev.sh                            # optional fallback in CI-like environments
+
 # Build
 cargo build                             # default (no audio/sonar)
+cargo build --features sonar            # Sonar client
 cargo build --features audio            # with libpulse audio mixer
-cargo build --features audio,sonar      # with Sonar API client
-cargo build --all-features             # everything
+cargo build --features audio,sonar      # all optional features without --all-features
+cargo build --all-features              # everything
 
 # Test
 cargo test                              # default feature set
-cargo test --all-features              # all tests (~77+)
-cargo test -p steelseries-gg-linux     # explicit package
+cargo test --features sonar             # CI-covered optional feature set
+cargo test --all-features               # broader local verification
+cargo test -p steelseries-gg-linux      # explicit package
 
 # Format & Lint (CI-enforced, must pass before push)
 cargo fmt                               # format all code
-cargo fmt --all -- --check             # CI format check
-cargo clippy --all-features -- -D warnings   # zero warnings required
+cargo fmt --all -- --check              # CI format check
+cargo clippy --all-targets --locked -- -D warnings
+cargo clippy --all-targets --locked --features sonar -- -D warnings
 cargo clippy --all-targets --locked --features audio -- -D warnings
 
 # Run CLI
@@ -155,9 +174,6 @@ cargo run -- server                     # start GameSense server on :27301
 cargo run -- daemon                     # full daemon mode
 cargo run -- validate                   # validate connected hardware
 cargo run -- bug-report                 # generate JSON diagnostic report
-
-# Mock udev (for CI or environments without HID hardware)
-./setup_mock_udev.sh                    # sets up mock libudev for build/test
 ```
 
 ---
@@ -168,7 +184,7 @@ cargo run -- bug-report                 # generate JSON diagnostic report
 |---------|---------|------|
 | *(none)* | Core RGB, GameSense server, profiles | — |
 | `audio` | `AudioMixer`, `Channel`, PulseAudio integration | `libpulse-binding` |
-| `sonar` | `SonarClient` — SteelSeries Sonar HTTP API | `reqwest`, **requires `audio` too** |
+| `sonar` | `SonarClient` — SteelSeries Sonar HTTP API | `reqwest` |
 | `--all-features` | Everything above | All system deps |
 
 **System packages** needed for full build (Ubuntu/Debian):
@@ -252,9 +268,8 @@ Main binary `ssgg` (via `clap` derive):
 
 - `hidapi` is pinned at **`=2.6.5`** (`Cargo.toml`) — do not change this constraint
 - Apex Pro TKL 2023 product ID is **`0x1628`** (not `0x1618`)
-- Per-key RGB command `PerKeyRgb = 0x23` is a **placeholder** — actual protocol unknown; use `simulate_per_key_with_zones()` zone-fallback
+- Per-key RGB protocol details are still evolving — verify the current implementation in `src/devices/hid_reports.rs` and keyboard code before changing it
 - Actuation point **write** works via command `0x2D` (`ActuationControl`); read-back is not yet implemented
-- `sonar` feature requires `audio` too — use `--features audio,sonar` or `--all-features`
 - CLI RGB commands are one-shot; continuous animations require `ssgg daemon`
 - GameSense server CORS is restricted to localhost origin — do not loosen without security review
 - `write_padded_report` silently deduplicates identical reports within 50ms (HidOptimizer cache)
@@ -287,9 +302,9 @@ chore: bump hidapi to =2.6.5
 | Workflow | Trigger | Jobs |
 |---------|---------|------|
 | `ci.yml` | push/PR to `main` | fmt, clippy (3 feature combos), test (2 combos), build (3 combos) |
-| `build.yml` | push/PR | build matrix |
-| `release-arch.yml` | tags | Arch Linux PKGBUILD release |
-| `cargo-assist.yml` | scheduled | dependency audit |
+| `build.yml` | `workflow_dispatch`, `merge_group` | release build |
+| `release-arch.yml` | tag push (`v*`), `workflow_dispatch`, `merge_group` | Arch Linux PKGBUILD release |
+| `cargo-assist.yml` | push | dependency assistance |
 | `dependabot.yml` / `renovate.json` | scheduled | automated dep bumps |
 
 CI runs clippy with `--features ""`, `--features sonar`, `--features audio` separately.
