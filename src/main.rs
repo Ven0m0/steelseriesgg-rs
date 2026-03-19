@@ -1942,10 +1942,10 @@ async fn cmd_performance(manager: &DeviceManager, action: PerformanceAction) -> 
                         let device_start = Instant::now();
                         let mut operation_count = 0;
 
+                        let colors = [Color::RED, Color::GREEN, Color::BLUE, Color::WHITE, Color::BLACK];
+
                         // Run rapid RGB operations for benchmark duration
                         while device_start.elapsed().as_secs() < duration {
-                            let colors = vec![Color::RED, Color::GREEN, Color::BLUE, Color::WHITE, Color::BLACK];
-
                             for color in colors {
                                 let _ = keyboard.set_color(color).await;
                                 operation_count += 1;
