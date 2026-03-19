@@ -2,7 +2,7 @@ name: upgrade
 
 on:
   workflow_dispatch:
-  
+
 jobs:
   cargo-upgrade:
     if: github.event_name == 'schedule'
