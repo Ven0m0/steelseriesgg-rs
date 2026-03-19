@@ -1951,7 +1951,7 @@ async fn cmd_performance(manager: &DeviceManager, action: PerformanceAction) -> 
                                 operation_count += 1;
 
                                 // Small delay to prevent overwhelming the device
-                                std::thread::sleep(Duration::from_millis(1));
+                                tokio::time::sleep(Duration::from_millis(1)).await;
                             }
                         }
 
