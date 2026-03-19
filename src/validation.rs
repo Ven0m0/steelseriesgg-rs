@@ -150,15 +150,17 @@ impl MemoryTracker {
 
         let (current_sample, first_sample) = match (self.samples.back(), self.samples.front()) {
             (Some(current), Some(first)) => (current, first),
-            _ => return MemoryAnalysis {
-                is_stable: false,
-                trend: MemoryTrend::Unknown,
-                leak_detected: false,
-                current_rss_kb: 0,
-                peak_rss_kb: 0,
-                growth_rate_kb_per_sec: 0.0,
-                warning_message: Some("Insufficient samples for analysis".to_string()),
-            },
+            _ => {
+                return MemoryAnalysis {
+                    is_stable: false,
+                    trend: MemoryTrend::Unknown,
+                    leak_detected: false,
+                    current_rss_kb: 0,
+                    peak_rss_kb: 0,
+                    growth_rate_kb_per_sec: 0.0,
+                    warning_message: Some("Insufficient samples for analysis".to_string()),
+                };
+            }
         };
 
         let time_span = current_sample.timestamp.saturating_sub(first_sample.timestamp);

@@ -448,9 +448,9 @@ impl Keyboard for GenericKeyboard {
             Error::DeviceCommunication("Per-key RGB not supported - no key mapping available".to_string())
         })?;
 
-        let address = mapping.get_key_address(key_id).ok_or_else(|| {
-            Error::DeviceCommunication(format!("Key {:?} not found in key mapping", key_id))
-        })?;
+        let address = mapping
+            .get_key_address(key_id)
+            .ok_or_else(|| Error::DeviceCommunication(format!("Key {:?} not found in key mapping", key_id)))?;
 
         self.set_key_color_direct(address, color).await
     }
