@@ -1801,7 +1801,8 @@ async fn cmd_validate(
             content
         };
 
-        std::fs::write(&output_path, export_content)
+        tokio::fs::write(&output_path, export_content)
+            .await
             .map_err(|e| Error::DeviceCommunication(format!("Failed to write report: {}", e)))?;
 
         println!("\n📄 Validation report exported to: {}", output_path);
