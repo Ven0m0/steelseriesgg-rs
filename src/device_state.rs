@@ -642,4 +642,145 @@ mod tests {
 
         Ok(())
     }
+
+    #[tokio::test]
+    async fn test_update_keyboard_effect() -> Result<()> {
+        let dir = tempdir().unwrap();
+        let state_file = dir.path().join("device_state.json");
+        let store = DeviceStateStore::with_path(state_file)?;
+
+        let device_id = DeviceId {
+            vendor_id: 0x1038,
+            product_id: 0x1234,
+            interface_number: 1,
+            serial_number: Some("serial123".to_string()),
+            path: Some("path/to/device".to_string()),
+        };
+
+        let effect = Effect::Static {
+            color: crate::rgb::Color::RED,
+        };
+
+        // 1. New device - should create KeyboardState
+        store.update_keyboard_effect(device_id.clone(), effect.clone())?;
+        {
+            let states = store.states.read();
+            let state = states.get(&device_id).unwrap();
+            let keyboard = state.keyboard.as_ref().unwrap();
+            assert_eq!(keyboard.effect, effect);
+            assert_eq!(keyboard.brightness, 100); // Default brightness
+
+            let dirty = store.dirty_flag.lock();
+            assert!(*dirty, "Should be dirty after new device update");
+        }
+
+        // Reset dirty flag
+        {
+            let mut dirty = store.dirty_flag.lock();
+            *dirty = false;
+        }
+
+        // 2. Existing device - should update effect
+        let new_effect = Effect::Spectrum { speed: 1.0 };
+        store.update_keyboard_effect(device_id.clone(), new_effect.clone())?;
+        {
+            let states = store.states.read();
+            let state = states.get(&device_id).unwrap();
+            assert_eq!(state.keyboard.as_ref().unwrap().effect, new_effect);
+
+            let dirty = store.dirty_flag.lock();
+            assert!(*dirty, "Should be dirty after effect change");
+        }
+
+        // Reset dirty flag
+        {
+            let mut dirty = store.dirty_flag.lock();
+            *dirty = false;
+        }
+
+        // 3. Same effect - should be no-op
+        store.update_keyboard_effect(device_id.clone(), new_effect.clone())?;
+        {
+            let dirty = store.dirty_flag.lock();
+            assert!(!*dirty, "Should NOT be dirty after same effect update");
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_device_id_from_key_invalid() {
+        // Wrong number of parts
+        assert!(DeviceId::from_key("1038:1234:1:serial").is_err());
+        assert!(DeviceId::from_key("1038:1234:1:serial:none:extra").is_err());
+
+        // Invalid hex vendor_id
+        assert!(DeviceId::from_key("103G:1234:1:serial:none").is_err());
+
+        // Invalid hex product_id
+        assert!(DeviceId::from_key("1038:XXXX:1:serial:none").is_err());
+
+        // Invalid interface integer
+        assert!(DeviceId::from_key("1038:1234:A:serial:none").is_err());
+    }
+
+    #[tokio::test]
+    async fn test_update_keyboard_brightness() -> Result<()> {
+        let dir = tempdir().unwrap();
+        let state_file = dir.path().join("device_state.json");
+        let store = DeviceStateStore::with_path(state_file)?;
+
+        let device_id = DeviceId {
+            vendor_id: 0x1038,
+            product_id: 0x1234,
+            interface_number: 1,
+            serial_number: Some("serial123".to_string()),
+            path: Some("path/to/device".to_string()),
+        };
+
+        // 1. New device - should create KeyboardState
+        store.update_keyboard_brightness(device_id.clone(), 50)?;
+        {
+            let states = store.states.read();
+            let state = states.get(&device_id).unwrap();
+            let keyboard = state.keyboard.as_ref().unwrap();
+            assert_eq!(keyboard.brightness, 50);
+            assert_eq!(keyboard.effect, Effect::default());
+
+            let dirty = store.dirty_flag.lock();
+            assert!(*dirty, "Should be dirty after new device update");
+        }
+
+        // Reset dirty flag
+        {
+            let mut dirty = store.dirty_flag.lock();
+            *dirty = false;
+        }
+
+        // 2. Existing device - should update brightness
+        store.update_keyboard_brightness(device_id.clone(), 75)?;
+        {
+            let states = store.states.read();
+            let state = states.get(&device_id).unwrap();
+            assert_eq!(state.keyboard.as_ref().unwrap().brightness, 75);
+
+            let dirty = store.dirty_flag.lock();
+            assert!(*dirty, "Should be dirty after brightness change");
+        }
+
+        // Reset dirty flag
+        {
+            let mut dirty = store.dirty_flag.lock();
+            *dirty = false;
+        }
+
+        // 3. Same brightness - should be no-op
+        store.update_keyboard_brightness(device_id.clone(), 75)?;
+        {
+            let dirty = store.dirty_flag.lock();
+            assert!(!*dirty, "Should NOT be dirty after same brightness update");
+        }
+
+        Ok(())
+    }
 }
