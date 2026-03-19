@@ -287,7 +287,7 @@ impl HidDiagnostics {
             return None;
         }
 
-        let last_byte = *data.last().unwrap();
+        let last_byte = *data.last()?;
         let sum = self.calculate_checksum_sum(data);
         let xor = self.calculate_checksum_xor(data);
 
