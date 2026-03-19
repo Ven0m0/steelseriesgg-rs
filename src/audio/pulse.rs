@@ -95,13 +95,14 @@ impl PulseHandler {
                         muted: info.mute,
                     };
 
-                    let _ = tx.send(Ok(Some(input)));
+                    tx.send(Ok(Some(input))).ok();
                 }
                 ListResult::End => {
-                    let _ = tx.send(Ok(None)); // End signal
+                    tx.send(Ok(None)).ok(); // End signal
                 }
                 ListResult::Error => {
-                    let _ = tx.send(Err(Error::Audio("Failed to list sink inputs".to_string())));
+                    tx.send(Err(Error::Audio("Failed to list sink inputs".to_string())))
+                        .ok();
                 }
             }
         });
@@ -139,7 +140,7 @@ impl PulseHandler {
             index,
             &cv,
             Some(Box::new(move |success| {
-                let _ = tx.send(success);
+                tx.send(success).ok();
             })),
         );
         self.mainloop.unlock();
@@ -159,7 +160,7 @@ impl PulseHandler {
             index,
             muted,
             Some(Box::new(move |success| {
-                let _ = tx.send(success);
+                tx.send(success).ok();
             })),
         );
         self.mainloop.unlock();
