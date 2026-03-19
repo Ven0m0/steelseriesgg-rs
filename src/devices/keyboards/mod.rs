@@ -327,10 +327,9 @@ impl Device for GenericKeyboard {
     }
 
     fn initialize(&mut self) -> Result<()> {
-        let apply_command = ApplyCommand;
         let mut buffer = [0u8; 65];
-        if let Ok(size) = self.report_builder.build_report(apply_command, &mut buffer) {
-            let _ = self.send_report(&buffer[..size]);
+        if let Ok(size) = self.report_builder.build_report(ApplyCommand, &mut buffer) {
+            self.send_report(&buffer[..size])?;
         }
         Ok(())
     }
