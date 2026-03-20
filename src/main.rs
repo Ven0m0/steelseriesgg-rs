@@ -5,6 +5,7 @@
 use clap::{Parser, Subcommand};
 use tracing::{Level, debug, info, warn};
 use tracing_subscriber::FmtSubscriber;
+use tokio::task::yield_now;
 
 use steelseries_gg::config::Config;
 use steelseries_gg::device_state::{DeviceId, DeviceStateStore, KeyboardState};
@@ -1801,8 +1802,9 @@ async fn cmd_validate(
             content
         };
 
-        std::fs::write(&output_path, export_content)
-            .map_err(|e| Error::DeviceCommunication(format!("Failed to write report: {}", e)))?;
+        tokio::fs::write(&output_path, export_content)
+            .await
+            .map_err(|e| Error::FileSystemError(format!("Failed to write report: {}", e)))?;
 
         println!("\n📄 Validation report exported to: {}", output_path);
     }
@@ -1951,7 +1953,7 @@ async fn cmd_performance(manager: &DeviceManager, action: PerformanceAction) -> 
                                 operation_count += 1;
 
                                 // Small delay to prevent overwhelming the device
-                                std::thread::sleep(Duration::from_millis(1));
+                                yield_now().await;
                             }
                         }
 

@@ -444,28 +444,21 @@ impl Keyboard for GenericKeyboard {
     }
 
     async fn set_key_color(&mut self, key_id: KeyId, color: Color) -> Result<()> {
-        let Some(mapping) = self.key_mapping.as_ref() else {
-            return Err(Error::DeviceCommunication(
-                "Per-key RGB not supported - no key mapping available".to_string(),
-            ));
-        };
+        let mapping = self.key_mapping.as_ref().ok_or_else(|| {
+            Error::DeviceCommunication("Per-key RGB not supported - no key mapping available".to_string())
+        })?;
 
-        if let Some(address) = mapping.get_key_address(key_id) {
-            self.set_key_color_direct(address, color).await
-        } else {
-            Err(Error::DeviceCommunication(format!(
-                "Key {:?} not found in key mapping",
-                key_id
-            )))
-        }
+        let address = mapping
+            .get_key_address(key_id)
+            .ok_or_else(|| Error::DeviceCommunication(format!("Key {:?} not found in key mapping", key_id)))?;
+
+        self.set_key_color_direct(address, color).await
     }
 
     async fn set_key_colors(&mut self, key_colors: &[(KeyId, Color)]) -> Result<()> {
-        let Some(mapping) = self.key_mapping.as_ref() else {
-            return Err(Error::DeviceCommunication(
-                "Per-key RGB not supported - no key mapping available".to_string(),
-            ));
-        };
+        let mapping = self.key_mapping.as_ref().ok_or_else(|| {
+            Error::DeviceCommunication("Per-key RGB not supported - no key mapping available".to_string())
+        })?;
 
         let mut builder = PerKeyRgbBuilder::new(super::hid_reports::PerKeyAddressingMode::Matrix);
         for (key_id, color) in key_colors {
