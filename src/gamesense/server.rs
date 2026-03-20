@@ -152,7 +152,7 @@ impl GameSenseServer {
 
     /// Securely write JSON content to a file, ensuring correct permissions and ownership.
     fn write_secure_json(path: &std::path::Path, content: &serde_json::Value) -> Result<()> {
-        #[cfg(target_os = "linux")]
+        #[cfg(unix)]
         {
             // Secure directory creation for /tmp usage
             if let Some(parent) = path.parent() {
@@ -175,8 +175,8 @@ impl GameSenseServer {
                         )));
                     }
                 } else {
-                    // Create with strict permissions (rwxr-xr-x)
-                    fs::DirBuilder::new().recursive(true).mode(0o755).create(parent)?;
+                    // Create with strict permissions (rwx------)
+                    fs::DirBuilder::new().recursive(true).mode(0o700).create(parent)?;
                 }
             }
 
@@ -184,14 +184,17 @@ impl GameSenseServer {
             let mut options = OpenOptions::new();
             options.write(true).create(true).truncate(true);
 
+            // Set file creation mode to 600 (rw-------)
+            options.mode(0o600);
+
             // Do not follow symlinks for the file itself
             options.custom_flags(libc::O_NOFOLLOW);
 
             let file = options.open(path)?;
 
-            // Set file permissions to 644 (rw-r--r--)
+            // Ensure file permissions are 600 (rw-------) even if file already existed
             let mut perms = file.metadata()?.permissions();
-            perms.set_mode(0o644);
+            perms.set_mode(0o600);
             file.set_permissions(perms)?;
 
             // Write content
@@ -199,7 +202,7 @@ impl GameSenseServer {
             debug!("Wrote secure JSON to {:?}", path);
         }
 
-        #[cfg(not(target_os = "linux"))]
+        #[cfg(not(unix))]
         {
             if let Some(parent) = path.parent() {
                 std::fs::create_dir_all(parent)?;
@@ -474,7 +477,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(target_os = "linux")]
+    #[cfg(unix)]
     fn test_secure_json_write() -> Result<()> {
         let temp_dir = std::env::temp_dir().join("test_gamesense_secure");
         let target_path = temp_dir.join("coreProps.json");
@@ -494,11 +497,13 @@ mod tests {
         let metadata = std::fs::symlink_metadata(&temp_dir)?;
         assert!(metadata.is_dir());
         assert_eq!(metadata.uid(), unsafe { libc::getuid() });
-        assert_eq!(metadata.permissions().mode() & 0o777, 0o755);
+        // Verify secure permissions (0o700)
+        assert_eq!(metadata.permissions().mode() & 0o777, 0o700);
 
         // Verify file
         let file_metadata = std::fs::symlink_metadata(&target_path)?;
-        assert_eq!(file_metadata.permissions().mode() & 0o777, 0o644);
+        // Verify secure permissions (0o600)
+        assert_eq!(file_metadata.permissions().mode() & 0o777, 0o600);
         assert!(!file_metadata.file_type().is_symlink());
 
         // Cleanup

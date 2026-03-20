@@ -135,7 +135,7 @@ impl PulseHandler {
         let (tx, rx) = mpsc::channel();
 
         self.mainloop.lock();
-        let _op = self.context.introspect().set_sink_input_volume(
+        let _ = self.context.introspect().set_sink_input_volume(
             index,
             &cv,
             Some(Box::new(move |success| {
@@ -155,7 +155,7 @@ impl PulseHandler {
         let (tx, rx) = mpsc::channel();
 
         self.mainloop.lock();
-        let _op = self.context.introspect().set_sink_input_mute(
+        let _ = self.context.introspect().set_sink_input_mute(
             index,
             muted,
             Some(Box::new(move |success| {
