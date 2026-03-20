@@ -73,7 +73,7 @@ impl PulseHandler {
         self.mainloop.lock();
 
         let introspector = self.context.introspect();
-        let _ = introspector.get_sink_input_info_list(move |res| {
+        let _op = introspector.get_sink_input_info_list(move |res| {
             let tx = tx.lock();
             match res {
                 ListResult::Item(info) => {
