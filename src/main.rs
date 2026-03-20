@@ -5,6 +5,7 @@
 use clap::{Parser, Subcommand};
 use tracing::{Level, debug, info, warn};
 use tracing_subscriber::FmtSubscriber;
+use tokio::task::yield_now;
 
 use steelseries_gg::config::Config;
 use steelseries_gg::device_state::{DeviceId, DeviceStateStore, KeyboardState};
@@ -1951,7 +1952,7 @@ async fn cmd_performance(manager: &DeviceManager, action: PerformanceAction) -> 
                                 operation_count += 1;
 
                                 // Small delay to prevent overwhelming the device
-                                tokio::time::sleep(Duration::from_millis(1)).await;
+                                yield_now().await;
                             }
                         }
 
