@@ -3,9 +3,9 @@
 //! A complete open-source replacement for SteelSeries GG on Linux.
 
 use clap::{Parser, Subcommand};
+use tokio::task::yield_now;
 use tracing::{Level, debug, info, warn};
 use tracing_subscriber::FmtSubscriber;
-use tokio::task::yield_now;
 
 use steelseries_gg::config::Config;
 use steelseries_gg::device_state::{DeviceId, DeviceStateStore, KeyboardState};
