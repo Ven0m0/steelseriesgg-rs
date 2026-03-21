@@ -1,8 +1,12 @@
 //! HID communication diagnostics and analysis tools.
 
-use std::fs::OpenOptions;
+use std::fs::{self, OpenOptions};
 use std::io::Write;
-use std::path::PathBuf;
+#[cfg(unix)]
+use std::os::unix::fs::{DirBuilderExt, MetadataExt, OpenOptionsExt, PermissionsExt};
+use std::path::{Path, PathBuf};
+#[cfg(unix)]
+use libc;
 use std::time::{Duration, Instant};
 use tracing::{debug, warn};
 
@@ -78,18 +82,20 @@ impl HidDiagnostics {
             return Ok(());
         }
 
+        // Determine log directory
+        let log_dir = if let Some(config_dir) = crate::config::Config::config_dir() {
+            config_dir.join("logs")
+        } else {
+            PathBuf::from("logs")
+        };
+
         // Create timestamped filename
         let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
         let filename = format!("ssgg_hid_diagnostics_{}.log", timestamp);
-        let filepath = PathBuf::from(filename);
+        let filepath = log_dir.join(filename);
 
-        // Open file for writing
-        let file = OpenOptions::new()
-            .create(true)
-            .write(true)
-            .truncate(true)
-            .open(&filepath)
-            .map_err(Error::Io)?;
+        // Securely open file for writing
+        let file = self.open_secure_log(&filepath)?;
 
         debug!("HID diagnostics logging to: {:?}", filepath);
 
@@ -109,6 +115,71 @@ impl HidDiagnostics {
         }
 
         Ok(())
+    }
+
+    /// Securely open a log file with restricted permissions and symlink protection.
+    fn open_secure_log(&self, path: &Path) -> Result<std::fs::File> {
+        #[cfg(unix)]
+        {
+            // Secure directory creation
+            if let Some(parent) = path.parent() {
+                if parent.exists() {
+                    let metadata = fs::symlink_metadata(parent).map_err(Error::Io)?;
+
+                    // Verify it is a directory and not a symlink
+                    if !metadata.is_dir() {
+                        return Err(Error::Other(format!("Security error: {:?} is not a directory", parent)));
+                    }
+
+                    // Verify ownership (must be owned by us)
+                    if metadata.uid() != unsafe { libc::getuid() } {
+                        return Err(Error::Other(format!(
+                            "Security error: {:?} is not owned by the current user",
+                            parent
+                        )));
+                    }
+                } else {
+                    // Create with strict permissions (rwx------)
+                    fs::DirBuilder::new()
+                        .recursive(true)
+                        .mode(0o700)
+                        .create(parent)
+                        .map_err(Error::Io)?;
+                }
+            }
+
+            // Secure file open
+            let mut options = OpenOptions::new();
+            options.write(true).create(true).truncate(true);
+
+            // Set file creation mode to 600 (rw-------)
+            options.mode(0o600);
+
+            // Do not follow symlinks for the file itself
+            options.custom_flags(libc::O_NOFOLLOW);
+
+            let file = options.open(path).map_err(Error::Io)?;
+
+            // Ensure file permissions are 600 (rw-------) even if file already existed
+            let mut perms = file.metadata().map_err(Error::Io)?.permissions();
+            perms.set_mode(0o600);
+            file.set_permissions(perms).map_err(Error::Io)?;
+
+            Ok(file)
+        }
+
+        #[cfg(not(unix))]
+        {
+            if let Some(parent) = path.parent() {
+                fs::create_dir_all(parent).map_err(Error::Io)?;
+            }
+            Ok(OpenOptions::new()
+                .write(true)
+                .create(true)
+                .truncate(true)
+                .open(path)
+                .map_err(Error::Io)?)
+        }
     }
 
     /// Record a HID operation for diagnostic analysis.

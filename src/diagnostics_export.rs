@@ -16,6 +16,7 @@ use tracing::{debug, warn};
 
 use crate::device_state::{DeviceId, DeviceState, DeviceStateStore};
 use crate::devices::{DeviceInfo, DeviceManager};
+use std::path::PathBuf;
 use crate::performance::RgbTimingMetrics;
 use crate::{Error, Result};
 
@@ -225,14 +226,20 @@ async fn collect_performance_snapshot() -> Result<Option<RgbTimingMetrics>> {
 
 /// Read HID diagnostic logs if available (async).
 async fn collect_hid_logs() -> Result<Option<Vec<String>>> {
-    // Look for HID diagnostic log files in current directory
+    // Look for HID diagnostic log files in the secure logs directory
     // Pattern: ssgg_hid_diagnostics_*.log
+
+    let log_dir = if let Some(config_dir) = crate::config::Config::config_dir() {
+        config_dir.join("logs")
+    } else {
+        PathBuf::from("logs")
+    };
 
     // Use glob to find matching files
     let mut log_files = Vec::new();
 
     // Use tokio::fs to read directory asynchronously
-    match tokio::fs::read_dir(".").await {
+    match tokio::fs::read_dir(&log_dir).await {
         Ok(mut entries) => {
             while let Ok(Some(entry)) = entries.next_entry().await {
                 let path = entry.path();
