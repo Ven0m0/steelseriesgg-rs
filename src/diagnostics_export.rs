@@ -16,9 +16,9 @@ use tracing::{debug, warn};
 
 use crate::device_state::{DeviceId, DeviceState, DeviceStateStore};
 use crate::devices::{DeviceInfo, DeviceManager};
-use std::path::PathBuf;
 use crate::performance::RgbTimingMetrics;
 use crate::{Error, Result};
+use std::path::PathBuf;
 
 /// Top-level bug report structure containing all diagnostic information.
 #[derive(Debug, Serialize, Deserialize)]

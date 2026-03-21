@@ -1,9 +1,9 @@
-use steelseries_gg::devices::diagnostics::HidDiagnostics;
-use steelseries_gg::config::Config;
 use std::fs;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
+use steelseries_gg::config::Config;
+use steelseries_gg::devices::diagnostics::HidDiagnostics;
 
 #[test]
 fn test_diagnostic_log_permissions() {

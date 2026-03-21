@@ -1,12 +1,12 @@
 //! HID communication diagnostics and analysis tools.
 
+#[cfg(unix)]
+use libc;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 #[cfg(unix)]
 use std::os::unix::fs::{DirBuilderExt, MetadataExt, OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
-#[cfg(unix)]
-use libc;
 use std::time::{Duration, Instant};
 use tracing::{debug, warn};
 
