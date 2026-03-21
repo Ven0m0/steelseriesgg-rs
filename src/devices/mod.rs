@@ -388,4 +388,22 @@ mod tests {
         // Ensure deterministic output
         assert_eq!(hash1, hash_report(data1));
     }
+
+    #[test]
+    fn test_device_metadata_mappings() {
+        use product_ids::*;
+
+        // Test device_type_from_product_id
+        assert_eq!(device_type_from_product_id(APEX_PRO), DeviceType::Keyboard);
+        assert_eq!(device_type_from_product_id(ARCTIS_1), DeviceType::Headset);
+        assert_eq!(device_type_from_product_id(0xFFFF), DeviceType::Unknown);
+
+        // Test device_name_from_product_id
+        assert_eq!(device_name_from_product_id(APEX_PRO), "Apex Pro");
+        assert_eq!(device_name_from_product_id(0xFFFF), "Unknown SteelSeries Device");
+
+        // Test zone_count_for_product_id
+        assert_eq!(zone_count_for_product_id(APEX_3), 10);
+        assert_eq!(zone_count_for_product_id(0xFFFF), 1);
+    }
 }
