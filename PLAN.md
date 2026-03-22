@@ -1,260 +1,129 @@
 ---
-goal: Turn the current TODO backlog into an evidence-driven execution plan for a follow-up agent.
+goal: Turn the current backlog findings into a prioritized implementation plan.
 date_created: 2026-03-17
+last_updated: 2026-03-22
 status: Planned
 source: TODO.md
 ---
 
-# PLAN: TODO backlog research and implementation
+# PLAN: implementation priorities from the current findings
 
-This file translates `TODO.md` into a concrete plan for the next agent.
+This plan converts the current TODO backlog and recent repository findings into a focused implementation order.
 
-The goal is not to implement everything at once. The goal is to research first, verify assumptions against the current repository state, and then make the smallest safe code and documentation changes needed for each TODO item.
+The goal is to address the highest-value, lowest-ambiguity improvements first, while preserving the repo's current architectural and security constraints.
 
-## 1. Ground rules for the follow-up agent
+## 1. Constraints to preserve while implementing the backlog
 
-- Read `AGENTS.md` before editing code.
-- Treat the following files as the source of truth when they disagree with prose docs:
+- Read `AGENTS.md` before making code changes.
+- Treat these files as the source of truth when prose docs drift:
   - `Cargo.toml`
   - `rust-toolchain.toml`
   - `.github/workflows/ci.yml`
   - `src/devices/hid_reports.rs`
-- Do not hand-build HID buffers when existing typed helpers already exist. Use `HidReportBuilder` and the current command abstractions.
-- Do not loosen GameSense localhost CORS restrictions while working adjacent code.
 - Preserve the exact `hidapi = "=2.6.5"` dependency pin unless a task explicitly proves that a change is required.
-- Prefer evidence-backed implementation over speculative protocol changes, especially for Apex Pro TKL 2023 per-key RGB and actuation read-back.
+- Do not loosen the localhost-only GameSense CORS policy.
+- Keep `audio` and `sonar` feature gating independent.
+- Do not replace typed HID helpers such as `HidReportBuilder` with manual byte arrays.
+- Do not present placeholder Apex Pro TKL 2023 protocol support as verified hardware behavior.
 
-## 2. Repository facts that should shape the work
+## 2. Verified baseline before follow-up implementation
 
-- `TODO.md` currently contains four broad workstreams:
-  1. investigate `Sharper-Flow/Open-G-Hub`
-  2. fix GitHub issues `#6` and `#120`
-  3. continue Apex Pro TKL 2023 protocol and RGB work
-  4. research a list of related open-source projects
-- The current protocol docs explicitly say per-key RGB is still a placeholder and actuation read-back is not implemented.
-- The protocol docs also reference a `src/bin/bulk_test.rs` harness that is not present in the current tree. Before relying on those instructions, reconcile the docs with the actual tooling in `src/bin/`.
-- Existing protocol-related docs to review before making changes:
-  - `docs/development/APEX_PRO_PROTOCOL.md`
-  - `docs/development/PROTOCOL_RESEARCH.md`
-  - `docs/development/KEY_MAPPING_RESEARCH.md`
-  - `docs/development/RGB_CONTROL_ANALYSIS.md`
-- Existing helper binaries that are actually present:
-  - `src/bin/discover_actuation.rs`
-  - `src/bin/verify_key_mapping.rs`
-  - `src/bin/benchmark_rgb_alloc.rs`
-  - `src/bin/sonar_control.rs`
-
-## 3. Global execution strategy
-
-Work in this order unless new evidence forces a change:
-
-1. establish a fresh research baseline
-2. reconcile stale documentation and tooling references
-3. investigate issue `#6`
-4. investigate issue `#120`
-5. research external projects and extract only the parts that clearly fit this codebase
-6. continue Apex Pro TKL 2023 protocol and RGB implementation only after the research above narrows the next safe step
-
-Do not start with speculative Apex protocol edits. The repository already contains placeholder structures and research notes; the next useful step is to reduce uncertainty, not add more guesswork.
-
-## 4. Phase 1: establish the research baseline
-
-### Objective
-
-Create a reliable starting point so later changes are based on the live repo, live issues, and current docs rather than stale assumptions.
-
-### Tasks
-
-- Read and summarize:
-  - `TODO.md`
-  - `AGENTS.md`
-  - issue `#6`: `https://github.com/Ven0m0/steelseriesgg-rs/issues/6`
-  - issue `#120`: `https://github.com/Ven0m0/steelseriesgg-rs/issues/120`
-- Confirm current build and test behavior from `.github/workflows/ci.yml`.
-- Create a dedicated research note for the backlog, preferably under a tracking directory if one is acceptable for the current task, otherwise under `docs/development/`.
-- Record what is confirmed, what is unverified, and what requires hardware.
-
-### Recommended deliverable
-
-A single research log that includes:
-
-- the original TODO items
-- linked issue summaries
-- current protocol status
-- a list of dead or stale references in the docs
-- a list of external projects worth deeper comparison
-
-### Validation commands
+The repository already passed the default local validation path during the latest review cycle:
 
 ```bash
 cd /home/runner/work/steelseriesgg-rs/steelseriesgg-rs
 cargo fmt --all -- --check
+cargo clippy --all-targets --locked -- -D warnings
 cargo test --locked
 ```
 
-## 5. Phase 2: reconcile stale docs and missing tooling references
+This means the next implementation step should stay narrow and should validate only the affected area unless a broader regression is suspected.
 
-### Objective
+## 3. Findings that should drive the next implementation work
 
-Make sure future protocol work points at real files and current workflows.
+### Finding A: the audio path needs fail-fast behavior
 
-### Tasks
-
-- Audit these files for references to tools or flows that no longer exist:
-  - `docs/development/APEX_PRO_PROTOCOL.md`
-  - `docs/development/PROTOCOL_RESEARCH.md`
-  - `docs/development/KEY_MAPPING_RESEARCH.md`
-- Specifically resolve references to `src/bin/bulk_test.rs`, because the current tree does not contain that binary.
-- Decide whether the correct fix is:
-  - restore the missing tool,
-  - replace those instructions with the existing tools in `src/bin/`, or
-  - clearly mark the old workflow as historical and provide the new path.
-- Update docs so they distinguish between:
-  - confirmed hardware behavior
-  - placeholder implementations
-  - speculative next steps
-
-### Success criteria
-
-- No protocol doc tells contributors to use a nonexistent binary without explanation.
-- The repo clearly shows which current tools support research today.
-
-## 6. Phase 3: investigate TODO item 1 (`Open-G-Hub`)
-
-### Objective
-
-Determine whether `https://github.com/Sharper-Flow/Open-G-Hub` contains logic that can be reused or adapted safely in this project.
-
-### Research questions
-
-- Which parts of Open-G-Hub overlap with this repository?
-  - device discovery
-  - HID transport
-  - RGB control patterns
-  - headset/audio handling
-  - packaging and permissions
-- Which device families overlap, and which do not?
-- Does it contain SteelSeries-specific protocol knowledge, or only generic infrastructure?
-- Is the design compatible with the current architecture here:
-  - `src/devices/`
-  - `src/audio/`
-  - `src/gamesense/`
+- The highest-impact reliability issue is the reported hang in issue `#120`.
+- The likely implementation surface is:
+  - `src/audio/pulse.rs`
+  - `src/audio/mod.rs`
   - `src/main.rs`
-- Are there licensing or architectural reasons not to port anything directly?
+- The current plan should assume the fix will involve bounded waits, explicit timeout/error propagation, and preserving CLI responsiveness when PulseAudio is unavailable or partially configured.
 
-### Expected output
+### Finding B: protocol docs drift from the current tooling
 
-Produce a short comparison table with:
+- The development docs reference `src/bin/bulk_test.rs`, but that binary is not present in the repository.
+- The current helper binaries that do exist are:
+  - `src/bin/discover_actuation.rs`
+  - `src/bin/verify_key_mapping.rs`
+  - `src/bin/benchmark_rgb_alloc.rs`
+  - `src/bin/sonar_control.rs`
+- Before further protocol work, the docs should point contributors to real tooling and clearly label historical vs current workflows.
 
-- subsystem
-- what Open-G-Hub does
-- whether it is directly reusable, adaptable, or irrelevant
-- exact local files where an adaptation would land
+### Finding C: Apex Pro per-key support needs more accurate capability reporting
 
-### Likely local integration points
+- The current code and docs indicate that parts of the Apex Pro TKL 2023 per-key RGB path are still placeholder or unverified.
+- The implementation plan should treat capability accuracy as a reliability and maintainability task, not as a new protocol expansion.
+- The likely implementation surface is:
+  - `src/devices/hid_reports.rs`
+  - `src/devices/key_mapping.rs`
+  - `src/devices/keyboards/mod.rs`
+  - `src/main.rs`
 
-- `src/devices/discovery.rs`
-- `src/devices/mod.rs`
-- `src/devices/hid_reports.rs`
-- `src/audio/mod.rs`
-- `src/audio/pulse.rs`
+### Finding D: Arch/audio validation needs a concrete reproduction path
 
-### Implementation rule
-
-Do not port ideas from Open-G-Hub unless you can point to a concrete mismatch or limitation in the current codebase that the idea would solve.
-
-## 7. Phase 4: investigate and fix issue `#6`
-
-### Objective
-
-Resolve the compile/build problem tracked in `https://github.com/Ven0m0/steelseriesgg-rs/issues/6`, or prove that it is stale and should be updated/closed.
-
-### Known context
-
-- Issue title: `Fails to compile on arch system`
-- The issue body references `cargo build --release`.
-- Comments suggest the problem may also have appeared on Debian.
-- The linked error log is outside the repository, so fetch it before making speculative fixes.
-
-### Tasks
-
-- Retrieve the attached error log from the issue and summarize the actual compiler or packaging failures.
-- Reproduce the failure in the smallest realistic environment:
-  - Arch-like environment if possible
-  - otherwise a controlled Linux environment with matching toolchain assumptions
-- Compare the issue against the current repo state:
+- Issue `#6` remains important, but the right fix depends on whether the failure is still reproducible on current code.
+- The likely validation and packaging surface is:
   - `PKGBUILD`
   - `ssgg.install`
-  - `Cargo.toml`
-  - `rust-toolchain.toml`
   - `.github/workflows/ci.yml`
-- Decide whether the fix belongs in:
-  - Rust code
-  - packaging metadata
-  - README or install instructions
-  - CI and release workflow definitions
+  - `.github/workflows/release-arch.yml`
+- This work should stay evidence-driven and should not change code if the issue turns out to be packaging-only or already stale.
 
-### Implementation guidance
+### Finding E: `src/main.rs` is a refactor candidate, not the first fix
 
-- If the issue is already fixed on current `main`, update the issue with reproduction evidence instead of inventing a new change.
-- If the issue is packaging-only, keep the code untouched and fix the packaging/docs.
-- If the issue is a real compiler problem, change only the smallest affected area and verify against the current build matrix.
+- `src/main.rs` remains oversized and should eventually be split into smaller command-focused modules.
+- That refactor is lower priority than the current reliability and correctness fixes.
+- It should only start after the higher-priority backlog items above are under control.
 
-### Validation commands
+## 4. Recommended implementation order
 
-```bash
-cd /home/runner/work/steelseriesgg-rs/steelseriesgg-rs
-cargo build --release --locked
-cargo test --locked
-```
+Work in this order unless new evidence requires a change:
 
-If you have an Arch environment:
+1. fix the audio hang path behind issue `#120`
+2. reconcile stale protocol docs and missing tooling references
+3. tighten Apex Pro capability reporting so placeholders are not presented as verified support
+4. reproduce and resolve issue `#6` using the smallest code, packaging, or CI change that matches the evidence
+5. refactor `src/main.rs` only after the higher-priority fixes above are stable
 
-```bash
-makepkg -sf --noconfirm
-```
-
-## 8. Phase 5: investigate and fix issue `#120`
+## 5. Phase 1: fix issue `#120` first
 
 ### Objective
 
-Resolve the hang tracked in `https://github.com/Ven0m0/steelseriesgg-rs/issues/120`, where `ssgg audio ...` becomes unresponsive.
+Make `ssgg audio ...` fail fast with a clear error instead of hanging.
 
-### Known context
-
-- Reported commands that hang:
-  - `ssgg audio status`
-  - `ssgg audio chat-mix 50`
-- The reporter built with:
-  - `cargo build --release --features audio`
-- The report mentions an `Arctis Pro Wireless` and an unknown additional SteelSeries USB device.
-
-### Highest-priority files to inspect
+### Primary files
 
 - `src/audio/pulse.rs`
 - `src/audio/mod.rs`
 - `src/main.rs`
 
-### Tasks
+### Implementation tasks
 
-- Reproduce the hang using the `audio` feature.
-- Add temporary instrumentation if needed to identify where execution stops.
-- Check for indefinite waits around:
-  - PulseAudio context readiness
-  - callback wakeups
-  - channel receive points
-  - sink enumeration or sink-input collection
-- Make the code fail fast with an explicit error or timeout instead of appearing frozen.
-- Ensure the CLI remains responsive even when PulseAudio is absent, misconfigured, or only partially available.
-- Add or update tests for any new timeout/error-path behavior if practical.
+- Reproduce the reported hang with the `audio` feature enabled.
+- Identify every unbounded wait in the PulseAudio setup and sink enumeration path.
+- Add bounded waiting or timeout-based exits where the current code can block indefinitely.
+- Propagate explicit errors back to the CLI so the user gets a failure instead of an apparent freeze.
+- Keep the change local to the audio path unless the investigation proves a different root cause.
 
-### Implementation guidance
+### Success criteria
 
-- Favor bounded waiting and explicit error propagation over retry loops without timeouts.
-- Keep the change local to the audio path unless evidence shows the problem originates elsewhere.
-- Preserve current feature gating and do not make `audio` depend on unrelated features.
+- `ssgg audio status` returns promptly.
+- `ssgg audio chat-mix 50` returns promptly.
+- Missing or unhealthy PulseAudio environments produce explicit errors.
+- The fix does not change unrelated feature behavior.
 
-### Validation commands
+### Validation
 
 ```bash
 cd /home/runner/work/steelseriesgg-rs/steelseriesgg-rs
@@ -265,148 +134,143 @@ RUST_LOG=debug cargo run --features audio -- audio status
 RUST_LOG=debug cargo run --features audio -- audio chat-mix 50
 ```
 
-### Manual verification checklist
-
-- commands return promptly
-- missing PulseAudio is reported cleanly
-- no silent hangs remain
-- live audio changes still work when the environment supports them
-
-## 9. Phase 6: continue Apex Pro TKL 2023 protocol and RGB work
+## 6. Phase 2: reconcile stale protocol docs
 
 ### Objective
 
-Advance the Apex Pro TKL 2023 implementation, but only where the next step is supported by evidence from code, docs, captures, or hardware validation.
+Make the protocol and reverse-engineering docs safe to follow again.
 
-### Current status to preserve
+### Primary files
 
-- zone RGB is implemented
-- per-key RGB is still documented as placeholder behavior
-- actuation write exists via command `0x2D`
-- actuation read-back is still unknown
-- placeholder key mappings exist and are not verified hardware truth
+- `docs/development/APEX_PRO_PROTOCOL.md`
+- `docs/development/PROTOCOL_RESEARCH.md`
+- `docs/development/KEY_MAPPING_RESEARCH.md`
 
-### First tasks before changing code
+### Implementation tasks
 
-- Compare the current implementation against the latest protocol docs:
-  - `src/devices/hid_reports.rs`
-  - `src/devices/keyboards/mod.rs`
-  - `src/devices/keyboards/apex_pro_tkl_2023.rs`
-  - `src/devices/key_mapping.rs`
-  - `src/devices/zone_mapping.rs`
-- Reconcile any drift between the docs and the current code.
-- Decide which single next protocol goal is most realistic:
-  - per-key RGB discovery
-  - key address verification
-  - actuation read-back discovery
-  - OSD/menu command abstraction
+- Replace or explain all references to missing tooling such as `src/bin/bulk_test.rs`.
+- Point contributors to the helper binaries that actually exist today.
+- Clearly separate:
+  - confirmed behavior
+  - placeholder code
+  - speculative next steps
 
-### Recommended research workflow
+### Success criteria
 
-1. confirm the available research tooling in `src/bin/`
-2. compare with official behavior if protocol capture is feasible
-3. test one protocol surface at a time
-4. update docs immediately when a behavior becomes confirmed or disproven
-5. only then update command builders and higher-level APIs
+- No development doc instructs contributors to use a nonexistent repository tool without explanation.
+- The current reverse-engineering workflow is understandable from the docs alone.
 
-### Potential implementation targets
+### Validation
+
+- Review the updated docs manually.
+- Search for stale references such as `bulk_test` and confirm they are either removed or clearly marked historical.
+
+## 7. Phase 3: tighten Apex Pro capability reporting
+
+### Objective
+
+Reduce misleading support claims for Apex Pro TKL 2023 per-key features until the protocol is verified.
+
+### Primary files
 
 - `src/devices/hid_reports.rs`
 - `src/devices/key_mapping.rs`
-- `src/devices/zone_mapping.rs`
-- `src/devices/keyboards/apex_pro_tkl_2023.rs`
-- `src/rgb/mod.rs`
-- `src/rgb/tests.rs`
-- `docs/development/APEX_PRO_PROTOCOL.md`
-- `docs/development/KEY_MAPPING_RESEARCH.md`
-- `docs/development/PROTOCOL_RESEARCH.md`
+- `src/devices/keyboards/mod.rs`
+- `src/main.rs`
 
-### Guardrails
+### Implementation tasks
 
-- Do not present placeholder per-key support as confirmed support.
-- Do not replace typed HID helpers with manual byte arrays.
-- Do not expand device support claims without hardware-backed evidence.
+- Identify where placeholder mappings or placeholder command support currently appear as confirmed support.
+- Separate "mapping exists" from "behavior verified on hardware" where the current code conflates the two.
+- Keep the public behavior conservative: it is better to describe support as provisional than to imply fully verified functionality.
+- Update nearby docs or CLI help only if needed to keep the behavior consistent.
 
-### Validation commands
+### Success criteria
+
+- Placeholder per-key support is no longer described as fully verified support.
+- Existing verified RGB and actuation behavior remains unchanged.
+
+### Validation
 
 ```bash
 cd /home/runner/work/steelseriesgg-rs/steelseriesgg-rs
 cargo build --locked
 cargo test --locked
-cargo run -- devices
-cargo run -- validate
-cargo run -- bug-report
 ```
 
-If hardware is available, add focused manual checks for:
+If hardware is available:
 
-- zone RGB still working
-- actuation writes still working
-- any newly discovered command affecting only the intended keys or settings
+- verify zone RGB still works
+- verify actuation writes still work
+- verify any per-key status output now reflects the intended support level
 
-## 10. Phase 7: research the remaining external projects from TODO item 4
+## 8. Phase 4: reproduce and resolve issue `#6`
 
 ### Objective
 
-Extract actionable ideas from the external project list without cargo-culting unrelated implementations.
+Determine whether issue `#6` still represents a live failure and fix the smallest affected surface.
 
-### Projects to review
+### Primary files
 
-- `https://github.com/flozz/rivalcfg`
-- `https://github.com/PrzemekkkYT/GGSonarRev`
-- `https://github.com/llMBQll/OmniLED`
-- `https://codeberg.org/Birbwell/linuxmix`
-- `https://github.com/AstroSnail/apexctl`
-- `https://github.com/FrankGrimm/apex7tkl_linux`
-- `https://github.com/Gibtnix/Apex-Macros`
-- `https://github.com/wex/sonar-rev`
-- `https://github.com/Mark7888/steelseries-sonar-py`
-- `https://github.com/Dymstro/nova-chatmix-linux`
-- `https://github.com/not-jan/apex-tux`
-- `https://github.com/Gibtnix/MSIKLM`
-- `https://github.com/stephenlacy/msi-keyboard`
+- `PKGBUILD`
+- `ssgg.install`
+- `Cargo.toml`
+- `rust-toolchain.toml`
+- `.github/workflows/ci.yml`
+- `.github/workflows/release-arch.yml`
 
-### Suggested categorization
+### Implementation tasks
 
-For each project, classify it under one or more of:
+- Retrieve the original failure details and compare them against the current repository state.
+- Reproduce the failure in the smallest realistic environment.
+- Decide whether the fix belongs in:
+  - Rust code
+  - packaging metadata
+  - installation documentation
+  - CI or release configuration
+- Avoid code changes if the problem is already fixed or only affects packaging/docs.
 
-- keyboard RGB / HID protocol
-- headset or Sonar reverse engineering
-- device discovery and permissions
-- packaging or distro integration
-- ideas that are unrelated to this repository
+### Success criteria
 
-### Required output
+- The issue is either reproduced and fixed, or shown to be stale with current evidence.
+- Any fix remains aligned with the current CI feature matrix.
 
-For each project, record:
+### Validation
 
-- what it targets
-- why it is relevant or not relevant
-- what exact local file or subsystem it could influence
-- whether it should be:
-  - ignored
-  - referenced in docs
-  - used as research input only
-  - adapted into a concrete implementation task
+```bash
+cd /home/runner/work/steelseriesgg-rs/steelseriesgg-rs
+cargo build --release --locked
+cargo test --locked
+```
 
-### Important rule
+If an Arch-like environment is available:
 
-Do not broaden scope just because a project is interesting. Only convert research into implementation work if it directly supports one of the TODO items or a blocker discovered while fixing them.
+```bash
+makepkg -sf --noconfirm
+```
 
-## 11. Completion criteria
+## 9. Phase 5: refactor `src/main.rs` only after the blockers above
 
-The TODO backlog should be considered meaningfully advanced only when:
+### Objective
 
-- every TODO item has a documented research outcome
-- issue `#6` has either a verified fix or evidence that it is stale
-- issue `#120` no longer hangs and has a clear validation story
-- Apex protocol docs accurately distinguish confirmed behavior from placeholders
-- stale protocol-tooling references are resolved
-- any code changes are accompanied by the smallest relevant existing validation commands
+Improve long-term maintainability without increasing risk to the backlog fixes above.
 
-## 12. Minimum validation matrix for future implementation work
+### Primary file
 
-Default path:
+- `src/main.rs`
+
+### Implementation tasks
+
+- Identify command families that can be extracted with low churn.
+- Move handlers into focused modules only after correctness-sensitive work is complete.
+- Preserve clap behavior, output, and feature gating exactly.
+
+### Success criteria
+
+- The command dispatch surface is easier to navigate and test.
+- No CLI behavior changes unintentionally.
+
+### Validation
 
 ```bash
 cd /home/runner/work/steelseriesgg-rs/steelseriesgg-rs
@@ -415,30 +279,31 @@ cargo clippy --all-targets --locked -- -D warnings
 cargo test --locked
 ```
 
-Sonar-related work:
+## 10. Deferred research tracks
 
-```bash
-cd /home/runner/work/steelseriesgg-rs/steelseriesgg-rs
-cargo clippy --all-targets --locked --features sonar -- -D warnings
-cargo test --locked --features sonar
-```
+These remain useful, but they should not outrank the implementation priorities above:
 
-Audio-related work:
+- compare `https://github.com/Sharper-Flow/Open-G-Hub` against the current architecture only when a concrete blocker suggests reusable ideas
+- review the remaining external research list from `TODO.md` and classify each project as:
+  - directly relevant
+  - research-only
+  - documentation-only
+  - out of scope
 
-```bash
-cd /home/runner/work/steelseriesgg-rs/steelseriesgg-rs
-cargo clippy --all-targets --locked --features audio -- -D warnings
-cargo test --locked --features audio
-```
+This research should support the active backlog items rather than expand the scope on its own.
 
-## 13. Suggested first move for the next agent
+## 11. Completion criteria
 
-Start by creating a short research note that answers these five questions before writing code:
+The backlog should be considered meaningfully advanced when:
 
-1. What in the current docs is stale or unverifiable?
-2. What exactly caused issue `#6`, based on the attached log?
-3. Where exactly does issue `#120` block or wait?
-4. Which external project has the highest-value overlap with the current blockers?
-5. What is the single safest next Apex Pro TKL 2023 protocol step that is backed by evidence?
+- issue `#120` has a verified non-hanging behavior and a clear validation story
+- stale protocol tooling references are resolved
+- Apex Pro capability reporting distinguishes placeholders from verified support
+- issue `#6` has either a verified fix or current evidence that it is stale
+- any refactor work begins only after the correctness and reliability fixes above are stable
 
-If those five answers are not clear yet, keep researching. If they are clear, implement the smallest next change and validate it immediately.
+## 12. Suggested next move
+
+If only one follow-up task is taken next, start with issue `#120`.
+
+It has the clearest user impact, the smallest likely implementation surface, and the strongest evidence that a local fail-fast fix in the audio path will improve the current codebase immediately.
