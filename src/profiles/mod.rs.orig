@@ -103,36 +103,36 @@ pub struct ProfileManager {
 
 impl ProfileManager {
     /// Create a new profile manager.
-    pub async fn new() -> Result<Self> {
+    pub fn new() -> Result<Self> {
         let profiles_dir = Config::config_dir()
             .ok_or_else(|| Error::Profile("could not determine config directory".to_string()))?
             .join("profiles");
 
-        tokio::fs::create_dir_all(&profiles_dir).await?;
+        std::fs::create_dir_all(&profiles_dir)?;
 
         let mut manager = Self {
             profiles: HashMap::new(),
             profiles_dir,
         };
 
-        manager.load_all().await?;
+        manager.load_all()?;
         Ok(manager)
     }
 
     /// Load all profiles from disk.
-    pub async fn load_all(&mut self) -> Result<()> {
+    pub fn load_all(&mut self) -> Result<()> {
         self.profiles.clear();
 
-        if !tokio::fs::try_exists(&self.profiles_dir).await.unwrap_or(false) {
+        if !self.profiles_dir.exists() {
             return Ok(());
         }
 
-        let mut dir = tokio::fs::read_dir(&self.profiles_dir).await?;
-        while let Ok(Some(entry)) = dir.next_entry().await {
+        for entry in std::fs::read_dir(&self.profiles_dir)? {
+            let entry = entry?;
             let path = entry.path();
 
             if path.extension().map(|e| e == "json").unwrap_or(false) {
-                match tokio::fs::read_to_string(&path).await {
+                match std::fs::read_to_string(&path) {
                     Ok(content) => match serde_json::from_str::<Profile>(&content) {
                         Ok(profile) => {
                             self.profiles.insert(profile.name.clone(), profile);
