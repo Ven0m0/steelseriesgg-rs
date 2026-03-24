@@ -171,7 +171,29 @@ impl ProfileManager {
         }
         let path = self.profiles_dir.join(format!("{}.json", filename));
         let content = serde_json::to_string_pretty(profile)?;
-        std::fs::write(path, content)?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            let mut options = std::fs::OpenOptions::new();
+            options.write(true).create(true).truncate(true).mode(0o600);
+
+            // Set file creation mode to 600 (rw-------)
+            let mut file = options.open(&path)?;
+
+            // Ensure permissions are 600 even if file already existed
+            let mut perms = file.metadata()?.permissions();
+            use std::os::unix::fs::PermissionsExt;
+            perms.set_mode(0o600);
+            file.set_permissions(perms)?;
+
+            use std::io::Write;
+            file.write_all(content.as_bytes())?;
+        }
+        #[cfg(not(unix))]
+        {
+            std::fs::write(&path, content)?;
+        }
+
         Ok(())
     }
 

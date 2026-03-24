@@ -159,11 +159,43 @@ impl Config {
             None => return Err("Could not determine config directory".into()),
         };
 
-        std::fs::create_dir_all(&dir)?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::DirBuilderExt;
+            if !dir.exists() {
+                std::fs::DirBuilder::new().recursive(true).mode(0o700).create(&dir)?;
+            }
+        }
+        #[cfg(not(unix))]
+        {
+            std::fs::create_dir_all(&dir)?;
+        }
 
         let path = dir.join("config.toml");
         let content = toml::to_string_pretty(self).map_err(|e| e.to_string())?;
-        std::fs::write(path, content)?;
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            let mut options = std::fs::OpenOptions::new();
+            options.write(true).create(true).truncate(true).mode(0o600);
+
+            // Set file creation mode to 600 (rw-------)
+            let mut file = options.open(&path)?;
+
+            // Ensure permissions are 600 even if file already existed
+            let mut perms = file.metadata()?.permissions();
+            use std::os::unix::fs::PermissionsExt;
+            perms.set_mode(0o600);
+            file.set_permissions(perms)?;
+
+            use std::io::Write;
+            file.write_all(content.as_bytes())?;
+        }
+        #[cfg(not(unix))]
+        {
+            std::fs::write(&path, content)?;
+        }
 
         Ok(())
     }
