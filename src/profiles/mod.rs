@@ -2,6 +2,9 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::fs::OpenOptions;
+#[cfg(unix)]
+use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt, PermissionsExt};
 use std::path::PathBuf;
 use tracing::warn;
 
@@ -108,6 +111,14 @@ impl ProfileManager {
             .ok_or_else(|| Error::Profile("could not determine config directory".to_string()))?
             .join("profiles");
 
+        #[cfg(unix)]
+        if !profiles_dir.exists() {
+            std::fs::DirBuilder::new()
+                .recursive(true)
+                .mode(0o700)
+                .create(&profiles_dir)?;
+        }
+        #[cfg(not(unix))]
         std::fs::create_dir_all(&profiles_dir)?;
 
         let mut manager = Self {
@@ -117,6 +128,15 @@ impl ProfileManager {
 
         manager.load_all()?;
         Ok(manager)
+    }
+
+    /// Create a test profile manager with a specific directory.
+    #[cfg(test)]
+    pub(crate) fn with_dir(dir: PathBuf) -> Self {
+        Self {
+            profiles: HashMap::new(),
+            profiles_dir: dir,
+        }
     }
 
     /// Load all profiles from disk.
@@ -171,7 +191,19 @@ impl ProfileManager {
         }
         let path = self.profiles_dir.join(format!("{}.json", filename));
         let content = serde_json::to_string_pretty(profile)?;
-        std::fs::write(path, content)?;
+
+        #[cfg(unix)]
+        {
+            let mut options = OpenOptions::new();
+            options.write(true).create(true).truncate(true).mode(0o600);
+            let file = options.open(&path)?;
+            let mut perms = file.metadata()?.permissions();
+            perms.set_mode(0o600);
+            file.set_permissions(perms)?;
+            std::io::Write::write_all(&mut &file, content.as_bytes())?;
+        }
+        #[cfg(not(unix))]
+        std::fs::write(&path, content)?;
         Ok(())
     }
 
