@@ -168,7 +168,7 @@ impl GameSenseServer {
                     }
 
                     // Verify ownership (must be owned by us)
-                    if metadata.uid() != unsafe { libc::getuid() } {
+                    if metadata.uid() != rustix::process::getuid().as_raw() {
                         return Err(Error::GameSense(format!(
                             "Security error: {:?} is not owned by the current user",
                             parent
@@ -496,7 +496,7 @@ mod tests {
         // Verify directory
         let metadata = std::fs::symlink_metadata(&temp_dir)?;
         assert!(metadata.is_dir());
-        assert_eq!(metadata.uid(), unsafe { libc::getuid() });
+        assert_eq!(metadata.uid(), rustix::process::getuid().as_raw());
         // Verify secure permissions (0o700)
         assert_eq!(metadata.permissions().mode() & 0o777, 0o700);
 
