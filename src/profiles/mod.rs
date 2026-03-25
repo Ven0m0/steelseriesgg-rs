@@ -129,7 +129,7 @@ impl ProfileManager {
         }
 
         let mut dir = tokio::fs::read_dir(&self.profiles_dir).await?;
-        while let Ok(Some(entry)) = dir.next_entry().await {
+        while let Some(entry) = dir.next_entry().await? {
             let path = entry.path();
 
             if path.extension().map(|e| e == "json").unwrap_or(false) {
