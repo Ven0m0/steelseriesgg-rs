@@ -112,11 +112,25 @@ impl ProfileManager {
             .join("profiles");
 
         #[cfg(unix)]
-        if !profiles_dir.exists() {
-            std::fs::DirBuilder::new()
-                .recursive(true)
-                .mode(0o700)
-                .create(&profiles_dir)?;
+        {
+            if profiles_dir.exists() {
+                let metadata = std::fs::symlink_metadata(&profiles_dir)?;
+                let file_type = metadata.file_type();
+                if file_type.is_symlink() || !metadata.is_dir() {
+                    return Err(Error::Profile(
+                        "profiles path exists but is not a directory".to_string(),
+                    ));
+                }
+
+                let mut perms = metadata.permissions();
+                perms.set_mode(0o700);
+                std::fs::set_permissions(&profiles_dir, perms)?;
+            } else {
+                std::fs::DirBuilder::new()
+                    .recursive(true)
+                    .mode(0o700)
+                    .create(&profiles_dir)?;
+            }
         }
         #[cfg(not(unix))]
         std::fs::create_dir_all(&profiles_dir)?;
