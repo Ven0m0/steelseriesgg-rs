@@ -1,0 +1,115 @@
+--- src/profiles/mod.rs
++++ src/profiles/mod.rs
+@@ -103,46 +103,46 @@
+
+ impl ProfileManager {
+     /// Create a new profile manager.
+-    pub fn new() -> Result<Self> {
++    pub async fn new() -> Result<Self> {
+         let profiles_dir = Config::config_dir()
+             .ok_or_else(|| Error::Profile("could not determine config directory".to_string()))?
+             .join("profiles");
+
+-        std::fs::create_dir_all(&profiles_dir)?;
++        tokio::fs::create_dir_all(&profiles_dir).await?;
+
+         let mut manager = Self {
+             profiles: HashMap::new(),
+             profiles_dir,
+         };
+
+-        manager.load_all()?;
++        manager.load_all().await?;
+         Ok(manager)
+     }
+
+     /// Load all profiles from disk.
+-    pub fn load_all(&mut self) -> Result<()> {
++    pub async fn load_all(&mut self) -> Result<()> {
+         self.profiles.clear();
+
+-        if !self.profiles_dir.exists() {
++        if !tokio::fs::try_exists(&self.profiles_dir).await.unwrap_or(false) {
+             return Ok(());
+         }
+
+-        for entry in std::fs::read_dir(&self.profiles_dir)? {
+-            let entry = entry?;
+-            let path = entry.path();
+-
+-            if path.extension().map(|e| e == "json").unwrap_or(false) {
+-                match std::fs::read_to_string(&path) {
+-                    Ok(content) => match serde_json::from_str::<Profile>(&content) {
+-                        Ok(profile) => {
+-                            self.profiles.insert(profile.name.clone(), profile);
+-                        }
+-                        Err(err) => {
+-                            warn!("Skipping invalid profile file {}: {}", path.display(), err)
+-                        }
+-                    },
+-                    Err(err) => warn!("Failed to read profile file {}: {}", path.display(), err),
+-                }
+-            }
+-        }
++        let mut dir = tokio::fs::read_dir(&self.profiles_dir).await?;
++        while let Ok(Some(entry)) = dir.next_entry().await {
++            let path = entry.path();
++
++            if path.extension().map(|e| e == "json").unwrap_or(false) {
++                match tokio::fs::read_to_string(&path).await {
++                    Ok(content) => match serde_json::from_str::<Profile>(&content) {
++                        Ok(profile) => {
++                            self.profiles.insert(profile.name.clone(), profile);
++                        }
++                        Err(err) => {
++                            warn!("Skipping invalid profile file {}: {}", path.display(), err)
++                        }
++                    },
++                    Err(err) => warn!("Failed to read profile file {}: {}", path.display(), err),
++                }
++            }
++        }
+
+         Ok(())
+@@ -165,22 +165,22 @@
+
+     /// Save a profile to disk.
+-    pub fn save(&self, profile: &Profile) -> Result<()> {
++    pub async fn save(&self, profile: &Profile) -> Result<()> {
+         let filename = Self::sanitize_filename(&profile.name);
+         if filename.is_empty() {
+             return Err(Error::Profile("Profile name cannot be empty".to_string()));
+         }
+         let path = self.profiles_dir.join(format!("{}.json", filename));
+         let content = serde_json::to_string_pretty(profile)?;
+-        std::fs::write(path, content)?;
++        tokio::fs::write(path, content).await?;
+         Ok(())
+     }
+
+     /// Get a profile by name.
+     pub fn get(&self, name: &str) -> Option<&Profile> {
+         self.profiles.get(name)
+     }
+
+     /// Add or update a profile.
+-    pub fn set(&mut self, profile: Profile) -> Result<()> {
+-        self.save(&profile)?;
++    pub async fn set(&mut self, profile: Profile) -> Result<()> {
++        self.save(&profile).await?;
+         self.profiles.insert(profile.name.clone(), profile);
+         Ok(())
+     }
+
+     /// Delete a profile.
+-    pub fn delete(&mut self, name: &str) -> Result<()> {
++    pub async fn delete(&mut self, name: &str) -> Result<()> {
+         let filename = Self::sanitize_filename(name);
+         let path = self.profiles_dir.join(format!("{}.json", filename));
+-        if path.exists() {
+-            std::fs::remove_file(path)?;
++        if tokio::fs::try_exists(&path).await.unwrap_or(false) {
++            tokio::fs::remove_file(path).await?;
+         }
+         self.profiles.remove(name);
+         Ok(())
