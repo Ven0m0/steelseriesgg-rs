@@ -197,20 +197,40 @@ impl Config {
 
         #[cfg(unix)]
         {
-            use std::os::unix::fs::OpenOptionsExt;
+            use std::io::Write;
+            use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+
+            // Refuse to operate on a symlinked config file.
+            if let Ok(metadata) = std::fs::symlink_metadata(&path) {
+                if metadata.file_type().is_symlink() {
+                    return Err("Refusing to write config.toml because it is a symlink".into());
+                }
+            }
+
             let mut options = std::fs::OpenOptions::new();
-            options.write(true).create(true).truncate(true).mode(0o600);
+            options
+                .write(true)
+                .create(true)
+                .truncate(true)
+                .mode(0o600)
+                .custom_flags(libc::O_NOFOLLOW);
 
-            // Set file creation mode to 600 (rw-------)
-            let mut file = options.open(&path)?;
+            // Set file creation mode to 600 (rw-------) without following symlinks.
+            let mut file = match options.open(&path) {
+                Ok(file) => file,
+                Err(err) => {
+                    // ELOOP indicates a symlink in the path when O_NOFOLLOW is set.
+                    if err.raw_os_error() == Some(libc::ELOOP) {
+                        return Err("Refusing to write config.toml because it is (or contains) a symlink".into());
+                    }
+                    return Err(err.into());
+                }
+            };
 
-            // Ensure permissions are 600 even if file already existed
+            // Ensure permissions are 600 even if file already existed.
             let mut perms = file.metadata()?.permissions();
-            use std::os::unix::fs::PermissionsExt;
             perms.set_mode(0o600);
             file.set_permissions(perms)?;
-
-            use std::io::Write;
             file.write_all(content.as_bytes())?;
         }
         #[cfg(not(unix))]
