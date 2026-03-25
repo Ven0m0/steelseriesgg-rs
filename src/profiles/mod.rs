@@ -183,8 +183,10 @@ impl ProfileManager {
             // Ensure permissions are 600 even if file already existed
             let mut perms = file.metadata()?.permissions();
             use std::os::unix::fs::PermissionsExt;
-            perms.set_mode(0o600);
-            file.set_permissions(perms)?;
+            if perms.mode() & 0o777 != 0o600 {
+                perms.set_mode(0o600);
+                file.set_permissions(perms)?;
+            }
 
             use std::io::Write;
             file.write_all(content.as_bytes())?;
