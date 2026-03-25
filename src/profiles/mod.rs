@@ -123,7 +123,8 @@ impl ProfileManager {
     pub async fn load_all(&mut self) -> Result<()> {
         self.profiles.clear();
 
-        if !tokio::fs::try_exists(&self.profiles_dir).await.unwrap_or(false) {
+        let exists = tokio::fs::try_exists(&self.profiles_dir).await?;
+        if !exists {
             return Ok(());
         }
 
