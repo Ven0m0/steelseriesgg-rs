@@ -464,7 +464,7 @@ impl PerKeyRgbCommand {
 
         // Handle empty case
         if self.key_colors.is_empty() {
-            return vec![self.clone()];
+            return Vec::new();
         }
 
         let mut current_fragment = PerKeyRgbCommand {
