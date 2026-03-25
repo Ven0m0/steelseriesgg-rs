@@ -303,9 +303,11 @@ impl DeviceStateStore {
                     .permissions();
 
                 use std::os::unix::fs::PermissionsExt;
-                perms.set_mode(0o600);
-                file.set_permissions(perms)
-                    .map_err(|e| Error::FileSystemError(format!("Failed to set temp file permissions: {}", e)))?;
+                if perms.mode() & 0o777 != 0o600 {
+                    perms.set_mode(0o600);
+                    file.set_permissions(perms)
+                        .map_err(|e| Error::FileSystemError(format!("Failed to set temp file permissions: {}", e)))?;
+                }
 
                 use std::io::Write;
                 file.write_all(content.as_bytes())
