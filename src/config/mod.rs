@@ -161,9 +161,30 @@ impl Config {
 
         #[cfg(unix)]
         {
-            use std::os::unix::fs::DirBuilderExt;
-            if !dir.exists() {
-                std::fs::DirBuilder::new().recursive(true).mode(0o700).create(&dir)?;
+            use std::fs;
+            use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
+
+            match fs::symlink_metadata(&dir) {
+                // Path does not exist: create securely with 0o700.
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                    fs::DirBuilder::new().recursive(true).mode(0o700).create(&dir)?;
+                }
+                // Path exists: ensure it's a real directory and tighten permissions.
+                Ok(metadata) => {
+                    if !metadata.file_type().is_dir() {
+                        return Err("Config directory path is not a directory".into());
+                    }
+
+                    let perms = metadata.permissions();
+                    // If any group/other bits are set, tighten to 0o700.
+                    if perms.mode() & 0o077 != 0 {
+                        let mut new_perms = perms;
+                        new_perms.set_mode(0o700);
+                        fs::set_permissions(&dir, new_perms)?;
+                    }
+                }
+                // Any other I/O error while inspecting metadata is propagated.
+                Err(e) => return Err(e.into()),
             }
         }
         #[cfg(not(unix))]
