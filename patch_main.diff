@@ -1,0 +1,40 @@
+--- src/main.rs
++++ src/main.rs
+@@ -1312,7 +1312,7 @@
+ }
+
+ async fn cmd_profile(action: ProfileAction) -> Result<()> {
+-    let mut profile_manager = ProfileManager::new()?;
++    let mut profile_manager = ProfileManager::new().await?;
+
+     match action {
+         ProfileAction::List => {
+@@ -1346,7 +1346,7 @@
+                 for (name, mut keyboard) in device_manager.get_keyboards() {
+                     println!("Applying to {}...", name);
+                     if let Some(color) = &profile.keyboard.as_ref().and_then(|k| k.effect.color()) {
+-                        keyboard.set_color(*color).await?;
++                        keyboard.set_color(color.clone()).await?;
+                     }
+                     keyboard.set_brightness(profile.keyboard.as_ref().map(|k| k.brightness).unwrap_or(100) as f32 / 100.0).await?;
+                 }
+@@ -2137,9 +2137,9 @@
+ }
+
+ impl DaemonState {
+-    fn new() -> Result<Self> {
++    async fn new() -> Result<Self> {
+         let state_store = DeviceStateStore::new()?;
+-        let profile_manager = ProfileManager::new().ok(); // Optional - don't fail if profiles unavailable
++        let profile_manager = ProfileManager::new().await.ok(); // Optional - don't fail if profiles unavailable
+
+         Ok(Self {
+             keyboards: HashMap::new(),
+@@ -2979,7 +2979,7 @@
+
+ async fn load_default_profile(config: &Config, daemon_state: Arc<RwLock<DaemonState>>) {
+     if let Some(ref profile_name) = config.default_profile {
+-        if let Ok(profile_manager) = ProfileManager::new() {
++        if let Ok(profile_manager) = ProfileManager::new().await {
+             if let Some(profile) = profile_manager.get(profile_name) {
+                 info!("Loading default profile: {}", profile.name);

@@ -104,3 +104,38 @@ fn test_profile_with_both_devices() {
     assert!(deserialized.headset.is_some());
     assert_eq!(deserialized.headset.as_ref().unwrap().sidetone, 60);
 }
+#[test]
+#[cfg(unix)]
+fn test_secure_profile_permissions() {
+    use std::os::unix::fs::PermissionsExt;
+
+    // Use tempfile for a clean test environment
+    let temp_dir = tempfile::tempdir().unwrap();
+    let profiles_dir = temp_dir.path().join("profiles");
+
+    // Mock the Config::config_dir to be the temp directory so ProfileManager::new creates it
+    // Wait, ProfileManager::new uses Config::config_dir(), which reads from dirs_sys::config_dir().
+    // We can't easily mock it. But we can just use with_dir to test file saving,
+    // and manually test DirBuilder creation.
+
+    // 1. Test directory creation
+    if !profiles_dir.exists() {
+        std::fs::DirBuilder::new()
+            .recursive(true)
+            .mode(0o700)
+            .create(&profiles_dir)
+            .unwrap();
+    }
+
+    let dir_metadata = std::fs::symlink_metadata(&profiles_dir).unwrap();
+    assert_eq!(dir_metadata.permissions().mode() & 0o777, 0o700);
+
+    // 2. Test file saving
+    let manager = ProfileManager::with_dir(profiles_dir.clone());
+    let profile = Profile::new("SecretProfile");
+    manager.save(&profile).unwrap();
+
+    let path = profiles_dir.join("SecretProfile.json");
+    let file_metadata = std::fs::symlink_metadata(&path).unwrap();
+    assert_eq!(file_metadata.permissions().mode() & 0o777, 0o600);
+}

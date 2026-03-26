@@ -287,8 +287,37 @@ impl DeviceStateStore {
         let state_file_clone = state_file.to_path_buf();
 
         tokio::task::spawn_blocking(move || -> Result<()> {
-            std::fs::write(&temp_file_clone, content)
-                .map_err(|e| Error::FileSystemError(format!("Failed to write temp file: {}", e)))?;
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::OpenOptionsExt;
+                let mut options = std::fs::OpenOptions::new();
+                options.write(true).create(true).truncate(true).mode(0o600);
+
+                let mut file = options
+                    .open(&temp_file_clone)
+                    .map_err(|e| Error::FileSystemError(format!("Failed to open temp file: {}", e)))?;
+
+                let mut perms = file
+                    .metadata()
+                    .map_err(|e| Error::FileSystemError(format!("Failed to get temp file metadata: {}", e)))?
+                    .permissions();
+
+                use std::os::unix::fs::PermissionsExt;
+                if perms.mode() & 0o777 != 0o600 {
+                    perms.set_mode(0o600);
+                    file.set_permissions(perms)
+                        .map_err(|e| Error::FileSystemError(format!("Failed to set temp file permissions: {}", e)))?;
+                }
+
+                use std::io::Write;
+                file.write_all(content.as_bytes())
+                    .map_err(|e| Error::FileSystemError(format!("Failed to write temp file: {}", e)))?;
+            }
+            #[cfg(not(unix))]
+            {
+                std::fs::write(&temp_file_clone, content)
+                    .map_err(|e| Error::FileSystemError(format!("Failed to write temp file: {}", e)))?;
+            }
 
             std::fs::rename(&temp_file_clone, &state_file_clone)
                 .map_err(|e| Error::FileSystemError(format!("Failed to rename temp file: {}", e)))?;

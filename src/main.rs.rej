@@ -1,0 +1,11 @@
+--- src/main.rs
++++ src/main.rs
+@@ -1346,7 +1346,7 @@
+                 for (name, mut keyboard) in device_manager.get_keyboards() {
+                     println!("Applying to {}...", name);
+                     if let Some(color) = &profile.keyboard.as_ref().and_then(|k| k.effect.color()) {
+-                        keyboard.set_color(*color).await?;
++                        keyboard.set_color(color.clone()).await?;
+                     }
+                     keyboard.set_brightness(profile.keyboard.as_ref().map(|k| k.brightness).unwrap_or(100) as f32 / 100.0).await?;
+                 }

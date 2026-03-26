@@ -2,9 +2,6 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::fs::OpenOptions;
-#[cfg(unix)]
-use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt, PermissionsExt};
 use std::path::PathBuf;
 use tracing::warn;
 
@@ -106,33 +103,11 @@ pub struct ProfileManager {
 
 impl ProfileManager {
     /// Create a new profile manager.
-    pub async fn new() -> Result<Self> {
+    pub fn new() -> Result<Self> {
         let profiles_dir = Config::config_dir()
             .ok_or_else(|| Error::Profile("could not determine config directory".to_string()))?
             .join("profiles");
 
-        #[cfg(unix)]
-        {
-            if profiles_dir.exists() {
-                let metadata = std::fs::symlink_metadata(&profiles_dir)?;
-                let file_type = metadata.file_type();
-                if file_type.is_symlink() || !metadata.is_dir() {
-                    return Err(Error::Profile(
-                        "profiles path exists but is not a directory".to_string(),
-                    ));
-                }
-
-                let mut perms = metadata.permissions();
-                perms.set_mode(0o700);
-                std::fs::set_permissions(&profiles_dir, perms)?;
-            } else {
-                std::fs::DirBuilder::new()
-                    .recursive(true)
-                    .mode(0o700)
-                    .create(&profiles_dir)?;
-            }
-        }
-        #[cfg(not(unix))]
         std::fs::create_dir_all(&profiles_dir)?;
 
         let mut manager = Self {
@@ -140,34 +115,24 @@ impl ProfileManager {
             profiles_dir,
         };
 
-        manager.load_all().await?;
+        manager.load_all()?;
         Ok(manager)
     }
 
-    /// Create a test profile manager with a specific directory.
-    #[cfg(test)]
-    pub(crate) fn with_dir(dir: PathBuf) -> Self {
-        Self {
-            profiles: HashMap::new(),
-            profiles_dir: dir,
-        }
-    }
-
     /// Load all profiles from disk.
-    pub async fn load_all(&mut self) -> Result<()> {
+    pub fn load_all(&mut self) -> Result<()> {
         self.profiles.clear();
 
-        let exists = tokio::fs::try_exists(&self.profiles_dir).await?;
-        if !exists {
+        if !self.profiles_dir.exists() {
             return Ok(());
         }
 
-        let mut dir = tokio::fs::read_dir(&self.profiles_dir).await?;
-        while let Some(entry) = dir.next_entry().await? {
+        for entry in std::fs::read_dir(&self.profiles_dir)? {
+            let entry = entry?;
             let path = entry.path();
 
             if path.extension().map(|e| e == "json").unwrap_or(false) {
-                match tokio::fs::read_to_string(&path).await {
+                match std::fs::read_to_string(&path) {
                     Ok(content) => match serde_json::from_str::<Profile>(&content) {
                         Ok(profile) => {
                             self.profiles.insert(profile.name.clone(), profile);
@@ -206,19 +171,7 @@ impl ProfileManager {
         }
         let path = self.profiles_dir.join(format!("{}.json", filename));
         let content = serde_json::to_string_pretty(profile)?;
-
-        #[cfg(unix)]
-        {
-            let mut options = OpenOptions::new();
-            options.write(true).create(true).truncate(true).mode(0o600);
-            let file = options.open(&path)?;
-            let mut perms = file.metadata()?.permissions();
-            perms.set_mode(0o600);
-            file.set_permissions(perms)?;
-            std::io::Write::write_all(&mut &file, content.as_bytes())?;
-        }
-        #[cfg(not(unix))]
-        std::fs::write(&path, content)?;
+        std::fs::write(path, content)?;
         Ok(())
     }
 

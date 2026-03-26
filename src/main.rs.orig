@@ -1,44 +1,7 @@
-//! SteelSeries GG for Linux - CLI
+//! NOTE: This file was an accidental backup copy of `src/main.rs` (e.g. from a patch/merge tool).
 //!
-//! A complete open-source replacement for SteelSeries GG on Linux.
-
-use clap::{Parser, Subcommand};
-use tokio::task::yield_now;
-use tracing::{Level, debug, info, warn};
-use tracing_subscriber::FmtSubscriber;
-
-use steelseries_gg::config::Config;
-use steelseries_gg::device_state::{DeviceId, DeviceStateStore, KeyboardState};
-use steelseries_gg::devices::headsets::Headset;
-use steelseries_gg::devices::keyboards::Keyboard;
-use steelseries_gg::devices::{
-    DeviceInfo, DeviceManager, DeviceType, KeyAddress, KeyId,
-    diagnostics::{init_global_diagnostics, with_global_diagnostics},
-    discovery::{DeviceFingerprint, HotPlugEvent, print_device_summary},
-};
-use steelseries_gg::gamesense::GameSenseServer;
-use steelseries_gg::profiles::{KeyboardProfile, Profile, ProfileManager};
-use steelseries_gg::rgb::{Color, Effect, RgbController, WaveDirection};
-use steelseries_gg::validation::RgbValidator;
-use steelseries_gg::{Error, Result};
-
-use std::collections::HashMap;
-use std::io::IsTerminal;
-use std::sync::Arc;
-use std::time::{Duration, Instant};
-use tokio::sync::RwLock;
-
-use colored::Colorize;
-use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
-use tabled::{Table, Tabled};
-
-#[cfg(feature = "audio")]
-use steelseries_gg::audio::{AudioMixer, Channel};
-
-#[cfg(feature = "sonar")]
-use steelseries_gg::audio::SonarClient;
-
-/// SteelSeries GG for Linux - Control your SteelSeries devices
+//! It is intentionally left without any executable code to avoid duplicating the main CLI entrypoint.
+//! All real application logic lives in `src/main.rs`.
 #[derive(Parser)]
 #[command(name = "ssgg")]
 #[command(author, version, about, long_about = None)]
@@ -1346,7 +1309,7 @@ async fn cmd_profile(action: ProfileAction) -> Result<()> {
                         // Apply effect - for static effects, apply immediately
                         match &keyboard_profile.effect {
                             Effect::Static { color } => {
-                                keyboard.set_color(*color).await?;
+                                keyboard.set_color(color.clone()).await?;
                             }
                             Effect::Off => {
                                 keyboard.set_color(Color::BLACK).await?;

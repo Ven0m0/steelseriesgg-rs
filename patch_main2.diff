@@ -1,0 +1,11 @@
+--- src/main.rs
++++ src/main.rs
+@@ -1347,7 +1347,7 @@
+                         // Apply effect - for static effects, apply immediately
+                         match &keyboard_profile.effect {
+                             Effect::Static { color } => {
+-                                keyboard.set_color(*color).await?;
++                                keyboard.set_color(color.clone()).await?;
+                             }
+                             Effect::Off => {
+                                 keyboard.set_color(Color::BLACK).await?;
