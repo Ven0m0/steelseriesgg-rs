@@ -38,6 +38,11 @@ pub enum CommandCode {
     /// NOTE: This command code is a placeholder. The actual per-key RGB command
     /// for SteelSeries keyboards has not been discovered and may be different.
     PerKeyRgb = 0x23,
+    /// Apex Pro TKL 2023 experimental direct per-key RGB control (0x40)
+    ///
+    /// NOTE: This command is based on reverse-engineering notes and is kept
+    /// behind the `experimental-apex-2023` feature until validated on hardware.
+    Apex2023Direct = 0x40,
     /// Actuation point control (0x2D) - EXPERIMENTAL
     /// NOTE: This command code is experimental based on hardware research.
     ActuationControl = 0x2D,
@@ -52,7 +57,28 @@ impl fmt::Display for CommandCode {
             CommandCode::ReactiveMode => write!(f, "REACTIVE"),
             CommandCode::ColorShift => write!(f, "COLOR_SHIFT"),
             CommandCode::PerKeyRgb => write!(f, "PERKEY_RGB_22"),
+            CommandCode::Apex2023Direct => write!(f, "APEX2023_DIRECT"),
             CommandCode::ActuationControl => write!(f, "ACTUATION_CTRL"),
+        }
+    }
+}
+
+impl CommandCode {
+    /// Parse a command byte found in a HID report.
+    ///
+    /// This keeps report-byte handling in one place, including compatibility
+    /// with legacy captures that have used `0x2A` for placeholder per-key RGB.
+    pub const fn from_report_byte(value: u8) -> Option<Self> {
+        match value {
+            0x09 => Some(CommandCode::Apply),
+            0x21 => Some(CommandCode::RgbControl),
+            0x22 => Some(CommandCode::Brightness),
+            0x25 => Some(CommandCode::ReactiveMode),
+            0x26 => Some(CommandCode::ColorShift),
+            0x23 | 0x2A => Some(CommandCode::PerKeyRgb),
+            0x40 => Some(CommandCode::Apex2023Direct),
+            0x2D => Some(CommandCode::ActuationControl),
+            _ => None,
         }
     }
 }
@@ -670,6 +696,137 @@ impl HidCommand for PerKeyRgbCommand {
     }
 }
 
+/// Experimental direct per-key RGB command for Apex Pro TKL 2023 (`0x1628`).
+///
+/// This command keeps the existing placeholder matrix path intact while allowing
+/// the 2023 keyboard to opt into a logical-key packet shape during development.
+#[cfg(feature = "experimental-apex-2023")]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Apex2023DirectCommand {
+    /// Logical key IDs and their target colors.
+    ///
+    /// The `u8` key identifier currently follows the standard HID keyboard
+    /// usage IDs until packet captures confirm any SteelSeries-specific
+    /// remapping for the 2023 protocol.
+    pub key_colors: Vec<(u8, Color)>,
+}
+
+#[cfg(feature = "experimental-apex-2023")]
+impl Apex2023DirectCommand {
+    /// Maximum keys per report for the current experimental packet format.
+    ///
+    /// A keyboard report is 65 bytes with a 1-byte report ID, leaving
+    /// 64 payload bytes. The direct packet uses 1 byte for the command,
+    /// 1 byte for the key count, and 4 bytes per key (`key_id`, `r`, `g`,
+    /// `b`), so `floor((64 - 2) / 4) = 15`.
+    pub const MAX_KEYS_PER_REPORT: usize = 15;
+
+    /// Create an empty direct command.
+    pub fn new() -> Self {
+        Self { key_colors: Vec::new() }
+    }
+
+    /// Add or update a logical key color.
+    pub fn set_key_color(&mut self, key_id: u8, color: Color) {
+        if let Some((_, existing_color)) = self
+            .key_colors
+            .iter_mut()
+            .find(|(existing_key_id, _)| *existing_key_id == key_id)
+        {
+            *existing_color = color;
+        } else {
+            self.key_colors.push((key_id, color));
+        }
+    }
+
+    /// Number of logical keys in this command.
+    pub fn key_count(&self) -> usize {
+        self.key_colors.len()
+    }
+
+    /// Whether the command contains no key updates.
+    pub fn is_empty(&self) -> bool {
+        self.key_colors.is_empty()
+    }
+}
+
+#[cfg(feature = "experimental-apex-2023")]
+impl Default for Apex2023DirectCommand {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[cfg(feature = "experimental-apex-2023")]
+impl HidCommand for Apex2023DirectCommand {
+    fn command_code(&self) -> CommandCode {
+        CommandCode::Apex2023Direct
+    }
+
+    fn serialize(&self, buffer: &mut [u8], device_type: HidDeviceType) -> Result<usize> {
+        self.validate()?;
+
+        let report_size = device_type.report_size();
+        if buffer.len() < report_size {
+            return Err(Error::DeviceCommunication(format!(
+                "Buffer too small: {} bytes (expected {})",
+                buffer.len(),
+                report_size
+            )));
+        }
+
+        buffer[..report_size].fill(0);
+        let mut offset = 0;
+
+        if device_type.includes_report_id() {
+            buffer[0] = 0x00;
+            offset = 1;
+        }
+
+        buffer[offset] = self.command_code() as u8;
+        offset += 1;
+        buffer[offset] = self.key_colors.len() as u8;
+        offset += 1;
+
+        for (key_id, color) in &self.key_colors {
+            if offset + 4 > report_size {
+                return Err(Error::DeviceCommunication(
+                    "Apex 2023 direct command serialization exceeded report size".to_string(),
+                ));
+            }
+
+            buffer[offset] = *key_id;
+            buffer[offset + 1] = color.r;
+            buffer[offset + 2] = color.g;
+            buffer[offset + 3] = color.b;
+            offset += 4;
+        }
+
+        Ok(report_size)
+    }
+
+    fn validate(&self) -> Result<()> {
+        if self.key_colors.is_empty() {
+            return Err(Error::DeviceCommunication(
+                "Apex 2023 direct command must have at least one key".to_string(),
+            ));
+        }
+
+        if self.key_colors.len() > Self::MAX_KEYS_PER_REPORT {
+            return Err(Error::DeviceCommunication(format!(
+                "Apex 2023 direct command exceeds {} keys per report",
+                Self::MAX_KEYS_PER_REPORT
+            )));
+        }
+
+        Ok(())
+    }
+
+    fn description(&self) -> String {
+        format!("Apex 2023 direct RGB for {} logical keys", self.key_colors.len())
+    }
+}
+
 /// Builder for creating batch per-key RGB operations.
 #[derive(Debug)]
 pub struct PerKeyRgbBuilder {
@@ -846,9 +1003,8 @@ impl HidReportBuilder {
         let cmd_offset = if self.device_type.includes_report_id() { 1 } else { 0 };
         if data.len() > cmd_offset {
             let cmd_byte = data[cmd_offset];
-            match cmd_byte {
-                0x09 | 0x21 | 0x22 | 0x25 | 0x26 | 0x2A | 0x2D => {} // Known commands
-                _ => tracing::warn!("Unknown command byte: 0x{:02x}", cmd_byte),
+            if CommandCode::from_report_byte(cmd_byte).is_none() {
+                tracing::warn!("Unknown command byte: 0x{:02x}", cmd_byte);
             }
         }
 
@@ -863,16 +1019,7 @@ impl HidReportBuilder {
             return None;
         }
 
-        match data[cmd_offset] {
-            0x09 => Some(CommandCode::Apply),
-            0x21 => Some(CommandCode::RgbControl),
-            0x22 => Some(CommandCode::Brightness),
-            0x25 => Some(CommandCode::ReactiveMode),
-            0x26 => Some(CommandCode::ColorShift),
-            0x2A => Some(CommandCode::PerKeyRgb),
-            0x2D => Some(CommandCode::ActuationControl),
-            _ => None,
-        }
+        CommandCode::from_report_byte(data[cmd_offset])
     }
 }
 
@@ -1544,6 +1691,31 @@ mod tests {
         assert!(cmd.key_count() >= 6);
         assert_eq!(cmd.addressing_mode, PerKeyAddressingMode::Matrix);
         assert!(cmd.validate().is_ok());
+    }
+
+    #[cfg(feature = "experimental-apex-2023")]
+    #[test]
+    fn test_apex_2023_direct_command_serialization() {
+        let mut cmd = Apex2023DirectCommand::new();
+        cmd.set_key_color(0x04, Color::RED);
+        cmd.set_key_color(0x52, Color::BLUE);
+
+        let builder = HidReportBuilder::new(HidDeviceType::Keyboard);
+        let mut buffer = [0u8; KEYBOARD_REPORT_SIZE];
+        let size = builder.build_report(cmd, &mut buffer).unwrap();
+
+        assert_eq!(size, KEYBOARD_REPORT_SIZE);
+        assert_eq!(buffer[0], 0x00);
+        assert_eq!(buffer[1], 0x40);
+        assert_eq!(buffer[2], 0x02);
+        assert_eq!(buffer[3], 0x04);
+        assert_eq!(buffer[4], 255);
+        assert_eq!(buffer[5], 0);
+        assert_eq!(buffer[6], 0);
+        assert_eq!(buffer[7], 0x52);
+        assert_eq!(buffer[8], 0);
+        assert_eq!(buffer[9], 0);
+        assert_eq!(buffer[10], 255);
     }
 
     #[test]

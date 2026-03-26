@@ -62,6 +62,140 @@ impl ApexProTkl2023 {
         self.inner.update_cached_actuation_point(command.actuation_point);
         Ok(())
     }
+
+    #[cfg(feature = "experimental-apex-2023")]
+    const fn experimental_direct_key_id(key_id: KeyId) -> Option<u8> {
+        Some(match key_id {
+            KeyId::A => 0x04,
+            KeyId::B => 0x05,
+            KeyId::C => 0x06,
+            KeyId::D => 0x07,
+            KeyId::E => 0x08,
+            KeyId::F => 0x09,
+            KeyId::G => 0x0A,
+            KeyId::H => 0x0B,
+            KeyId::I => 0x0C,
+            KeyId::J => 0x0D,
+            KeyId::K => 0x0E,
+            KeyId::L => 0x0F,
+            KeyId::M => 0x10,
+            KeyId::N => 0x11,
+            KeyId::O => 0x12,
+            KeyId::P => 0x13,
+            KeyId::Q => 0x14,
+            KeyId::R => 0x15,
+            KeyId::S => 0x16,
+            KeyId::T => 0x17,
+            KeyId::U => 0x18,
+            KeyId::V => 0x19,
+            KeyId::W => 0x1A,
+            KeyId::X => 0x1B,
+            KeyId::Y => 0x1C,
+            KeyId::Z => 0x1D,
+            KeyId::Key1 => 0x1E,
+            KeyId::Key2 => 0x1F,
+            KeyId::Key3 => 0x20,
+            KeyId::Key4 => 0x21,
+            KeyId::Key5 => 0x22,
+            KeyId::Key6 => 0x23,
+            KeyId::Key7 => 0x24,
+            KeyId::Key8 => 0x25,
+            KeyId::Key9 => 0x26,
+            KeyId::Key0 => 0x27,
+            KeyId::Enter => 0x28,
+            KeyId::Escape => 0x29,
+            KeyId::Backspace => 0x2A,
+            KeyId::Tab => 0x2B,
+            KeyId::Space => 0x2C,
+            KeyId::Minus => 0x2D,
+            KeyId::Equal => 0x2E,
+            KeyId::LeftBracket => 0x2F,
+            KeyId::RightBracket => 0x30,
+            KeyId::Backslash => 0x31,
+            KeyId::Semicolon => 0x33,
+            KeyId::Quote => 0x34,
+            KeyId::Backtick => 0x35,
+            KeyId::Comma => 0x36,
+            KeyId::Period => 0x37,
+            KeyId::Slash => 0x38,
+            KeyId::CapsLock => 0x39,
+            KeyId::F1 => 0x3A,
+            KeyId::F2 => 0x3B,
+            KeyId::F3 => 0x3C,
+            KeyId::F4 => 0x3D,
+            KeyId::F5 => 0x3E,
+            KeyId::F6 => 0x3F,
+            KeyId::F7 => 0x40,
+            KeyId::F8 => 0x41,
+            KeyId::F9 => 0x42,
+            KeyId::F10 => 0x43,
+            KeyId::F11 => 0x44,
+            KeyId::F12 => 0x45,
+            KeyId::Insert => 0x49,
+            KeyId::Home => 0x4A,
+            KeyId::PageUp => 0x4B,
+            KeyId::Delete => 0x4C,
+            KeyId::End => 0x4D,
+            KeyId::PageDown => 0x4E,
+            KeyId::ArrowRight => 0x4F,
+            KeyId::ArrowLeft => 0x50,
+            KeyId::ArrowDown => 0x51,
+            KeyId::ArrowUp => 0x52,
+            KeyId::Menu => 0x65,
+            KeyId::LeftCtrl => 0xE0,
+            KeyId::LeftShift => 0xE1,
+            KeyId::LeftAlt => 0xE2,
+            KeyId::LeftWin => 0xE3,
+            KeyId::RightCtrl => 0xE4,
+            KeyId::RightShift => 0xE5,
+            KeyId::RightAlt => 0xE6,
+            KeyId::RightWin => 0xE7,
+            KeyId::SteelSeriesKey | KeyId::VolumeWheel => return None,
+            KeyId::NumLock
+            | KeyId::NumSlash
+            | KeyId::NumAsterisk
+            | KeyId::NumMinus
+            | KeyId::Num7
+            | KeyId::Num8
+            | KeyId::Num9
+            | KeyId::NumPlus
+            | KeyId::Num4
+            | KeyId::Num5
+            | KeyId::Num6
+            | KeyId::Num1
+            | KeyId::Num2
+            | KeyId::Num3
+            | KeyId::NumEnter
+            | KeyId::Num0
+            | KeyId::NumPeriod => return None,
+        })
+    }
+
+    #[cfg(feature = "experimental-apex-2023")]
+    fn build_experimental_direct_command(
+        &self,
+        key_colors: &[(KeyId, Color)],
+    ) -> Option<crate::devices::hid_reports::Apex2023DirectCommand> {
+        use crate::devices::hid_reports::Apex2023DirectCommand;
+
+        if key_colors.is_empty() {
+            return None;
+        }
+
+        let mut command = Apex2023DirectCommand::new();
+        for (key_id, color) in key_colors {
+            let Some(direct_key_id) = Self::experimental_direct_key_id(*key_id) else {
+                tracing::debug!(
+                    "Falling back to placeholder Apex per-key path for unsupported experimental key {:?}",
+                    key_id
+                );
+                return None;
+            };
+            command.set_key_color(direct_key_id, *color);
+        }
+
+        Some(command)
+    }
 }
 
 // Delegate Device trait
@@ -127,10 +261,18 @@ impl Keyboard for ApexProTkl2023 {
     }
 
     async fn set_key_color(&mut self, key_id: KeyId, color: Color) -> Result<()> {
-        self.inner.set_key_color(key_id, color).await
+        self.set_key_colors(&[(key_id, color)]).await
     }
 
     async fn set_key_colors(&mut self, key_colors: &[(KeyId, Color)]) -> Result<()> {
+        #[cfg(feature = "experimental-apex-2023")]
+        if let Some(command) = self.build_experimental_direct_command(key_colors) {
+            let report_builder = HidReportBuilder::new(HidDeviceType::Keyboard);
+            let mut buffer = [0u8; KEYBOARD_REPORT_SIZE];
+            let size = report_builder.build_report(command, &mut buffer)?;
+            return self.inner.send_raw(&buffer[..size]);
+        }
+
         self.inner.set_key_colors(key_colors).await
     }
 

@@ -31,6 +31,7 @@ required-features = ["sonar"]
 default = []
 audio = ["dep:libpulse-binding"]
 sonar = ["dep:reqwest"]
+experimental-apex-2023 = []
 
 [dependencies]
 # HTTP server for GameSense API
