@@ -4,7 +4,7 @@
 [![Rust](https://img.shields.io/badge/rust-1.70+-orange?style=flat-square)](https://www.rust-lang.org/)
 ![GitHub repo size](https://img.shields.io/github/repo-size/Ven0m0/steelseriesgg-rs)
 
-Open-source SteelSeries GG replacement for Linux. Control SteelSeries keyboards and headsets: RGB lighting, GameSense-compatible server, profiles, and (optional) audio/Sonar integration.
+Open-source [SteelSeries GG](https://steelseries.com/gg/engine) replacement for Linux. Control SteelSeries keyboards and headsets: RGB lighting, GameSense-compatible server, profiles, and (optional) audio/Sonar integration.
 
 ## Quickstart
 
@@ -34,7 +34,7 @@ systemctl --user enable --now ssgg.service
 ## Supported Devices **WIP**
 
 ### Keyboards
-- Apex Pro / Apex Pro TKL / Apex Pro TKL 2023
+- Apex Pro / Apex Pro TKL / [Apex Pro TKL 2023](https://steelseries.com/gaming-keyboards/apex-pro-2023)
 - Apex 3 / Apex 3 TKL
 - Apex 5
 - Apex 7 / Apex 7 TKL
