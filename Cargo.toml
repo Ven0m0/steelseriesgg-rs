@@ -68,7 +68,7 @@ indicatif = "0.18.4"
 tabled = "0.20.0"
 # Async runtime - only include needed features to reduce binary size
 tokio = { version = "1.50.0", default-features = false, features = ["rt-multi-thread", "macros", "signal", "fs"] }
-toml = "1.0.4"
+toml = "1.1.0"
 tower-http = { version = "0.6.8", default-features = false, features = ["cors"] }
 
 # Logging
