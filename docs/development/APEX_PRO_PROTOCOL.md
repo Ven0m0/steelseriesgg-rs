@@ -73,7 +73,7 @@ Total: 64 bytes (zero-padded)
 
 ### HidReportBuilder (Recommended API)
 
-All HID report construction **must** use `HidReportBuilder` from `src/devices/hid_reports.rs`. Direct byte-array construction is discouraged.
+Shared keyboard and headset commands should prefer `HidReportBuilder` from `src/devices/hid_reports.rs`. A few Apex-specific helpers in `src/devices/keyboards/apex.rs` still use direct byte-array construction for commands that do not yet have dedicated command structs.
 
 ```rust
 use steelseries_gg::devices::hid_reports::{HidReportBuilder, HidDeviceType};
@@ -209,7 +209,7 @@ The `write_padded_report()` function in `src/devices/mod.rs` includes a deduplic
 
 ### Commands Under Investigation (0x20, 0x25–0x2F)
 
-These commands were tested systematically via the bulk testing harness (`src/bin/bulk_test.rs`) with value patterns `0x00, 0x04, 0x08, 0x14, 0x24, 0x30`. Functions not yet identified through observable behavior. See `PROTOCOL_RESEARCH.md` for testing methodology.
+These commands were investigated with targeted helper binaries, USB capture, and manual hardware observation using value patterns such as `0x00, 0x04, 0x08, 0x14, 0x24, 0x30`. Functions are still not identified through observable behavior. See `PROTOCOL_RESEARCH.md` for the current testing workflow.
 
 ---
 
@@ -357,7 +357,7 @@ keyboard.simulate_per_key_with_zones(&key_colors).await?;        // ✅ Uses Zon
 ### Research Methods
 
 - **Packet Capture:** SteelSeries GG via WINE/Lutris + Wireshark/usbmon
-- **Systematic Testing:** `bulk_test` binary for automated command-range sweeps
+- **Targeted Testing:** `discover_actuation` and `verify_key_mapping` for focused command discovery on live hardware
 - **Reverse Engineering:** Analyze apex-tux, apex7tkl_linux, msi-perkeyrgb projects
 - **Hardware Testing:** Visual / physical validation on actual devices
 

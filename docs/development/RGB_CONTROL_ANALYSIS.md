@@ -6,7 +6,7 @@
 
 ## Investigation Summary
 
-This document analyzes whether the crates/projects mentioned in todo.md could help improve RGB control:
+This document analyzes whether the crates/projects mentioned in `TODO.md` could help improve RGB control:
 - `usbd-human-interface-device`
 - `kanata-keyberon`
 - Kanata Linux setup documentation
@@ -227,7 +227,7 @@ Additionally, `src/devices/diagnostics.rs` provides `HidDiagnostics` for structu
 
 ### Completed Improvements ✅
 
-1. **HidReportBuilder** — All commands go through the builder; no raw byte arrays
+1. **HidReportBuilder** — Shared RGB and configuration commands use the builder, while a few Apex-specific helpers still send direct packets
 2. **Stack-allocated buffers** — `[u8; 65]` instead of `Vec<u8>` in hot paths
 3. **HidOptimizer** — Deduplication layer reduces unnecessary writes by 50–90 % during animations
 4. **Diagnostics** — `HidDiagnostics` for communication analysis

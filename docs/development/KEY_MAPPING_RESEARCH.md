@@ -112,13 +112,13 @@ This is the **recommended approach** until accurate per-key addresses are discov
 **Objective**: Empirically discover key addresses through controlled testing
 
 **Methods**:
-1. **Systematic Testing**: Send test commands to individual matrix positions via `bulk_test` binary
+1. **Systematic Testing**: Send test commands to individual matrix positions via the `verify_key_mapping` utility
 2. **Visual Verification**: Observe which physical keys light up
 3. **Matrix Mapping**: Build accurate row/column → physical key mapping
 
 **Tools Needed**:
 - Apex Pro hardware (preferably TKL 2023, PID `0x1628`)
-- The `bulk_test` binary (`src/bin/bulk_test.rs`) for automated command sweeps
+- The `verify_key_mapping` binary (`src/bin/verify_key_mapping.rs`) for scan, manual, and fuzz modes
 - Physical observation and documentation
 
 ### Phase 4: Reverse Engineering

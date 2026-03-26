@@ -1,7 +1,7 @@
 # Protocol Research Findings — Apex Pro TKL 2023
 
 **Last Updated**: 2026-03-01 (originally 2026-01-15)
-**Status**: Active Testing Phase — Bulk Command Discovery
+**Status**: Active Testing Phase — Targeted Command Discovery
 
 ---
 
@@ -27,8 +27,11 @@ This document compiles reverse engineering resources and protocol discoveries fo
 ### Testing Methodology
 
 **Device**: Apex Pro TKL 2023 (VID:`0x1038`, PID:`0x1628`)
-**Approach**: Systematic bulk HID command testing with automated harness
-**Test Tool**: `bulk_test` binary in `src/bin/bulk_test.rs`
+**Approach**: Targeted HID command testing, USB capture comparison, and manual hardware verification
+**Current Tools**:
+- `cargo run --bin discover_actuation -- --pid 0x1628 --force` for actuation read-back discovery
+- `cargo run --bin verify_key_mapping -- --product-id 0x1628 --fuzz` for exploratory per-key command probing
+- `cargo run --bin verify_key_mapping -- --product-id 0x1628 --manual --start-row <ROW> --start-col <COL>` for focused matrix tests
 
 ### Bulk Testing Results (2026-01-15)
 
@@ -154,40 +157,28 @@ apex.set_actuation_point(8)?;           // Raw value
 apex.set_actuation_point_mm(1.5)?;      // Millimeters
 ```
 
-**Read-back**: Not implemented. The `Keyboard::read_actuation_point()` trait method always returns an error. The HID command to read the current actuation setting has not been discovered.
+**Read-back**: A device-side query command has not been discovered yet. `Keyboard::read_actuation_point()` can return a cached session value after a successful write, but it does not currently read the live value back from the keyboard firmware.
 
 ### Testing Tools
 
-**Bulk Test Harness** (`src/bin/bulk_test.rs`):
+**Current Discovery Tooling**:
 ```bash
-# Quick test (2 commands, ~6 seconds)
-cargo run --release --bin bulk_test -- \
-  --start 0x20 --end 0x21 --values 0x04 --delay 2 --with-save
+# Probe for an actuation read-back command on the Apex Pro TKL 2023
+cargo run --bin discover_actuation -- --pid 0x1628 --force
 
-# Full range test (96 tests, ~3.2 minutes)
-cargo run --release --bin bulk_test -- \
-  --start 0x20 --end 0x2F \
-  --values 0x00,0x04,0x08,0x14,0x24,0x30 \
-  --delay 2 --with-save
+# Fuzz likely per-key command formats against the default device
+cargo run --bin verify_key_mapping -- --product-id 0x1628 --fuzz
 
-# Test both with/without save
-cargo run --release --bin bulk_test -- \
-  --start 0x20 --end 0x2F --values 0x04 --delay 2 \
-  --with-save --test-both-modes
-
-# Test parameterless commands
-cargo run --release --bin bulk_test -- \
-  --start 0x20 --end 0x2F --values 0x04 --delay 2 \
-  --with-save --test-parameterless
+# Manually test a specific row/column pair with a chosen command byte
+cargo run --bin verify_key_mapping -- \
+  --product-id 0x1628 --manual --command-byte 0xB0 --start-row 0 --start-col 0
 ```
 
 **Features**:
-- Hex value parsing for commands and values
-- Configurable delay between tests
-- With/without save command testing
-- Parameterless command support
-- JSON result logging with timestamp
-- Manual observation annotation via `"notes"` field
+- `discover_actuation` safely skips known-dangerous commands and correlates responses with known actuation values
+- `verify_key_mapping` supports fuzz, scan, and manual modes for per-key exploration
+- Both tools are designed for live hardware observation rather than unattended bulk sweeps
+- USB capture (`usbmon` / Wireshark) remains the best way to validate unknown commands against SteelSeries GG traffic
 
 ---
 
@@ -475,10 +466,10 @@ sudo cat /sys/kernel/debug/usb/usbmon/1u > capture.log
 ```
 
 #### Method 2: Systematic HID Command Testing
-1. Use `bulk_test` binary to sweep remaining command ranges (0x30–0x3F, 0x10–0x1F)
-2. Monitor keyboard behavior (actuation feel, Rapid Trigger responsiveness)
-3. Document successful commands
-4. Cross-reference with known patterns
+1. Use `discover_actuation` to narrow candidate read-back commands and verify returned values against known writes
+2. Use `verify_key_mapping` in fuzz/manual mode to test likely per-key packet layouts
+3. Monitor keyboard behavior (actuation feel, Rapid Trigger responsiveness, LED changes)
+4. Document successful commands and cross-reference them with USB captures from SteelSeries GG
 
 **Safety**: Avoid firmware-related command ranges (likely 0xF0+). Stick to configuration commands.
 
@@ -551,7 +542,7 @@ async fn set_zone_colors(&mut self, colors: &[Color]) -> Result<()> {
 ```
 
 **Key Design Decisions**:
-- All commands go through `HidReportBuilder` — never raw byte arrays
+- Prefer `HidReportBuilder` for shared keyboard/headset commands; a few Apex-specific helper methods still use small direct packets in `src/devices/keyboards/apex.rs`
 - Stack-allocated `[u8; 65]` buffers avoid heap allocation in hot paths
 - `HidOptimizer` deduplicates identical reports within 50 ms windows (FNV-1a hashing)
 - `Cow<[Color]>` in `RgbZoneCommand` allows zero-copy when borrowing color slices
