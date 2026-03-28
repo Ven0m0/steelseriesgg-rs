@@ -327,10 +327,18 @@ impl GenericKeyboard {
     /// Send a HID feature report of arbitrary size (for Apex 2023 new protocol).
     /// Uses direct ioctl to bypass hidapi's broken HIDIOCSFEATURE direction bits.
     /// Resolves the correct hidraw path for the control interface (interface 3 for wireless).
+    #[cfg(unix)]
     pub fn send_feature(&self, data: &[u8], report_len: usize) -> Result<()> {
         let path = super::find_hidraw_for_interface(self.info.vendor_id, self.info.product_id, 3)
             .unwrap_or_else(|| self.info.path.clone());
         super::send_feature_report_raw(&path, data, report_len)
+    }
+
+    #[cfg(not(unix))]
+    pub fn send_feature(&self, _data: &[u8], _report_len: usize) -> Result<()> {
+        Err(Error::DeviceCommunication(
+            "Raw HID feature reports are only supported on Unix platforms".to_string(),
+        ))
     }
 
     async fn send_zone_buffer_async(&mut self) -> Result<()> {
@@ -338,9 +346,10 @@ impl GenericKeyboard {
         // support the 0xFF "all zones" selector. Send per-zone commands instead,
         // with zone indices starting at 1.
         if self.info.product_id == super::product_ids::APEX_PRO_TKL_2023_WIRELESS {
-            for (i, color) in self.zone_color_buffer.clone().iter().enumerate() {
+            for i in 0..self.zone_color_buffer.len() {
+                let color = self.zone_color_buffer[i];
                 let zone_index = (i + 1) as u8; // zones start at 1, not 0
-                let rgb_command = RgbZoneCommand::new_specific_zone(zone_index, *color);
+                let rgb_command = RgbZoneCommand::new_specific_zone(zone_index, color);
                 let mut buffer = [0u8; super::KEYBOARD_REPORT_SIZE];
                 let size = self.report_builder.build_report(rgb_command, &mut buffer)?;
                 self.send_report_async(&buffer[..size]).await?;

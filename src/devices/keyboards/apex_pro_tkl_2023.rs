@@ -63,10 +63,10 @@ impl ApexProTkl2023 {
     }
 
     /// Whether this device uses the new 2023 per-key direct protocol.
+    /// Only the wireless variant uses this unconditionally; the wired model
+    /// has its own path behind the `experimental-apex-2023` feature flag.
     fn uses_new_protocol(&self) -> bool {
-        let pid = self.inner.info().product_id;
-        pid == product_ids::APEX_PRO_TKL_2023
-            || pid == product_ids::APEX_PRO_TKL_2023_WIRELESS
+        self.is_wireless()
     }
 
     /// Whether this is the wireless variant.
@@ -88,29 +88,9 @@ impl ApexProTkl2023 {
         Ok(())
     }
 
-    /// Resolve the hidraw path for interface 3 (control interface for feature reports).
-    fn feature_report_path(&self) -> String {
-        super::super::find_hidraw_for_interface(
-            self.inner.info().vendor_id,
-            self.inner.info().product_id,
-            3,
-        )
-        .unwrap_or_else(|| self.inner.info().path.clone())
-    }
-
     /// Send per-key direct RGB using the new 643-byte feature report protocol.
-    /// Uses raw hidraw ioctl, bypassing hidapi entirely.
     fn send_direct_rgb_new_protocol(&mut self, color: Color) -> Result<()> {
-        let path = self.feature_report_path();
-
-        if !self.initialized_new_protocol {
-            let mut init_buf = vec![0u8; APEX_2023_PACKET_LENGTH];
-            init_buf[0] = 0x00;
-            init_buf[1] = APEX_2023_PACKET_ID_INIT;
-            super::super::send_feature_report_raw(&path, &init_buf, APEX_2023_PACKET_LENGTH)?;
-            self.initialized_new_protocol = true;
-            tracing::info!("Sent Apex 2023 new protocol init (0x4B)");
-        }
+        self.ensure_new_protocol_init()?;
 
         let packet_id = if self.is_wireless() {
             APEX_2023_PACKET_ID_DIRECT_WIRELESS
@@ -132,7 +112,7 @@ impl ApexProTkl2023 {
             buf[offset + 3] = color.b;
         }
 
-        super::super::send_feature_report_raw(&path, &buf, APEX_2023_PACKET_LENGTH)
+        self.inner.send_feature(&buf, APEX_2023_PACKET_LENGTH)
     }
 
     /// Set actuation point for all keys (global).
@@ -356,7 +336,7 @@ impl Keyboard for ApexProTkl2023 {
     async fn set_zone_colors(&mut self, colors: &[Color]) -> Result<()> {
         if self.uses_new_protocol() {
             // For zone colors, just use the first color for all keys via direct protocol
-            let color = colors.first().copied().unwrap_or(Color { r: 0, g: 0, b: 0 });
+            let color = colors.first().copied().unwrap_or(Color::BLACK);
             return self.send_direct_rgb_new_protocol(color);
         }
         self.inner.set_zone_colors(colors).await

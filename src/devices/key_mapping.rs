@@ -558,8 +558,10 @@ impl KeyMappingDatabase {
         // SteelSeries key (HID 240 - discovered from migration files)
         mapping.add_key(KeyId::SteelSeriesKey, KeyAddress::new(240));
 
-        self.mappings.insert(product_ids::APEX_PRO_TKL_2023, mapping.clone());
-        self.mappings.insert(product_ids::APEX_PRO_TKL_2023_WIRELESS, mapping);
+        let mut wireless_mapping = mapping.clone();
+        wireless_mapping.product_id = product_ids::APEX_PRO_TKL_2023_WIRELESS;
+        self.mappings.insert(product_ids::APEX_PRO_TKL_2023, mapping);
+        self.mappings.insert(product_ids::APEX_PRO_TKL_2023_WIRELESS, wireless_mapping);
     }
 
     /// Add Apex Pro (full-size) key mapping with verified HID codes.

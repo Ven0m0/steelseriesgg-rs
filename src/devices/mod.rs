@@ -251,6 +251,7 @@ pub fn write_padded_report(device: &HidDevice, data: &[u8], report_len: usize, i
     write_result.map_err(Into::into).map(|_| ())
 }
 
+#[cfg(unix)]
 /// Send a HID feature report by opening the hidraw device path directly.
 ///
 /// We bypass hidapi's `send_feature_report` because the hidapi Rust crate's
@@ -295,6 +296,7 @@ pub fn send_feature_report_raw(hidraw_path: &str, data: &[u8], report_len: usize
     Ok(())
 }
 
+#[cfg(unix)]
 /// Find the hidraw device path for a specific USB interface of a device.
 /// Scans /sys/class/hidraw/ to match vendor_id, product_id, and input number.
 pub fn find_hidraw_for_interface(vendor_id: u16, product_id: u16, interface: usize) -> Option<String> {
@@ -306,12 +308,12 @@ pub fn find_hidraw_for_interface(vendor_id: u16, product_id: u16, interface: usi
     );
 
     for entry in fs::read_dir("/sys/class/hidraw").ok()? {
-        let entry = entry.ok()?;
+        let Ok(entry) = entry else { continue };
         let uevent_path = entry.path().join("device/uevent");
-        let content = fs::read_to_string(&uevent_path).ok()?;
+        let Ok(content) = fs::read_to_string(&uevent_path) else { continue };
 
         let has_hid_id = content.lines().any(|l| {
-            l.starts_with("HID_ID=") && l[7..].eq_ignore_ascii_case(&target_hid_id)
+            l.strip_prefix("HID_ID=").is_some_and(|v| v.eq_ignore_ascii_case(&target_hid_id))
         });
         let has_phys = content.lines().any(|l| {
             l.starts_with("HID_PHYS=") && l.ends_with(&target_phys_suffix)
