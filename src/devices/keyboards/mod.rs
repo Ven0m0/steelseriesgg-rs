@@ -211,6 +211,30 @@ impl GenericKeyboard {
         }
     }
 
+    /// Create without a HID device handle (for wireless raw-only mode).
+    pub fn new_without_device(info: DeviceInfo) -> Self {
+        let zone_count = zone_count_for_product_id(info.product_id);
+        let key_mapping = KeyMappingDatabase::new().get_mapping(info.product_id).cloned();
+        let zone_fallback = ZoneFallback::new();
+        let zone_mapping = zone_fallback.get_mapping(info.product_id).cloned();
+        let per_key_controller = key_mapping.as_ref().map(|mapping| {
+            PerKeyRgbController::new_with_performance(mapping.clone())
+        });
+
+        Self {
+            info,
+            device: None,
+            zone_count,
+            report_builder: HidReportBuilder::new(HidDeviceType::Keyboard),
+            key_mapping,
+            zone_fallback,
+            zone_mapping,
+            per_key_controller,
+            zone_color_buffer: Vec::with_capacity(zone_count),
+            actuation_point_cache: None,
+        }
+    }
+
     /// Send a HID report to the keyboard synchronously (blocking).
     fn send_report(&mut self, data: &[u8]) -> Result<()> {
         use tracing::debug;
@@ -300,7 +324,30 @@ impl GenericKeyboard {
         result
     }
 
+    /// Send a HID feature report of arbitrary size (for Apex 2023 new protocol).
+    /// Uses direct ioctl to bypass hidapi's broken HIDIOCSFEATURE direction bits.
+    /// Resolves the correct hidraw path for the control interface (interface 3 for wireless).
+    pub fn send_feature(&self, data: &[u8], report_len: usize) -> Result<()> {
+        let path = super::find_hidraw_for_interface(self.info.vendor_id, self.info.product_id, 3)
+            .unwrap_or_else(|| self.info.path.clone());
+        super::send_feature_report_raw(&path, data, report_len)
+    }
+
     async fn send_zone_buffer_async(&mut self) -> Result<()> {
+        // Wireless keyboards (e.g. Apex Pro TKL 2023 Wireless, PID 0x1632) don't
+        // support the 0xFF "all zones" selector. Send per-zone commands instead,
+        // with zone indices starting at 1.
+        if self.info.product_id == super::product_ids::APEX_PRO_TKL_2023_WIRELESS {
+            for (i, color) in self.zone_color_buffer.clone().iter().enumerate() {
+                let zone_index = (i + 1) as u8; // zones start at 1, not 0
+                let rgb_command = RgbZoneCommand::new_specific_zone(zone_index, *color);
+                let mut buffer = [0u8; super::KEYBOARD_REPORT_SIZE];
+                let size = self.report_builder.build_report(rgb_command, &mut buffer)?;
+                self.send_report_async(&buffer[..size]).await?;
+            }
+            return Ok(());
+        }
+
         let rgb_command = RgbZoneCommand::new_all_zones(&self.zone_color_buffer);
         let mut buffer = [0u8; super::KEYBOARD_REPORT_SIZE];
         let size = self.report_builder.build_report(rgb_command, &mut buffer)?;

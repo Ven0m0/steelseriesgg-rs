@@ -289,7 +289,8 @@ impl ZoneFallback {
         );
         apex_tkl_2023.add_zone(ZonePosition::ArrowKeys, "Arrow Keys".to_string(), false, 4);
         apex_tkl_2023.add_zone(ZonePosition::Logo, "SteelSeries Logo".to_string(), false, 1);
-        self.mappings.insert(product_ids::APEX_PRO_TKL_2023, apex_tkl_2023);
+        self.mappings.insert(product_ids::APEX_PRO_TKL_2023, apex_tkl_2023.clone());
+        self.mappings.insert(product_ids::APEX_PRO_TKL_2023_WIRELESS, apex_tkl_2023);
 
         // Apex 3 - Enhanced 10-zone mapping
         let mut apex_3 = ZoneMapping::new(product_ids::APEX_3, "Apex 3".to_string());

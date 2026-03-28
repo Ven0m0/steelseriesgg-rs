@@ -10,7 +10,7 @@ use super::hid_reports::ConnectionHealth;
 use super::keyboards::apex::Apex3Tkl;
 use super::keyboards::apex_pro_tkl_2023::ApexProTkl2023;
 use super::keyboards::{GenericKeyboard, Keyboard};
-use super::product_ids::{APEX_3_TKL, APEX_PRO_TKL_2023};
+use super::product_ids::{APEX_3_TKL, APEX_PRO_TKL_2023, APEX_PRO_TKL_2023_WIRELESS};
 use super::{DeviceInfo, DeviceType, device_name_from_product_id, device_type_from_product_id};
 use crate::{Error, Result, STEELSERIES_VENDOR_ID};
 
@@ -254,7 +254,9 @@ impl DeviceManager {
     pub fn open_device(&self, info: &DeviceInfo) -> Result<hidapi::HidDevice> {
         // Find the device with the matching interface for control
         // Most SteelSeries devices use interface 1 for control
+        // Wireless keyboards (e.g. Apex Pro TKL 2023 Wireless PID 0x1632) use interface 3
         let control_interface = match info.device_type {
+            DeviceType::Keyboard if info.product_id == APEX_PRO_TKL_2023_WIRELESS => 3,
             DeviceType::Keyboard => 1,
             DeviceType::Headset => 3,
             DeviceType::Unknown => info.interface_number,
@@ -308,13 +310,25 @@ impl DeviceManager {
             )));
         }
 
-        let hid_device = self.open_device(info)?;
+        // Wireless Apex 2023 uses raw hidraw feature reports, not hidapi.
+        // Try opening via hidapi; if it fails for wireless, create a dummy-device keyboard
+        // that only works through the raw feature report path.
+        let hid_device = match self.open_device(info) {
+            Ok(dev) => dev,
+            Err(e) if info.product_id == APEX_PRO_TKL_2023_WIRELESS => {
+                tracing::warn!(
+                    "hidapi open failed for wireless keyboard (expected): {e}. Using raw hidraw path."
+                );
+                return Ok(Box::new(ApexProTkl2023::new_wireless_raw(info.clone())));
+            }
+            Err(e) => return Err(e),
+        };
         let generic_keyboard = GenericKeyboard::new(info.clone(), hid_device);
 
         // Wrap in specific implementation if available
         match info.product_id {
             APEX_3_TKL => Ok(Box::new(Apex3Tkl::new(generic_keyboard))),
-            APEX_PRO_TKL_2023 => Ok(Box::new(ApexProTkl2023::new(generic_keyboard))),
+            APEX_PRO_TKL_2023 | APEX_PRO_TKL_2023_WIRELESS => Ok(Box::new(ApexProTkl2023::new(generic_keyboard))),
             _ => Ok(Box::new(generic_keyboard)),
         }
     }
