@@ -327,6 +327,7 @@ impl GenericKeyboard {
     /// Send a HID feature report of arbitrary size (for Apex 2023 new protocol).
     /// Uses direct ioctl to bypass hidapi's broken HIDIOCSFEATURE direction bits.
     /// Resolves the correct hidraw path for the control interface (interface 3 for wireless).
+    /// Resolves the correct hidraw path for the control interface (interface 3 for wireless).
     #[cfg(unix)]
     pub fn send_feature(&self, data: &[u8], report_len: usize) -> Result<()> {
         let path = super::find_hidraw_for_interface(self.info.vendor_id, self.info.product_id, 3)
@@ -334,6 +335,16 @@ impl GenericKeyboard {
         super::send_feature_report_raw(&path, data, report_len)
     }
 
+    /// Send a HID feature report of arbitrary size (for Apex 2023 new protocol).
+    ///
+    /// On non-Unix platforms, raw hidraw feature reports are not supported and this
+    /// method will always return a platform-not-supported error.
+    #[cfg(not(unix))]
+    pub fn send_feature(&self, _data: &[u8], _report_len: usize) -> Result<()> {
+        Err(Error::PlatformNotSupported(
+            "Raw HID feature reports are only supported on Unix-like platforms",
+        ))
+    }
     #[cfg(not(unix))]
     pub fn send_feature(&self, _data: &[u8], _report_len: usize) -> Result<()> {
         Err(Error::DeviceCommunication(
