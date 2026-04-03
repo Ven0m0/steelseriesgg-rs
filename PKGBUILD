@@ -23,28 +23,45 @@ _cargo_home="$srcdir/cargo-home"
 _cargo_target_dir="$srcdir/target"
 _rust_target="$CARCH-unknown-linux-gnu"
 
+_resolve_archive_dir() {
+  local candidate
+  for candidate in \
+    "$srcdir/$_archive_dir" \
+    "$srcdir/$pkgname-$pkgver" \
+    "$srcdir/${url##*/}-$pkgver"
+  do
+    if [[ -d "$candidate" ]]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+
+  printf 'Missing extracted source directory in %s\n' "$srcdir" >&2
+  return 1
+}
+
 prepare() {
-  cd "$_archive_dir" || return 1
+  cd "$(_resolve_archive_dir)" || return 1
   export CARGO_HOME="$_cargo_home"
   cargo fetch --locked --target "$_rust_target"
 }
 
 build() {
-  cd "$_archive_dir" || return 1
+  cd "$(_resolve_archive_dir)" || return 1
   export CARGO_HOME="$_cargo_home"
   export CARGO_TARGET_DIR="$_cargo_target_dir"
   cargo build --release --frozen --bin ssgg
 }
 
 check() {
-  cd "$_archive_dir" || return 1
+  cd "$(_resolve_archive_dir)" || return 1
   export CARGO_HOME="$_cargo_home"
   export CARGO_TARGET_DIR="$_cargo_target_dir"
   cargo test --frozen
 }
 
 package() {
-  cd "$_archive_dir" || return 1
+  cd "$(_resolve_archive_dir)" || return 1
   install -Dm755 "$_cargo_target_dir/release/ssgg" "$pkgdir/usr/bin/ssgg"
   install -Dm644 assets/ssgg.service "$pkgdir/usr/lib/systemd/user/ssgg.service"
   install -Dm644 assets/99-steelseries.rules "$pkgdir/usr/lib/udev/rules.d/99-steelseries.rules"
