@@ -35,6 +35,13 @@ jobs:
       - name: Build package
         run: |
           PKGVER=$(sed -n 's/^pkgver=//p' PKGBUILD | head -n1)
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            TAG_VERSION="${GITHUB_REF_NAME#v}"
+            if [[ "$PKGVER" != "$TAG_VERSION" ]]; then
+              echo "PKGBUILD pkgver ($PKGVER) does not match tag version ($TAG_VERSION)" >&2
+              exit 1
+            fi
+          fi
           git archive --format=tar --prefix="steelseriesgg-rs-${PKGVER}/" HEAD | gzip -n > "ssgg-${PKGVER}.tar.gz"
           su - builder -c "cd \"$GITHUB_WORKSPACE\" && SRCDEST=\"$GITHUB_WORKSPACE\" makepkg -sCf --noconfirm"
 
