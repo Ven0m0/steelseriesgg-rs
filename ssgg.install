@@ -32,7 +32,8 @@ post_upgrade() {
   echo ""
   echo "==> SteelSeries GG for Linux has been upgraded!"
   echo ""
-  echo "If the user service is enabled, restart it to pick up the new binary:"
+  echo "If the user service is enabled, reload the user unit definitions and restart it:"
+  echo "  systemctl --user daemon-reload"
   echo "  systemctl --user restart ssgg.service"
   echo ""
 }
