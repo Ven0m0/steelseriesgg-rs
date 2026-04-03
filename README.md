@@ -1,7 +1,7 @@
 # steelseriesgg-rs – SteelSeries GG for Linux
 
 [![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
-[![Rust](https://img.shields.io/badge/rust-1.70+-orange?style=flat-square)](https://www.rust-lang.org/)
+[![Rust](https://img.shields.io/badge/rust-1.88%2B-orange?style=flat-square)](https://www.rust-lang.org/)
 ![GitHub repo size](https://img.shields.io/github/repo-size/Ven0m0/steelseriesgg-rs)
 [![Maintainability](https://qlty.sh/gh/Ven0m0/projects/steelseriesgg-rs/maintainability.svg)](https://qlty.sh/gh/Ven0m0/projects/steelseriesgg-rs)
 
@@ -52,7 +52,7 @@ systemctl --user enable --now ssgg.service
 ### Prerequisites
 
 - Linux with udev
-- Rust 1.70+ (for source builds)
+- Rust 1.88+ (minimum supported for source builds)
 
 No extra HID development packages are required for the default source build.
 
