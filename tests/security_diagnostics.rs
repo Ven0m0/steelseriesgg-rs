@@ -36,16 +36,11 @@ fn test_diagnostic_log_permissions() {
     let path = log_file.expect("Log file was not created");
     #[allow(unused_variables)]
     let metadata = fs::metadata(&path).expect("Failed to get metadata");
-    #[cfg(unix)]
-    let mode = metadata.permissions().mode() & 0o777;
 
     #[cfg(unix)]
     {
+        let mode = metadata.permissions().mode() & 0o777;
         println!("File mode: {:o}", mode);
-    }
-
-    #[cfg(unix)]
-    {
         // Check directory permissions too
         let dir_metadata = fs::metadata(&log_dir).expect("Failed to get log dir metadata");
         let dir_mode = dir_metadata.permissions().mode() & 0o777;
