@@ -53,7 +53,7 @@ systemctl --user enable --now ssgg.service
 
 - Linux with udev
 - Rust 1.94.1 (pinned in `rust-toolchain.toml` for local development)
-- Rust 1.88+ if you need the current minimum supported version for source builds without the pinned toolchain file
+- Rust 1.88+ if you are building in an environment that does not honor `rust-toolchain.toml` (for example, distro packaging)
 
 No extra HID development packages are required for the default source build.
 
