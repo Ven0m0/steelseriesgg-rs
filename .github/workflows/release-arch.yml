@@ -42,7 +42,9 @@ jobs:
               exit 1
             fi
           fi
-          git archive --format=tar --prefix="steelseriesgg-rs-${PKGVER}/" HEAD | gzip -n > "ssgg-${PKGVER}.tar.gz"
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git archive --format=tar --prefix="steelseriesgg-rs-${PKGVER}/" --output="ssgg-${PKGVER}.tar" HEAD
+          gzip -n "ssgg-${PKGVER}.tar"
           su - builder -c "cd \"$GITHUB_WORKSPACE\" && SRCDEST=\"$GITHUB_WORKSPACE\" makepkg -sCf --noconfirm"
 
       - name: Generate checksums

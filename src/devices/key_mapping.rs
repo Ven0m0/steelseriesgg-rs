@@ -561,7 +561,8 @@ impl KeyMappingDatabase {
         let mut wireless_mapping = mapping.clone();
         wireless_mapping.product_id = product_ids::APEX_PRO_TKL_2023_WIRELESS;
         self.mappings.insert(product_ids::APEX_PRO_TKL_2023, mapping);
-        self.mappings.insert(product_ids::APEX_PRO_TKL_2023_WIRELESS, wireless_mapping);
+        self.mappings
+            .insert(product_ids::APEX_PRO_TKL_2023_WIRELESS, wireless_mapping);
     }
 
     /// Add Apex Pro (full-size) key mapping with verified HID codes.

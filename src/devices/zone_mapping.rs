@@ -292,7 +292,8 @@ impl ZoneFallback {
         let mut apex_tkl_2023_wireless = apex_tkl_2023.clone();
         apex_tkl_2023_wireless.product_id = product_ids::APEX_PRO_TKL_2023_WIRELESS;
         self.mappings.insert(product_ids::APEX_PRO_TKL_2023, apex_tkl_2023);
-        self.mappings.insert(product_ids::APEX_PRO_TKL_2023_WIRELESS, apex_tkl_2023_wireless);
+        self.mappings
+            .insert(product_ids::APEX_PRO_TKL_2023_WIRELESS, apex_tkl_2023_wireless);
 
         // Apex 3 - Enhanced 10-zone mapping
         let mut apex_3 = ZoneMapping::new(product_ids::APEX_3, "Apex 3".to_string());

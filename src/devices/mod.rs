@@ -302,22 +302,22 @@ pub fn send_feature_report_raw(hidraw_path: &str, data: &[u8], report_len: usize
 pub fn find_hidraw_for_interface(vendor_id: u16, product_id: u16, interface: usize) -> Option<String> {
     use std::fs;
     let target_phys_suffix = format!("/input{interface}");
-    let target_hid_id = format!(
-        "0003:{:08X}:{:08X}",
-        vendor_id as u32, product_id as u32
-    );
+    let target_hid_id = format!("0003:{:08X}:{:08X}", vendor_id as u32, product_id as u32);
 
     for entry in fs::read_dir("/sys/class/hidraw").ok()? {
         let Ok(entry) = entry else { continue };
         let uevent_path = entry.path().join("device/uevent");
-        let Ok(content) = fs::read_to_string(&uevent_path) else { continue };
+        let Ok(content) = fs::read_to_string(&uevent_path) else {
+            continue;
+        };
 
         let has_hid_id = content.lines().any(|l| {
-            l.strip_prefix("HID_ID=").is_some_and(|v| v.eq_ignore_ascii_case(&target_hid_id))
+            l.strip_prefix("HID_ID=")
+                .is_some_and(|v| v.eq_ignore_ascii_case(&target_hid_id))
         });
-        let has_phys = content.lines().any(|l| {
-            l.starts_with("HID_PHYS=") && l.ends_with(&target_phys_suffix)
-        });
+        let has_phys = content
+            .lines()
+            .any(|l| l.starts_with("HID_PHYS=") && l.ends_with(&target_phys_suffix));
 
         if has_hid_id && has_phys {
             let name = entry.file_name();
@@ -422,7 +422,7 @@ pub fn zone_count_for_product_id(product_id: u16) -> usize {
     match product_id {
         APEX_3 => 10,                                                // Apex 3 - 10 zones
         APEX_3_TKL => 9,                                             // Apex 3 TKL - 9 zones
-        APEX_PRO_TKL_2023 | APEX_PRO_TKL_2023_WIRELESS => 9,            // Apex Pro TKL (2023) - 9 zones
+        APEX_PRO_TKL_2023 | APEX_PRO_TKL_2023_WIRELESS => 9,         // Apex Pro TKL (2023) - 9 zones
         APEX_PRO | APEX_PRO_TKL | APEX_5 | APEX_7 | APEX_7_TKL => 1, // Single zone for now
         _ => 1,                                                      // Default single zone
     }

@@ -316,9 +316,7 @@ impl DeviceManager {
         let hid_device = match self.open_device(info) {
             Ok(dev) => dev,
             Err(e) if info.product_id == APEX_PRO_TKL_2023_WIRELESS => {
-                tracing::warn!(
-                    "hidapi open failed for wireless keyboard (expected): {e}. Using raw hidraw path."
-                );
+                tracing::warn!("hidapi open failed for wireless keyboard (expected): {e}. Using raw hidraw path.");
                 return Ok(Box::new(ApexProTkl2023::new_wireless_raw(info.clone())));
             }
             Err(e) => return Err(e),

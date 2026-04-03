@@ -217,9 +217,9 @@ impl GenericKeyboard {
         let key_mapping = KeyMappingDatabase::new().get_mapping(info.product_id).cloned();
         let zone_fallback = ZoneFallback::new();
         let zone_mapping = zone_fallback.get_mapping(info.product_id).cloned();
-        let per_key_controller = key_mapping.as_ref().map(|mapping| {
-            PerKeyRgbController::new_with_performance(mapping.clone())
-        });
+        let per_key_controller = key_mapping
+            .as_ref()
+            .map(|mapping| PerKeyRgbController::new_with_performance(mapping.clone()));
 
         Self {
             info,
