@@ -32,7 +32,7 @@ pub struct BugReport {
     /// Performance metrics snapshot (if available)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub performance_metrics: Option<RgbTimingMetrics>,
-    /// Recent error logs (placeholder for future error tracking)
+    /// Recent error logs captured through the in-process global error log.
     pub recent_errors: Vec<ErrorLog>,
     /// HID communication logs (if included)
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -100,7 +100,7 @@ impl From<&DeviceInfo> for DeviceInfoSummary {
     }
 }
 
-/// Error log entry (placeholder for future error tracking).
+/// Error log entry exported in bug reports and diagnostics snapshots.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ErrorLog {
     /// Error timestamp

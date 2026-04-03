@@ -1,29 +1,47 @@
 # TODOs
 
-## 1:
+## Resolved
 
-Check out https://github.com/Sharper-Flow/Open-G-Hub to see if the logic could be useful for this project aswell.
+- Issue #120 (`'ssgg audio' becomes unresponsive`) was closed as completed on 2026-03-27.
+  The PulseAudio connection path in `src/audio/pulse.rs` now has a 5s timeout.
 
-## 2:
+## Active backlog
 
-Fix the issues: https://github.com/Ven0m0/steelseriesgg-rs/issues/6 https://github.com/Ven0m0/steelseriesgg-rs/issues/120
+1. Reproduce issue #6 on an Arch-like environment and fix it only if the failure still exists.
+   - Validate the `cargo build --release --locked` path used by the package and release workflow.
+   - Keep any fix limited to packaging, install metadata, manifests, or CI unless reproduction proves a code change is required.
+2. Continue Apex Pro TKL 2023 protocol and RGB work.
+   - Verify the real per-key RGB protocol on hardware and replace the placeholder `0x23` path when confirmed.
+   - Discover an actuation read-back command if the firmware exposes one.
+   - Validate unsupported-key handling plus ANSI/ISO layout differences on hardware.
 
-## 3:
+## Deferred research
 
-Continue working on the steelseries apex pro tkl 2023 protocol and rgb Implementation
+- Open-G-Hub (`https://github.com/Sharper-Flow/Open-G-Hub`)
+  - Defer unless a concrete blocker suggests reusable logic for active backlog items.
 
-## 4: Research
+## Reference projects by relevance
+
+### Directly relevant
+
+- Sonar / audio research
+  - https://github.com/PrzemekkkYT/GGSonarRev
+  - https://github.com/wex/sonar-rev
+  - https://github.com/Mark7888/steelseries-sonar-py
+  - https://codeberg.org/Birbwell/linuxmix
+  - https://github.com/Dymstro/nova-chatmix-linux
+- Apex keyboard protocol / RGB research
+  - https://github.com/AstroSnail/apexctl
+  - https://github.com/FrankGrimm/apex7tkl_linux
+  - https://github.com/not-jan/apex-tux
+
+### Research-only
 
 - https://github.com/flozz/rivalcfg
-- https://github.com/PrzemekkkYT/GGSonarRev
 - https://github.com/llMBQll/OmniLED
-- https://codeberg.org/Birbwell/linuxmix
-- https://github.com/AstroSnail/apexctl
-- https://github.com/FrankGrimm/apex7tkl_linux
+
+### Out of scope for the current backlog
+
 - https://github.com/Gibtnix/Apex-Macros
-- https://github.com/wex/sonar-rev
-- https://github.com/Mark7888/steelseries-sonar-py
-- https://github.com/Dymstro/nova-chatmix-linux
-- https://github.com/not-jan/apex-tux
 - https://github.com/Gibtnix/MSIKLM
 - https://github.com/stephenlacy/msi-keyboard
