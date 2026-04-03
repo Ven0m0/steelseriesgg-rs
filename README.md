@@ -52,8 +52,8 @@ systemctl --user enable --now ssgg.service
 ### Prerequisites
 
 - Linux with udev
-- Rust 1.94.1 (pinned in `rust-toolchain.toml` for local development)
-- Rust 1.88+ if you are building in an environment that does not honor `rust-toolchain.toml` (for example, distro packaging)
+- Rust 1.94.1 (recommended/tested and pinned in `rust-toolchain.toml` for local development)
+- Rust 1.88+ as the minimum supported version for environments that do not honor `rust-toolchain.toml` (for example, distro packaging)
 
 No extra HID development packages are required for the default source build.
 

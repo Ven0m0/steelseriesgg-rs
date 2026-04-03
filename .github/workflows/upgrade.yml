@@ -27,7 +27,7 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
       - name: Install cargo-edit
         run: |
-          if ! command -v cargo-upgrade >/dev/null 2>&1; then
+          if [ ! -x ~/.cargo/bin/cargo-upgrade ]; then
             cargo install cargo-edit --locked
           fi
       - name: Upgrade dependencies
