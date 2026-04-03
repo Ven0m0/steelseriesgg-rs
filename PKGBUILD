@@ -10,7 +10,7 @@ arch=('x86_64')
 url="https://github.com/Ven0m0/steelseriesgg-rs"
 license=('MIT')
 depends=('hidapi' 'glibc' 'systemd')
-makedepends=('rust' 'cargo')
+makedepends=('rust')
 install=ssgg.install
 source=(
   "$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz"
@@ -18,32 +18,36 @@ source=(
 # Update this when creating a release
 sha256sums=('SKIP')
 
+_archive_dir="steelseriesgg-rs-$pkgver"
+_cargo_home="$srcdir/cargo-home"
+_cargo_target_dir="$srcdir/target"
+_rust_target="$CARCH-unknown-linux-gnu"
+
 prepare() {
-  cd "steelseriesgg-rs-$pkgver" || return 1
-  cargo fetch --locked --target "$CARCH-unknown-linux-gnu"
+  cd "$_archive_dir" || return 1
+  export CARGO_HOME="$_cargo_home"
+  cargo fetch --locked --target "$_rust_target"
 }
 
 build() {
-  cd "steelseriesgg-rs-$pkgver" || return 1
-  export CARGO_TARGET_DIR=target
-  # Build with default features only (no audio/sonar dependencies)
-  cargo build -r --locked
+  cd "$_archive_dir" || return 1
+  export CARGO_HOME="$_cargo_home"
+  export CARGO_TARGET_DIR="$_cargo_target_dir"
+  cargo build --release --frozen --bin ssgg
 }
 
 check() {
-  cd "steelseriesgg-rs-$pkgver" || return 1
-  cargo test --locked
+  cd "$_archive_dir" || return 1
+  export CARGO_HOME="$_cargo_home"
+  export CARGO_TARGET_DIR="$_cargo_target_dir"
+  cargo test --frozen
 }
 
 package() {
-  cd "steelseriesgg-rs-$pkgver" || return 1
-  # Install binary
-  install -Dm755 target/release/ssgg "$pkgdir/usr/bin/ssgg"
-  # Install systemd user unit
+  cd "$_archive_dir" || return 1
+  install -Dm755 "$_cargo_target_dir/release/ssgg" "$pkgdir/usr/bin/ssgg"
   install -Dm644 assets/ssgg.service "$pkgdir/usr/lib/systemd/user/ssgg.service"
-  # Install udev rules
   install -Dm644 assets/99-steelseries.rules "$pkgdir/usr/lib/udev/rules.d/99-steelseries.rules"
-  # Install license & documentation
   install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
   install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
 }
