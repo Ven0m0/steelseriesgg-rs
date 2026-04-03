@@ -11,7 +11,7 @@ steelseriesgg-rs is an open-source Linux replacement for SteelSeries GG, providi
 - Hardware abstraction for multiple SteelSeries device types
 
 **Language**: Rust 2021 (Edition 2021)
-**Toolchain**: Pinned at 1.94.0 in `rust-toolchain.toml`
+**Toolchain**: Pinned at 1.94.1 in `rust-toolchain.toml`
 **License**: MIT
 **Binary**: `ssgg` (src/main.rs, ~3500+ LOC, 15+ subcommands via clap derive)
 **Library**: `steelseries_gg` (src/lib.rs)
@@ -24,7 +24,7 @@ steelseriesgg-rs is an open-source Linux replacement for SteelSeries GG, providi
 |------|-------------|
 | `Cargo.toml` | Package manifest, features, dependency versions (source of truth) |
 | `Cargo.lock` | Dependency lockfile for reproducible builds |
-| `rust-toolchain.toml` | Pinned Rust version (1.94.0) and components |
+| `rust-toolchain.toml` | Pinned Rust version (1.94.1) and components |
 | `rustfmt.toml` | Formatter config (edition 2024, style_edition 2024, 120-char max line) |
 | `CLAUDE.md` | Claude Code agent instructions (architecture, conventions, commands) |
 | `.github/workflows/` | CI/CD pipelines (ci.yml, build.yml, release-arch.yml) |
