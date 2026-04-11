@@ -132,18 +132,7 @@ impl ApexProTkl2023 {
     /// Precision is limited to 0.1mm increments.
     pub fn set_actuation_point_mm(&mut self, mm: f32) -> Result<()> {
         let command = ActuationCommand::from_mm(mm);
-        command.validate()?;
-
-        // Use the new command infrastructure for consistent serialization
-        let report_builder = HidReportBuilder::new(HidDeviceType::Keyboard);
-
-        let mut buffer = [0u8; KEYBOARD_REPORT_SIZE];
-        let size = report_builder.build_report(command.clone(), &mut buffer)?;
-
-        self.inner.send_raw(&buffer[..size])?;
-
-        self.inner.update_cached_actuation_point(command.actuation_point);
-        Ok(())
+        self.set_actuation_point(command.actuation_point)
     }
 
     #[cfg(feature = "experimental-apex-2023")]
