@@ -128,7 +128,10 @@ pub trait Keyboard: Device {
 
     /// Test zone connectivity and reliability.
     async fn test_zone_reliability(&mut self) -> Result<Vec<bool>> {
-        Ok(vec![])
+        Err(Error::from(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "test_zone_reliability is not supported for this keyboard",
+        )))
     }
 
     // === Per-Key RGB Effect Support ===
