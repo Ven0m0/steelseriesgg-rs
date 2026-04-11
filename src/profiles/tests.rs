@@ -139,3 +139,31 @@ fn test_secure_profile_permissions() {
     let file_metadata = std::fs::symlink_metadata(&path).unwrap();
     assert_eq!(file_metadata.permissions().mode() & 0o777, 0o600);
 }
+
+#[test]
+#[cfg(unix)]
+fn test_profile_save_refuse_symlink() {
+    use std::os::unix::fs::symlink;
+    use tempfile::tempdir;
+
+    let dir = tempdir().unwrap();
+    let profiles_dir = dir.path().join("profiles");
+    std::fs::create_dir_all(&profiles_dir).unwrap();
+
+    let manager = ProfileManager::with_dir(profiles_dir.clone());
+    let profile = Profile::new("symlink_test");
+
+    let target_file = dir.path().join("target.json");
+    std::fs::write(&target_file, "dummy").unwrap();
+
+    let symlink_path = profiles_dir.join("symlink_test.json");
+    symlink(&target_file, &symlink_path).unwrap();
+
+    let result = manager.save(&profile);
+    assert!(result.is_err(), "Expected save to fail when target is a symlink");
+    if let Err(crate::Error::Profile(msg)) = result {
+        assert!(msg.contains("symlink"));
+    } else {
+        panic!("Expected Error::Profile with symlink message, got {:?}", result);
+    }
+}
