@@ -23,7 +23,9 @@ use std::sync::Arc;
 pub trait Keyboard: Device {
     /// Set the entire keyboard to a single color.
     async fn set_color(&mut self, _color: Color) -> Result<()> {
-        Ok(())
+        Err(Error::DeviceCommunication(
+            "set_color is not supported for this keyboard".to_string(),
+        ))
     }
 
     /// Set colors for individual zones.
