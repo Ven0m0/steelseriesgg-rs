@@ -699,10 +699,18 @@ mod tests {
         let colors = res.unwrap();
         // Both A and Q should map to MainKeys (zone 1, 2, or 3 in Apex Pro TKL 2023)
         // Let's find which zone has the blended color
-        let has_blended = colors
-            .iter()
-            .any(|&c| c != Color::BLACK && c != Color::RED && c != Color::BLUE);
-        assert!(has_blended, "Should have a blended color in one of the zones");
+        let a_zone_idx = map_key_to_zone(product_ids::APEX_PRO_TKL_2023, crate::devices::KeyId::A);
+        let q_zone_idx = map_key_to_zone(product_ids::APEX_PRO_TKL_2023, crate::devices::KeyId::Q);
+        assert_eq!(
+            a_zone_idx, q_zone_idx,
+            "A and Q should map to the same zone for blending on Apex Pro TKL 2023"
+        );
+        let zone_idx = a_zone_idx;
+        assert_eq!(
+            colors[zone_idx],
+            Color::blend(Color::RED, Color::BLUE, 0.5),
+            "Expected the shared zone to contain the blended color"
+        );
     }
 
     #[test]
