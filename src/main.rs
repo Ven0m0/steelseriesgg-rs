@@ -8,7 +8,7 @@ use tracing::{Level, debug, info, warn};
 use tracing_subscriber::FmtSubscriber;
 
 use steelseries_gg::config::Config;
-use steelseries_gg::device_state::{DeviceId, DeviceStateStore, HeadsetState, KeyboardState};
+use steelseries_gg::device_state::{DeviceId, DeviceStateStore, KeyboardState};
 use steelseries_gg::devices::headsets::Headset;
 use steelseries_gg::devices::keyboards::Keyboard;
 use steelseries_gg::devices::{
