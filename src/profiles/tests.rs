@@ -142,6 +142,7 @@ fn test_secure_profile_permissions() {
 use std::time::Instant;
 
 #[tokio::test]
+#[ignore = "benchmark-style test; run explicitly with `cargo test -- --ignored`"]
 async fn benchmark_profile_deletion() {
     let temp_dir = tempfile::tempdir().unwrap();
     let mut manager = ProfileManager::with_dir(temp_dir.path().to_path_buf());
