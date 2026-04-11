@@ -3225,18 +3225,37 @@ async fn wait_for_shutdown() -> Result<()> {
 
 async fn save_final_device_states(daemon_state: Arc<RwLock<DaemonState>>) {
     let state = daemon_state.read().await;
+    let mut keyboard_updates = Vec::new();
+
     for (_keyboard, controller, info) in state.keyboards.values() {
         let device_id = DeviceId::from(info);
         let final_state = KeyboardState {
             effect: controller.effect().clone(),
             brightness: (controller.brightness() * 100.0) as u8,
         };
-
-        if let Err(e) = state.state_store.update_keyboard(device_id, final_state) {
-            warn!("Failed to save final state for {}: {}", info.name, e);
-        } else {
-            debug!("Saved final state for {}", info.name);
-        }
+        keyboard_updates.push((device_id, final_state));
     }
-    info!("Saved final states for {} device(s)", state.device_count());
+
+    // Currently we don't extract headset state, but we provide the empty vector for the batch call
+    let headset_updates = Vec::new();
+
+    if let Err(e) = state.state_store.update_states(keyboard_updates, headset_updates) {
+        warn!("Failed to batch update final states: {}", e);
+    } else {
+        debug!(
+            "Successfully batched final states for {} device(s)",
+            state.device_count()
+        );
+    }
+
+    // Explicitly await the save operation to ensure data is persisted before shutdown.
+    // This addresses the issue of the background task being aborted on drop.
+    if let Err(e) = state.state_store.save().await {
+        warn!("Failed to persist final states to disk: {}", e);
+    } else {
+        info!(
+            "Successfully persisted final states for {} device(s)",
+            state.device_count()
+        );
+    }
 }

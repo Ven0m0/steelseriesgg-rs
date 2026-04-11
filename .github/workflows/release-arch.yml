@@ -20,7 +20,7 @@ jobs:
       - name: Install dependencies
         run: |
           pacman -Syu --noconfirm
-          pacman -S --noconfirm git rust cargo hidapi systemd-libs
+          pacman -S --needed --noconfirm git rust systemd
 
       - uses: actions/checkout@v6
         with:
@@ -34,7 +34,18 @@ jobs:
 
       - name: Build package
         run: |
-          su - builder -c "cd $GITHUB_WORKSPACE && makepkg -s --noconfirm"
+          PKGVER=$(sed -n 's/^pkgver=//p' PKGBUILD | head -n1)
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            TAG_VERSION="${GITHUB_REF_NAME#v}"
+            if [[ "$PKGVER" != "$TAG_VERSION" ]]; then
+              echo "PKGBUILD pkgver ($PKGVER) does not match tag version ($TAG_VERSION)" >&2
+              exit 1
+            fi
+          fi
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git archive --format=tar --prefix="steelseriesgg-rs-${PKGVER}/" --output="ssgg-${PKGVER}.tar" HEAD
+          gzip -n "ssgg-${PKGVER}.tar"
+          su - builder -c "cd \"$GITHUB_WORKSPACE\" && SRCDEST=\"$GITHUB_WORKSPACE\" makepkg -sCf --noconfirm"
 
       - name: Generate checksums
         run: |

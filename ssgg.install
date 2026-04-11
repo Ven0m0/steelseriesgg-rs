@@ -25,7 +25,17 @@ post_install() {
 }
 
 post_upgrade() {
-  post_install
+  echo "==> Reloading udev rules..."
+  udevadm control --reload-rules
+  udevadm trigger
+
+  echo ""
+  echo "==> SteelSeries GG for Linux has been upgraded!"
+  echo ""
+  echo "If the user service is enabled, reload the user unit definitions and restart it:"
+  echo "  systemctl --user daemon-reload"
+  echo "  systemctl --user restart ssgg.service"
+  echo ""
 }
 
 post_remove() {

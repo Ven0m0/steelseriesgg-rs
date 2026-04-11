@@ -38,6 +38,12 @@
       "description": "Automerge linters at any time, bypassing weekly schedule",
       "matchCategories": ["linters"],
       "schedule": ["at any time"]
+    },
+    {
+      "description": "Do not flag the maintained crates.io directories crate as abandoned because the old GitHub mirror is archived",
+      "matchManagers": ["cargo"],
+      "matchPackageNames": ["directories"],
+      "abandonmentThreshold": null
     }
   ],
   "customManagers": [

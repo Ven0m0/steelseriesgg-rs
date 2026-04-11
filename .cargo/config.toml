@@ -15,10 +15,6 @@
 [target.x86_64-unknown-linux-gnu]
 # # rustflags = ["-Ctarget-cpu=native"]
 # Replace the rustflags line above with this one if you have lld installed for faster linking (do not use both):
-rustflags = ["-Clink-arg=-fuse-ld=lld"]
+# rustflags = ["-Clink-arg=-fuse-ld=lld"]
 
-[profile.release]
-strip = "symbols"  # Removes std backtrace symbols (~50 KiB savings)
-lto = "fat"        # Link-time optimization for better dead code elimination
-codegen-units = 1  # Better optimization at cost of compile time
-opt-level = "z"    # Optimize for size over speed
+# Project-wide release profile settings live in Cargo.toml.

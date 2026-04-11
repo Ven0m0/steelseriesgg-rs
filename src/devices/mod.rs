@@ -250,6 +250,83 @@ pub fn write_padded_report(device: &HidDevice, data: &[u8], report_len: usize, i
 
     write_result.map_err(Into::into).map(|_| ())
 }
+
+#[cfg(unix)]
+/// Send a HID feature report by opening the hidraw device path directly.
+///
+/// We bypass hidapi's `send_feature_report` because the hidapi Rust crate's
+/// linux-native backend uses `ioctl_write_buf!` (IOC_WRITE only) for HIDIOCSFEATURE,
+/// but the Linux kernel defines it as `_IOWR` (IOC_WRITE|IOC_READ). This causes EINVAL
+/// on large feature reports. We call the ioctl directly with correct direction bits.
+pub fn send_feature_report_raw(hidraw_path: &str, data: &[u8], report_len: usize) -> Result<()> {
+    use std::fs::OpenOptions;
+    use std::os::unix::io::AsRawFd;
+    use tracing::debug;
+
+    let mut report = vec![0u8; report_len];
+    let copy_len = data.len().min(report_len);
+    report[..copy_len].copy_from_slice(&data[..copy_len]);
+
+    debug!(
+        "Sending HID feature report via {}: len={}, cmd={:#04x}",
+        hidraw_path,
+        report_len,
+        report.get(1).copied().unwrap_or(0)
+    );
+
+    let file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(hidraw_path)
+        .map_err(|e| Error::DeviceCommunication(format!("Failed to open {hidraw_path}: {e}")))?;
+
+    let fd = file.as_raw_fd();
+    // HIDIOCSFEATURE = _IOWR('H', 0x06, size) = (3 << 30) | (size << 16) | ('H' << 8) | 0x06
+    let ioctl_code: libc::c_ulong =
+        (3 << 30) | ((report_len as libc::c_ulong) << 16) | ((b'H' as libc::c_ulong) << 8) | 0x06;
+
+    let ret = unsafe { libc::ioctl(fd, ioctl_code, report.as_mut_ptr()) };
+    if ret < 0 {
+        let err = std::io::Error::last_os_error();
+        return Err(Error::DeviceCommunication(format!(
+            "HID feature report ioctl failed on {hidraw_path}: {err}"
+        )));
+    }
+
+    Ok(())
+}
+
+#[cfg(unix)]
+/// Find the hidraw device path for a specific USB interface of a device.
+/// Scans /sys/class/hidraw/ to match vendor_id, product_id, and input number.
+pub fn find_hidraw_for_interface(vendor_id: u16, product_id: u16, interface: usize) -> Option<String> {
+    use std::fs;
+    let target_phys_suffix = format!("/input{interface}");
+    let target_hid_id = format!("0003:{:08X}:{:08X}", vendor_id as u32, product_id as u32);
+
+    for entry in fs::read_dir("/sys/class/hidraw").ok()? {
+        let Ok(entry) = entry else { continue };
+        let uevent_path = entry.path().join("device/uevent");
+        let Ok(content) = fs::read_to_string(&uevent_path) else {
+            continue;
+        };
+
+        let has_hid_id = content.lines().any(|l| {
+            l.strip_prefix("HID_ID=")
+                .is_some_and(|v| v.eq_ignore_ascii_case(&target_hid_id))
+        });
+        let has_phys = content
+            .lines()
+            .any(|l| l.starts_with("HID_PHYS=") && l.ends_with(&target_phys_suffix));
+
+        if has_hid_id && has_phys {
+            let name = entry.file_name();
+            return Some(format!("/dev/{}", name.to_string_lossy()));
+        }
+    }
+    None
+}
+
 pub mod product_ids {
     // Keyboards - Apex Series
     pub const APEX_PRO: u16 = 0x1610;
@@ -258,6 +335,7 @@ pub mod product_ids {
     // The previously documented 0x1618 value does not match the device on this
     // system, so we treat 0x1628 as the canonical 2023 TKL PID here.
     pub const APEX_PRO_TKL_2023: u16 = 0x1628;
+    pub const APEX_PRO_TKL_2023_WIRELESS: u16 = 0x1632;
     pub const APEX_3: u16 = 0x161A;
     pub const APEX_3_TKL: u16 = 0x1622;
     pub const APEX_5: u16 = 0x161C;
@@ -285,7 +363,7 @@ pub fn device_type_from_product_id(product_id: u16) -> DeviceType {
 
     match product_id {
         // Keyboards
-        APEX_PRO | APEX_PRO_TKL | APEX_PRO_TKL_2023 | APEX_3 | APEX_3_TKL | APEX_5 | APEX_7
+        APEX_PRO | APEX_PRO_TKL | APEX_PRO_TKL_2023 | APEX_PRO_TKL_2023_WIRELESS | APEX_3 | APEX_3_TKL | APEX_5 | APEX_7
         | APEX_7_TKL => DeviceType::Keyboard,
 
         // Headsets
@@ -314,6 +392,7 @@ pub fn device_name_from_product_id(product_id: u16) -> &'static str {
         APEX_PRO => "Apex Pro",
         APEX_PRO_TKL => "Apex Pro TKL",
         APEX_PRO_TKL_2023 => "Apex Pro TKL (2023)",
+        APEX_PRO_TKL_2023_WIRELESS => "Apex Pro TKL (2023) Wireless",
         APEX_3 => "Apex 3",
         APEX_3_TKL => "Apex 3 TKL",
         APEX_5 => "Apex 5",
@@ -343,7 +422,7 @@ pub fn zone_count_for_product_id(product_id: u16) -> usize {
     match product_id {
         APEX_3 => 10,                                                // Apex 3 - 10 zones
         APEX_3_TKL => 9,                                             // Apex 3 TKL - 9 zones
-        APEX_PRO_TKL_2023 => 9,                                      // Apex Pro TKL (2023) - 9 zones
+        APEX_PRO_TKL_2023 | APEX_PRO_TKL_2023_WIRELESS => 9,         // Apex Pro TKL (2023) - 9 zones
         APEX_PRO | APEX_PRO_TKL | APEX_5 | APEX_7 | APEX_7_TKL => 1, // Single zone for now
         _ => 1,                                                      // Default single zone
     }

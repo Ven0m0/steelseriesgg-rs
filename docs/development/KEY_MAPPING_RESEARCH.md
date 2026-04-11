@@ -277,11 +277,11 @@ The reverse engineering effort on `SteelSeriesGG107.0.0Setup.exe` successfully d
 The key mapping system is implemented in `src/devices/key_mapping.rs` with:
 
 - **`KeyId` enum**: 87 physical key identifiers covering function row, letter rows, bottom row, arrow cluster, navigation cluster, numpad, and SteelSeries-specific keys (`SteelSeriesKey`, `VolumeWheel`)
-- **`KeyAddress` struct**: Matrix coordinates `(row, col)` for HID addressing
+- **`KeyAddress` struct**: USB HID usage ID addressing via `hid_code: u8`
 - **`KeyboardLayout` enum**: `FullSize`, `TenKeyLess`, `Compact`
-- **`KeyMapping` struct**: Complete mapping for a specific keyboard model, including a `key_map: HashMap<KeyId, KeyAddress>`, declared matrix dimensions, and cached key lists for efficient iteration
-- **`KeyMappingStats` struct**: Statistics about a mapping (total keys, matrix utilization, actual vs. declared dimensions)
-- **`KeyMappingDatabase`**: Database of all supported keyboard mappings, populated at construction with placeholder data
+- **`KeyMapping` struct**: Complete mapping for a specific keyboard model, including a `key_map: HashMap<KeyId, KeyAddress>`, cached key lists for efficient iteration, and the supported HID-code set for that device
+- **`KeyMappingStats` struct**: Statistics about a mapping (total keys, supported HID codes, mapped keys, utilization)
+- **`KeyMappingDatabase`**: Database of supported keyboard mappings, populated at construction with HID-code mappings derived from official SteelSeries migration data
 
 ### `KeyMapping` API
 
@@ -290,41 +290,31 @@ let mut mapping = KeyMapping::new(
     product_id,
     KeyboardLayout::TenKeyLess,
     "Apex Pro TKL (2023)".to_string(),
-    6,   // matrix rows
-    17,  // matrix columns
+    supported_hid_codes,
 );
 
-mapping.add_key(KeyId::A, KeyAddress::new(3, 1));
-mapping.get_key_address(KeyId::A);    // → Some(KeyAddress { row: 3, col: 1 })
+mapping.add_key(KeyId::A, KeyAddress::new(4));
+mapping.get_key_address(KeyId::A);    // → Some(KeyAddress { hid_code: 4 })
 mapping.supports_key(KeyId::A);       // → true
 mapping.get_all_keys();               // → &[KeyId] (stable iteration order)
 mapping.get_stats();                  // → KeyMappingStats
 ```
 
-### Supported Models (PLACEHOLDER)
+### Supported Models
 
-| Model | Product ID | Layout | Matrix Size | Mapped Keys | Utilization | Status |
-|-------|------------|--------|-------------|-------------|-------------|--------|
-| Apex Pro TKL (2023) | `0x1628` | TenKeyLess | 6×17 | ~87 | ~85 % | PLACEHOLDER |
-| Apex Pro | `0x1610` | Full-size | 6×21 | ~104 | ~82 % | PLACEHOLDER |
-| Apex Pro TKL | `0x1614` | TenKeyLess | 6×17 | ~87 | ~85 % | PLACEHOLDER |
+| Model | Product ID | Layout | Mapped Keys | Addressing Source | Status |
+|-------|------------|--------|-------------|-------------------|--------|
+| Apex Pro TKL (2023) | `0x1628` | TenKeyLess | 87 | Official SteelSeries migration HID codes | HID mapping verified; protocol still pending |
+| Apex Pro | `0x1610` | Full-size | 104 | Official SteelSeries migration HID codes | HID mapping verified; protocol still pending |
+| Apex Pro TKL | `0x1614` | TenKeyLess | 87 | Official SteelSeries migration HID codes | HID mapping verified; protocol still pending |
 
-### Placeholder Matrix Layout (Apex Pro TKL 2023)
+### Addressing model
 
-```
-Row 0 (Function):  ESC _ F1 F2 F3 F4 F5 F6 F7 F8 F9 F10 F11 F12   INS HOM PGU
-Row 1 (Numbers):    `  1  2  3  4  5  6  7  8  9  0   -   =  BKSP  DEL END PGD
-Row 2 (QWERTY):   TAB  Q  W  E  R  T  Y  U  I  O  P   [   ]   \
-Row 3 (Home):     CAPS  A  S  D  F  G  H  J  K  L  ;   '  _  ENTER        ↑
-Row 4 (Shift):    LSHF  _  Z  X  C  V  B  N  M  ,  .   /  RSHF       ←   ↓   →
-Row 5 (Bottom):   LCTL LWIN LALT _ _ _ SPC _ _ _ RALT RWIN MENU RCTL
-```
-
-> `_` indicates unused matrix positions (gaps). Real hardware matrices are typically 40–60 % utilized.
+The current implementation does not model a guessed `(row, col)` matrix anymore. It stores the HID usage ID for each key and relies on protocol validation work to confirm how those HID codes must be encoded in the real per-key RGB packets.
 
 ## Zone-Based Fallback (Working Alternative)
 
-While per-key mapping uses placeholder data, the **zone fallback system** (`src/devices/zone_mapping.rs`) provides a working approximation:
+While the per-key protocol remains unverified, the **zone fallback system** (`src/devices/zone_mapping.rs`) provides a working approximation:
 
 - **`ZoneMapping`** associates zones with `ZonePosition` identifiers (`MainKeys`, `FunctionRow`, `ArrowKeys`, etc.)
 - **`ZoneFallback`** maps individual `KeyId` values to their nearest zone
@@ -447,7 +437,7 @@ Command 0x2D: [0x00] [0x2D] [value] [padding]
 
 ### Long-term (Production Ready) ⏸️ Pending
 
-1. Replace placeholder mappings with verified hardware data
+1. Validate HID-code driven per-key writes on hardware
 2. Implement actual per-key RGB commands in `PerKeyRgbCommand`
 3. Add runtime key mapping discovery
 4. Create validation tools for mapping accuracy
@@ -458,7 +448,7 @@ Command 0x2D: [0x00] [0x2D] [value] [padding]
 ### Functional Limitations
 
 - ❌ **No per-key control**: Zone-based RGB only (per-key uses placeholder protocol)
-- ❌ **Inaccurate mappings**: Placeholder data only — not verified against hardware
+- ⚠️ **Protocol still unverified**: HID key mappings are derived from official software, but the packet format for per-key RGB still needs hardware validation
 - ❌ **No key discovery**: Cannot detect available keys at runtime
 - ❌ **No validation**: Cannot verify mapping accuracy without hardware
 

@@ -6,15 +6,33 @@ use crate::devices::hid_reports::{
     ActuationCommand, HidCommand, HidDeviceType, HidReportBuilder, KEYBOARD_REPORT_SIZE,
 };
 use crate::devices::key_mapping::{KeyAddress, KeyId, KeyMapping};
+use crate::devices::product_ids;
 use crate::devices::zone_mapping::{ZoneEffect, ZoneMapping};
 use crate::devices::{Device, DeviceInfo, DeviceType};
 use crate::rgb::{Color, PerKeyEffect};
 use async_trait::async_trait;
 use std::ops::{Deref, DerefMut};
 
+/// Apex 2023 new protocol constants (from OpenRGB reverse engineering).
+const APEX_2023_PACKET_LENGTH: usize = 643;
+const APEX_2023_PACKET_ID_INIT: u8 = 0x4B;
+const APEX_2023_PACKET_ID_DIRECT_WIRED: u8 = 0x40;
+const APEX_2023_PACKET_ID_DIRECT_WIRELESS: u8 = 0x61;
+
+/// TKL key HID codes (from OpenRGB SteelSeriesApexController.cpp).
+const TKL_KEYS: &[u8] = &[
+    0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16,
+    0x17, 0x18, 0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F, 0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29,
+    0x2A, 0x2B, 0x2C, 0x2D, 0x2E, 0x2F, 0x30, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x3A, 0x3B, 0x3C, 0x3D,
+    0x3E, 0x3F, 0x40, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48, 0x49, 0x4A, 0x4B, 0x4C, 0x4D, 0x4E, 0x4F, 0x50,
+    0x51, 0x52, 0x64, 0xE0, 0xE1, 0xE2, 0xE3, 0xE4, 0xE5, 0xE6, 0xE7, 0xF0, 0x31, 0x87, 0x88, 0x89, 0x8A, 0x8B, 0x53,
+    0x54, 0x55, 0x56, 0x57, 0x58, 0x59, 0x5A, 0x5B, 0x5C, 0x5D, 0x5E, 0x5F, 0x60, 0x61, 0x62, 0x63,
+];
+
 /// Apex Pro TKL 2023 implementation.
 pub struct ApexProTkl2023 {
     inner: GenericKeyboard,
+    initialized_new_protocol: bool,
 }
 
 impl ApexProTkl2023 {
@@ -23,7 +41,72 @@ impl ApexProTkl2023 {
 
     /// Create from a generic keyboard.
     pub fn new(keyboard: GenericKeyboard) -> Self {
-        Self { inner: keyboard }
+        Self {
+            inner: keyboard,
+            initialized_new_protocol: false,
+        }
+    }
+
+    /// Create for wireless model without a hidapi device handle.
+    /// Uses raw hidraw feature reports only.
+    pub fn new_wireless_raw(info: DeviceInfo) -> Self {
+        Self {
+            inner: GenericKeyboard::new_without_device(info),
+            initialized_new_protocol: false,
+        }
+    }
+
+    /// Whether this device uses the new 2023 per-key direct protocol.
+    /// Only the wireless variant uses this unconditionally; the wired model
+    /// has its own path behind the `experimental-apex-2023` feature flag.
+    fn uses_new_protocol(&self) -> bool {
+        self.is_wireless()
+    }
+
+    /// Whether this is the wireless variant.
+    fn is_wireless(&self) -> bool {
+        self.inner.info().product_id == product_ids::APEX_PRO_TKL_2023_WIRELESS
+    }
+
+    /// Send the 0x4B initialization feature report required by new protocol.
+    fn ensure_new_protocol_init(&mut self) -> Result<()> {
+        if self.initialized_new_protocol {
+            return Ok(());
+        }
+        let mut buf = vec![0u8; APEX_2023_PACKET_LENGTH];
+        buf[0] = 0x00; // Report ID
+        buf[1] = APEX_2023_PACKET_ID_INIT;
+        self.inner.send_feature(&buf, APEX_2023_PACKET_LENGTH)?;
+        self.initialized_new_protocol = true;
+        tracing::info!("Sent Apex 2023 new protocol init (0x4B)");
+        Ok(())
+    }
+
+    /// Send per-key direct RGB using the new 643-byte feature report protocol.
+    fn send_direct_rgb_new_protocol(&mut self, color: Color) -> Result<()> {
+        self.ensure_new_protocol_init()?;
+
+        let packet_id = if self.is_wireless() {
+            APEX_2023_PACKET_ID_DIRECT_WIRELESS
+        } else {
+            APEX_2023_PACKET_ID_DIRECT_WIRED
+        };
+
+        let num_keys = TKL_KEYS.len();
+        let mut buf = vec![0u8; APEX_2023_PACKET_LENGTH];
+        buf[0] = 0x00; // Report ID
+        buf[1] = packet_id;
+        buf[2] = num_keys as u8;
+
+        for (i, &hid_code) in TKL_KEYS.iter().enumerate() {
+            let offset = 3 + i * 4;
+            buf[offset] = hid_code;
+            buf[offset + 1] = color.r;
+            buf[offset + 2] = color.g;
+            buf[offset + 3] = color.b;
+        }
+
+        self.inner.send_feature(&buf, APEX_2023_PACKET_LENGTH)
     }
 
     /// Set actuation point for all keys (global).
@@ -209,6 +292,11 @@ impl Device for ApexProTkl2023 {
     }
 
     fn initialize(&mut self) -> Result<()> {
+        // Wireless variant uses feature reports for init, not output reports.
+        // The 0x4B init is sent lazily in ensure_new_protocol_init().
+        if self.is_wireless() {
+            return Ok(());
+        }
         self.inner.initialize()
     }
 
@@ -233,10 +321,18 @@ impl Device for ApexProTkl2023 {
 #[async_trait]
 impl Keyboard for ApexProTkl2023 {
     async fn set_color(&mut self, color: Color) -> Result<()> {
+        if self.uses_new_protocol() {
+            return self.send_direct_rgb_new_protocol(color);
+        }
         self.inner.set_color(color).await
     }
 
     async fn set_zone_colors(&mut self, colors: &[Color]) -> Result<()> {
+        if self.uses_new_protocol() {
+            // For zone colors, just use the first color for all keys via direct protocol
+            let color = colors.first().copied().unwrap_or(Color::BLACK);
+            return self.send_direct_rgb_new_protocol(color);
+        }
         self.inner.set_zone_colors(colors).await
     }
 

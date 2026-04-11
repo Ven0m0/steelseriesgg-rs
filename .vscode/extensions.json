@@ -1,0 +1,15 @@
+{
+  "recommendations": [
+    "biomejs.biome", 
+    "oxc.oxc-vscode",
+    "hverlin.mise-vscode",
+    "mads-hartmann.bash-ide-vscode",
+    "redhat.vscode-yaml",
+    "tombi-toml.tombi",
+    "davidanson.vscode-markdownlint",
+    "github.vscode-github-actions",
+    "ast-grep.ast-grep-vscode",
+    "rust-lang.rust-analyzer",
+    "washan.cargo-appraiser"
+  ]
+}
