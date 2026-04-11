@@ -699,7 +699,9 @@ mod tests {
         let colors = res.unwrap();
         // Both A and Q should map to MainKeys (zone 1, 2, or 3 in Apex Pro TKL 2023)
         // Let's find which zone has the blended color
-        let has_blended = colors.iter().any(|&c| c != Color::BLACK && c != Color::RED && c != Color::BLUE);
+        let has_blended = colors
+            .iter()
+            .any(|&c| c != Color::BLACK && c != Color::RED && c != Color::BLUE);
         assert!(has_blended, "Should have a blended color in one of the zones");
     }
 
