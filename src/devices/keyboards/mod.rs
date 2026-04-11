@@ -193,7 +193,7 @@ pub trait Keyboard: Device {
     /// Returns actuation point in 0.1mm units (e.g., 4 = 0.4mm, 36 = 3.6mm).
     fn read_actuation_point(&mut self) -> Result<u8> {
         Err(Error::DeviceCommunication(
-            "Reading actuation point not supported".to_string(),
+            "Reading actuation point not implemented".to_string(),
         ))
     }
 
