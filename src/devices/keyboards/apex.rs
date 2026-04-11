@@ -232,14 +232,6 @@ impl Keyboard for Apex3Tkl {
     fn read_actuation_point(&mut self) -> Result<u8> {
         self.inner.read_actuation_point()
     }
-
-    fn set_actuation_point(&mut self, value: u8) -> Result<()> {
-        self.inner.set_actuation_point(value)
-    }
-
-    fn set_actuation_point_mm(&mut self, mm: f32) -> Result<()> {
-        self.inner.set_actuation_point_mm(mm)
-    }
 }
 
 impl std::ops::Deref for Apex3Tkl {
