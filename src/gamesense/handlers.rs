@@ -222,7 +222,6 @@ pub mod presets {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::rgb::Color;
 
     #[test]
     fn test_static_color_handler() {
