@@ -212,8 +212,26 @@ impl ProfileManager {
         #[cfg(unix)]
         {
             let mut options = OpenOptions::new();
-            options.write(true).create(true).truncate(true).mode(0o600);
-            let file = options.open(&path)?;
+            options
+                .write(true)
+                .create(true)
+                .truncate(true)
+                .mode(0o600)
+                .custom_flags(libc::O_NOFOLLOW);
+
+            let file = match options.open(&path) {
+                Ok(file) => file,
+                Err(e) => {
+                    if e.raw_os_error() == Some(libc::ELOOP) {
+                        return Err(Error::Profile(format!(
+                            "Security error: Refusing to open profile {} because it is a symlink",
+                            path.display()
+                        )));
+                    }
+                    return Err(e.into());
+                }
+            };
+
             let mut perms = file.metadata()?.permissions();
             perms.set_mode(0o600);
             file.set_permissions(perms)?;

@@ -139,3 +139,39 @@ fn test_secure_profile_permissions() {
     let file_metadata = std::fs::symlink_metadata(&path).unwrap();
     assert_eq!(file_metadata.permissions().mode() & 0o777, 0o600);
 }
+
+#[test]
+#[cfg(unix)]
+fn test_profile_save_refuse_symlink() {
+    use std::os::unix::fs::symlink;
+
+    let temp_dir = tempfile::tempdir().unwrap();
+    let profiles_dir = temp_dir.path().join("profiles");
+    std::fs::create_dir_all(&profiles_dir).unwrap();
+
+    let manager = ProfileManager::with_dir(profiles_dir.clone());
+    let profile_name = "SymlinkedProfile";
+    let profile_path = profiles_dir.join(format!("{}.json", profile_name));
+    let target_path = temp_dir.path().join("target.json");
+
+    // Create a dummy target file
+    std::fs::write(&target_path, "dummy content").unwrap();
+
+    // Create a symlink at the profile path pointing to the target
+    symlink(&target_path, &profile_path).expect("Failed to create symlink");
+
+    let profile = Profile::new(profile_name);
+    let result = manager.save(&profile);
+
+    assert!(result.is_err(), "Should have failed to save to a symlink");
+    let err_msg = result.unwrap_err().to_string();
+    assert!(
+        err_msg.contains("Security error") || err_msg.contains("symlink"),
+        "Error message should mention security or symlink: {}",
+        err_msg
+    );
+
+    // Verify target file was not overwritten
+    let content = std::fs::read_to_string(&target_path).unwrap();
+    assert_eq!(content, "dummy content");
+}

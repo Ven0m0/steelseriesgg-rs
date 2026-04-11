@@ -291,11 +291,25 @@ impl DeviceStateStore {
             {
                 use std::os::unix::fs::OpenOptionsExt;
                 let mut options = std::fs::OpenOptions::new();
-                options.write(true).create(true).truncate(true).mode(0o600);
+                options
+                    .write(true)
+                    .create(true)
+                    .truncate(true)
+                    .mode(0o600)
+                    .custom_flags(libc::O_NOFOLLOW);
 
-                let mut file = options
-                    .open(&temp_file_clone)
-                    .map_err(|e| Error::FileSystemError(format!("Failed to open temp file: {}", e)))?;
+                let mut file = match options.open(&temp_file_clone) {
+                    Ok(file) => file,
+                    Err(e) => {
+                        if e.raw_os_error() == Some(libc::ELOOP) {
+                            return Err(Error::FileSystemError(format!(
+                                "Security error: Refusing to open temp file {} because it is a symlink",
+                                temp_file_clone.display()
+                            )));
+                        }
+                        return Err(Error::FileSystemError(format!("Failed to open temp file: {}", e)));
+                    }
+                };
 
                 let mut perms = file
                     .metadata()
@@ -329,6 +343,7 @@ impl DeviceStateStore {
 
         Ok(())
     }
+
 
     /// Load device states from disk synchronously (used during initialization).
     fn load_sync(&mut self) -> Result<()> {
@@ -751,6 +766,42 @@ mod tests {
 
         // Invalid interface integer
         assert!(DeviceId::from_key("1038:1234:A:serial:none").is_err());
+    }
+
+    #[tokio::test]
+    #[cfg(unix)]
+    async fn test_device_state_save_refuse_symlink() -> Result<()> {
+        use std::os::unix::fs::symlink;
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let state_file = temp_dir.path().join("device_state.json");
+        let temp_state_file = temp_dir.path().join("device_state.json.tmp");
+        let target_file = temp_dir.path().join("target_file");
+
+        // Create a dummy target file
+        std::fs::write(&target_file, "dummy content").unwrap();
+
+        // Create a symlink at the temp file path pointing to the target
+        symlink(&target_file, &temp_state_file).expect("Failed to create symlink");
+
+        let store = DeviceStateStore::with_path(state_file.clone())?;
+
+        // Try to save, which should use the temp file
+        let result = store.save().await;
+
+        assert!(result.is_err(), "Should have failed to save through a symlink");
+        let err_msg = result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("Security error") || err_msg.contains("symlink"),
+            "Error message should mention security or symlink: {}",
+            err_msg
+        );
+
+        // Verify target file was not overwritten
+        let content = std::fs::read_to_string(&target_file).unwrap();
+        assert_eq!(content, "dummy content");
+
+        Ok(())
     }
 
     #[tokio::test]
