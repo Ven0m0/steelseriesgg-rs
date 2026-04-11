@@ -63,7 +63,9 @@ pub trait Keyboard: Device {
     /// Uses the keyboard's key mapping to convert logical key IDs to matrix addresses.
     /// Returns an error if the key is not found in the mapping or per-key RGB is not supported.
     async fn set_key_color(&mut self, _key_id: KeyId, _color: Color) -> Result<()> {
-        Ok(())
+        Err(Error::DeviceCommunication(
+            "Per-key RGB not supported".to_string(),
+        ))
     }
 
     /// Set RGB colors for multiple keys by logical key IDs.
