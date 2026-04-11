@@ -111,21 +111,20 @@ impl ApexProTkl2023 {
 
     /// Set actuation point for all keys (global).
     /// Value is in 0.1mm increments (e.g. 4 = 0.4mm, 36 = 3.6mm).
+    /// Send actuation command and update cache
+    fn send_actuation_command(&mut self, command: ActuationCommand) -> Result<()> {
+        let report_builder = HidReportBuilder::new(HidDeviceType::Keyboard);
+        let mut buffer = [0u8; KEYBOARD_REPORT_SIZE];
+        let size = report_builder.build_report(command.clone(), &mut buffer)?;
+        self.inner.send_raw(&buffer[..size])?;
+        self.inner.update_cached_actuation_point(command.actuation_point);
+        Ok(())
+    }
+
     pub fn set_actuation_point(&mut self, value: u8) -> Result<()> {
-        // Create ActuationCommand and validate it
         let command = ActuationCommand::new(value);
         command.validate()?;
-
-        // Use the new command infrastructure for consistent serialization
-        let report_builder = HidReportBuilder::new(HidDeviceType::Keyboard);
-
-        let mut buffer = [0u8; KEYBOARD_REPORT_SIZE];
-        let size = report_builder.build_report(command, &mut buffer)?;
-
-        self.inner.send_raw(&buffer[..size])?;
-
-        self.inner.update_cached_actuation_point(value);
-        Ok(())
+        self.send_actuation_command(command)
     }
 
     /// Set actuation point in millimeters.
@@ -133,17 +132,7 @@ impl ApexProTkl2023 {
     pub fn set_actuation_point_mm(&mut self, mm: f32) -> Result<()> {
         let command = ActuationCommand::from_mm(mm);
         command.validate()?;
-
-        // Use the new command infrastructure for consistent serialization
-        let report_builder = HidReportBuilder::new(HidDeviceType::Keyboard);
-
-        let mut buffer = [0u8; KEYBOARD_REPORT_SIZE];
-        let size = report_builder.build_report(command.clone(), &mut buffer)?;
-
-        self.inner.send_raw(&buffer[..size])?;
-
-        self.inner.update_cached_actuation_point(command.actuation_point);
-        Ok(())
+        self.send_actuation_command(command)
     }
 
     #[cfg(feature = "experimental-apex-2023")]

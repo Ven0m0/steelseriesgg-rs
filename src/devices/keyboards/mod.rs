@@ -22,108 +22,167 @@ use std::sync::Arc;
 #[async_trait]
 pub trait Keyboard: Device {
     /// Set the entire keyboard to a single color.
-    async fn set_color(&mut self, color: Color) -> Result<()>;
+    async fn set_color(&mut self, _color: Color) -> Result<()> {
+        Err(Error::DeviceCommunication(
+            "set_color is not supported for this keyboard".to_string(),
+        ))
+    }
 
     /// Set colors for individual zones.
-    async fn set_zone_colors(&mut self, colors: &[Color]) -> Result<()>;
+    async fn set_zone_colors(&mut self, _colors: &[Color]) -> Result<()> {
+        Ok(())
+    }
 
     /// Get the number of RGB zones.
-    fn zone_count(&self) -> usize;
+    fn zone_count(&self) -> usize {
+        0
+    }
 
     /// Set keyboard brightness (0-100).
-    async fn set_brightness(&mut self, brightness: u8) -> Result<()>;
+    async fn set_brightness(&mut self, _brightness: u8) -> Result<()> {
+        Ok(())
+    }
 
     /// Apply the current RGB settings.
-    async fn apply(&mut self) -> Result<()>;
+    async fn apply(&mut self) -> Result<()> {
+        Ok(())
+    }
 
     // === Per-Key RGB Control ===
 
     /// Check if per-key RGB control is supported by this keyboard.
-    fn supports_per_key_rgb(&self) -> bool;
+    fn supports_per_key_rgb(&self) -> bool {
+        false
+    }
 
     /// Get the key mapping for this keyboard (if available).
-    fn get_key_mapping(&self) -> Option<&KeyMapping>;
+    fn get_key_mapping(&self) -> Option<&KeyMapping> {
+        None
+    }
 
     /// Set RGB color for a specific key by logical key ID.
     ///
     /// Uses the keyboard's key mapping to convert logical key IDs to matrix addresses.
     /// Returns an error if the key is not found in the mapping or per-key RGB is not supported.
-    async fn set_key_color(&mut self, key_id: KeyId, color: Color) -> Result<()>;
+    async fn set_key_color(&mut self, _key_id: KeyId, _color: Color) -> Result<()> {
+        Err(Error::DeviceCommunication(
+            "Per-key RGB not supported".to_string(),
+        ))
+    }
 
     /// Set RGB colors for multiple keys by logical key IDs.
     ///
     /// Uses the keyboard's key mapping to convert logical key IDs to matrix addresses.
     /// Keys not found in the mapping are ignored with a warning.
-    async fn set_key_colors(&mut self, key_colors: &[(KeyId, Color)]) -> Result<()>;
+    async fn set_key_colors(&mut self, _key_colors: &[(KeyId, Color)]) -> Result<()> {
+        Ok(())
+    }
 
     /// Set RGB color for a specific key by direct matrix address.
     ///
     /// Bypasses key mapping and directly addresses the key matrix.
     /// Use with caution - invalid addresses may cause device issues.
-    async fn set_key_color_direct(&mut self, address: KeyAddress, color: Color) -> Result<()>;
+    async fn set_key_color_direct(&mut self, _address: KeyAddress, _color: Color) -> Result<()> {
+        Ok(())
+    }
 
     /// Set RGB colors for multiple keys by direct matrix addresses.
     ///
     /// Bypasses key mapping and directly addresses the key matrix.
     /// Use with caution - invalid addresses may cause device issues.
-    async fn set_key_colors_direct(&mut self, key_colors: &[(KeyAddress, Color)]) -> Result<()>;
+    async fn set_key_colors_direct(&mut self, _key_colors: &[(KeyAddress, Color)]) -> Result<()> {
+        Ok(())
+    }
 
     /// Set all keys to black (turn off per-key RGB).
-    async fn clear_per_key_rgb(&mut self) -> Result<()>;
+    async fn clear_per_key_rgb(&mut self) -> Result<()> {
+        Ok(())
+    }
 
     /// Set a region of keys to the same color using HID codes.
-    async fn set_key_region(&mut self, start_hid: u8, count: u8, color: Color) -> Result<()>;
+    async fn set_key_region(&mut self, _start_hid: u8, _count: u8, _color: Color) -> Result<()> {
+        Ok(())
+    }
 
     // === Zone-based RGB Fallback ===
 
     /// Get zone mapping information for this keyboard.
-    fn get_zone_mapping(&self) -> Option<&ZoneMap>;
+    fn get_zone_mapping(&self) -> Option<&ZoneMap> {
+        None
+    }
 
     /// Set zone-based RGB effect as fallback.
-    async fn set_zone_effect(&mut self, effect: ZoneEffect) -> Result<()>;
+    async fn set_zone_effect(&mut self, _effect: ZoneEffect) -> Result<()> {
+        Ok(())
+    }
 
     /// Simulate per-key effect using zone-based fallback.
-    async fn simulate_per_key_with_zones(&mut self, key_colors: &[(KeyId, Color)]) -> Result<()>;
+    async fn simulate_per_key_with_zones(&mut self, _key_colors: &[(KeyId, Color)]) -> Result<()> {
+        Ok(())
+    }
 
     /// Enhanced zone-based RGB with retry logic.
-    async fn set_zone_colors_with_retry(&mut self, colors: &[Color], max_retries: usize) -> Result<()>;
+    async fn set_zone_colors_with_retry(&mut self, _colors: &[Color], _max_retries: usize) -> Result<()> {
+        Ok(())
+    }
 
     /// Test zone connectivity and reliability.
-    async fn test_zone_reliability(&mut self) -> Result<Vec<bool>>;
+    async fn test_zone_reliability(&mut self) -> Result<Vec<bool>> {
+        Err(Error::from(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "test_zone_reliability is not supported for this keyboard",
+        )))
+    }
 
     // === Per-Key RGB Effect Support ===
 
     /// Check if per-key RGB effects are supported.
-    fn supports_per_key_effects(&self) -> bool;
+    fn supports_per_key_effects(&self) -> bool {
+        false
+    }
 
     /// Set per-key RGB effect.
-    async fn set_per_key_effect(&mut self, effect: PerKeyEffect) -> Result<()>;
+    async fn set_per_key_effect(&mut self, _effect: PerKeyEffect) -> Result<()> {
+        Ok(())
+    }
 
     /// Get current per-key RGB effect (if available).
-    fn get_per_key_effect(&self) -> Option<&PerKeyEffect>;
+    fn get_per_key_effect(&self) -> Option<&PerKeyEffect> {
+        None
+    }
 
     /// Trigger reactive effect for specific keys.
-    async fn trigger_key_reactive(&mut self, keys: &[KeyId], duration: f32) -> Result<()>;
+    async fn trigger_key_reactive(&mut self, _keys: &[KeyId], _duration: f32) -> Result<()> {
+        Ok(())
+    }
 
     /// Apply per-key effect with brightness control.
-    async fn apply_per_key_effect_with_brightness(&mut self, brightness: f32) -> Result<()>;
+    async fn apply_per_key_effect_with_brightness(&mut self, _brightness: f32) -> Result<()> {
+        Ok(())
+    }
 
     /// Convert per-key effect to zone-based fallback.
-    async fn convert_per_key_to_zones(&mut self, effect: &PerKeyEffect) -> Result<()>;
+    async fn convert_per_key_to_zones(&mut self, _effect: &PerKeyEffect) -> Result<()> {
+        Ok(())
+    }
 
     // === Performance Optimization ===
 
     /// Get current performance statistics for RGB operations.
-    fn get_rgb_performance_stats(&self) -> Option<&crate::performance::PerformanceStats>;
+    fn get_rgb_performance_stats(&self) -> Option<&crate::performance::PerformanceStats> {
+        None
+    }
 
     /// Get optimal frame time for current adaptive refresh rate.
-    fn get_optimal_frame_time(&self) -> Option<std::time::Duration>;
+    fn get_optimal_frame_time(&self) -> Option<std::time::Duration> {
+        None
+    }
 
     /// Force cleanup of performance caches.
-    fn cleanup_rgb_caches(&mut self);
+    fn cleanup_rgb_caches(&mut self) {}
 
     /// Enable/disable performance optimizations.
-    fn set_performance_optimization(&mut self, enabled: bool);
+    fn set_performance_optimization(&mut self, _enabled: bool) {}
 
     /// Read current actuation point setting from keyboard (if supported).
     ///
@@ -132,19 +191,31 @@ pub trait Keyboard: Device {
     /// returns an error indicating the feature is not implemented.
     ///
     /// Returns actuation point in 0.1mm units (e.g., 4 = 0.4mm, 36 = 3.6mm).
-    fn read_actuation_point(&mut self) -> Result<u8>;
+    fn read_actuation_point(&mut self) -> Result<u8> {
+        Err(Error::DeviceCommunication(
+            "Reading actuation point not implemented".to_string(),
+        ))
+    }
 
     /// Set actuation point for adjustable actuation keyboards (if supported).
     ///
     /// Value is in 0.1mm increments (e.g. 4 = 0.4mm, 36 = 3.6mm).
     /// Returns an error if the keyboard doesn't support adjustable actuation.
-    fn set_actuation_point(&mut self, value: u8) -> Result<()>;
+    fn set_actuation_point(&mut self, _value: u8) -> Result<()> {
+        Err(Error::DeviceCommunication(
+            "Setting actuation point not supported".to_string(),
+        ))
+    }
 
     /// Set actuation point for adjustable actuation keyboards in millimeters (if supported).
     ///
     /// Value is in millimeters with precision limited to 0.1mm increments.
     /// Returns an error if the keyboard doesn't support adjustable actuation.
-    fn set_actuation_point_mm(&mut self, mm: f32) -> Result<()>;
+    fn set_actuation_point_mm(&mut self, _mm: f32) -> Result<()> {
+        Err(Error::DeviceCommunication(
+            "Setting actuation point not supported".to_string(),
+        ))
+    }
 }
 
 /// Generic SteelSeries keyboard implementation.
@@ -881,18 +952,6 @@ impl Keyboard for GenericKeyboard {
                 "Reading actuation point not yet implemented - HID read command not discovered and no cached value available. Hint: the actuation point can currently only be retrieved if it was set earlier in this session; cache the value you set instead of relying on reading it back.".to_string(),
             ))
         }
-    }
-
-    fn set_actuation_point(&mut self, _value: u8) -> Result<()> {
-        Err(Error::DeviceCommunication(
-            "Setting actuation point not supported on this keyboard model".to_string(),
-        ))
-    }
-
-    fn set_actuation_point_mm(&mut self, _mm: f32) -> Result<()> {
-        Err(Error::DeviceCommunication(
-            "Setting actuation point not supported on this keyboard model".to_string(),
-        ))
     }
 }
 
