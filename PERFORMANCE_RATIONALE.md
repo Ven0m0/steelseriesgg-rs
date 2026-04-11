@@ -4,7 +4,7 @@ The following performance bottlenecks were identified in the device state persis
 
 1. **Mutex Contention in `dirty_flag`**: The `DeviceStateStore` uses `Arc<Mutex<bool>>` to track if the state is dirty. If the lock is contended, it spawns a new Tokio task just to set the boolean. Replacing this with `Arc<AtomicBool>` eliminates the need for locks and task spawning, making `mark_dirty()` a very cheap operation.
 
-2. **Synchronous JSON Serialization**: In `save_async`, `serde_json::to_string_pretty` is called on the async thread before entering `spawn_blocking`. For large device states, this CPU-intensive operation can block the async executor, increasing latency for other tasks. Moving serialization into the `spawn_blocking` block ensures the async executor remains responsive.
+2. **Synchronous JSON Serialization**: Previously, in `save_async`, `serde_json::to_string_pretty` was called on the async thread before entering `spawn_blocking`. For large device states, this CPU-intensive operation could block the async executor, increasing latency for other tasks. Moving serialization into the `spawn_blocking` block ensures the async executor remains responsive.
 
 3. **Repeated Lock Acquisition in Loops**: The `save_final_device_states` function in `src/main.rs` iterates over devices and calls `update_keyboard` for each one. Each call acquires and releases a write lock on the internal state map. Implementing a batch update method allows all states to be updated with a single lock acquisition, reducing overhead.
 
