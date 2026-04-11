@@ -697,8 +697,8 @@ mod tests {
         let res = fallback.simulate_per_key_effect(product_ids::APEX_PRO_TKL_2023, &blending_colors);
         assert!(res.is_some());
         let colors = res.unwrap();
-        // Both A and Q should map to MainKeys (zone 1, 2, or 3 in Apex Pro TKL 2023)
-        // Let's find which zone has the blended color
+        // Both A and Q should map to the same MainKeys zone selected by the current mapping logic.
+        // Verify that one zone contains a blended color produced from both inputs.
         let a_zone_idx = map_key_to_zone(product_ids::APEX_PRO_TKL_2023, crate::devices::KeyId::A);
         let q_zone_idx = map_key_to_zone(product_ids::APEX_PRO_TKL_2023, crate::devices::KeyId::Q);
         assert_eq!(
