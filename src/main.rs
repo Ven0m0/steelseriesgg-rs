@@ -1384,7 +1384,7 @@ async fn cmd_profile(action: ProfileAction) -> Result<()> {
         }
 
         ProfileAction::Delete { name } => {
-            profile_manager.delete(&name)?;
+            profile_manager.delete(&name).await?;
             println!("Profile deleted: {}", name);
         }
     }

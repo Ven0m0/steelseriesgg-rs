@@ -139,3 +139,26 @@ fn test_secure_profile_permissions() {
     let file_metadata = std::fs::symlink_metadata(&path).unwrap();
     assert_eq!(file_metadata.permissions().mode() & 0o777, 0o600);
 }
+use std::time::Instant;
+
+#[tokio::test]
+async fn benchmark_profile_deletion() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let mut manager = ProfileManager::with_dir(temp_dir.path().to_path_buf());
+
+    let num_profiles = 1000;
+
+    // Setup
+    for i in 0..num_profiles {
+        let profile = Profile::new(format!("Profile_{}", i));
+        manager.set(profile).unwrap();
+    }
+
+    let start = Instant::now();
+    for i in 0..num_profiles {
+        manager.delete(&format!("Profile_{}", i)).await.unwrap();
+    }
+    let duration = start.elapsed();
+
+    println!("Deleted {} profiles in {:?}", num_profiles, duration);
+}
