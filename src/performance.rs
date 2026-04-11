@@ -418,7 +418,7 @@ pub struct EffectComputationCache {
     max_age: Duration,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 struct EffectCacheKey {
     effect_hash: u64,
     time_bucket: u64, // Rounded to reduce cache fragmentation
@@ -579,12 +579,12 @@ impl EffectComputationCache {
 
     /// Evict least recently used cache entry.
     fn evict_lru(&mut self) {
-        if let Some((key_to_remove, _)) = self
+        if let Some(key_to_remove) = self
             .cache
             .iter()
             .min_by_key(|(_, entry)| (entry.access_count, entry.timestamp))
+            .map(|(k, _)| *k)
         {
-            let key_to_remove = key_to_remove.clone();
             self.cache.remove(&key_to_remove);
         }
     }
