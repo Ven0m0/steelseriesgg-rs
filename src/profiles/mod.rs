@@ -237,7 +237,20 @@ impl ProfileManager {
     }
 
     /// Delete a profile.
-    pub async fn delete(&mut self, name: &str) -> Result<()> {
+    pub fn delete(&mut self, name: &str) -> Result<()> {
+        let filename = Self::sanitize_filename(name);
+        let path = self.profiles_dir.join(format!("{}.json", filename));
+        match std::fs::remove_file(&path) {
+            Ok(_) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(e.into()),
+        }
+        self.profiles.remove(name);
+        Ok(())
+    }
+
+    /// Delete a profile asynchronously.
+    pub async fn delete_async(&mut self, name: &str) -> Result<()> {
         let filename = Self::sanitize_filename(name);
         let path = self.profiles_dir.join(format!("{}.json", filename));
         match tokio::fs::remove_file(&path).await {
