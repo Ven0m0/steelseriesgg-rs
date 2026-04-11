@@ -656,4 +656,90 @@ mod tests {
         assert_eq!(ZonePosition::FunctionRow.to_string(), "Function Row");
         assert_eq!(ZonePosition::Custom(5).to_string(), "Custom 5");
     }
+
+    #[test]
+    fn test_zone_fallback_initialization() {
+        let fallback = ZoneFallback::new();
+        let products = fallback.get_supported_products();
+        assert!(products.contains(&product_ids::APEX_PRO_TKL_2023));
+        assert!(products.contains(&product_ids::APEX_3));
+        assert!(products.contains(&product_ids::APEX_3_TKL));
+    }
+
+    #[test]
+    fn test_zone_fallback_get_mapping() {
+        let fallback = ZoneFallback::new();
+        let mapping = fallback.get_mapping(product_ids::APEX_3);
+        assert!(mapping.is_some());
+        assert_eq!(mapping.unwrap().zone_count, 10);
+
+        let unknown = fallback.get_mapping(0xDEAD);
+        assert!(unknown.is_none());
+    }
+
+    #[test]
+    fn test_per_key_simulation_edge_cases() {
+        let fallback = ZoneFallback::new();
+
+        // Empty input
+        let empty_colors = vec![];
+        let res = fallback.simulate_per_key_effect(product_ids::APEX_PRO_TKL_2023, &empty_colors);
+        assert!(res.is_some());
+        let colors = res.unwrap();
+        assert_eq!(colors.len(), 9);
+        assert!(colors.iter().all(|&c| c == Color::BLACK));
+
+        // Unknown product
+        let res = fallback.simulate_per_key_effect(0xDEAD, &[(crate::devices::KeyId::A, Color::RED)]);
+        assert!(res.is_none());
+
+        // Color blending
+        let blending_colors = vec![
+            (crate::devices::KeyId::A, Color::RED),
+            (crate::devices::KeyId::Q, Color::BLUE),
+        ];
+        let res = fallback.simulate_per_key_effect(product_ids::APEX_PRO_TKL_2023, &blending_colors);
+        assert!(res.is_some());
+        let colors = res.unwrap();
+        // Both A and Q should map to the same MainKeys zone selected by the current mapping logic.
+        // Verify that one zone contains a blended color produced from both inputs.
+        let a_zone_idx = map_key_to_zone(product_ids::APEX_PRO_TKL_2023, crate::devices::KeyId::A);
+        let q_zone_idx = map_key_to_zone(product_ids::APEX_PRO_TKL_2023, crate::devices::KeyId::Q);
+        assert_eq!(
+            a_zone_idx, q_zone_idx,
+            "A and Q should map to the same zone for blending on Apex Pro TKL 2023"
+        );
+        let zone_idx = a_zone_idx;
+        assert_eq!(
+            colors[zone_idx],
+            Color::blend(Color::RED, Color::BLUE, 0.5),
+            "Expected the shared zone to contain the blended color"
+        );
+    }
+
+    #[test]
+    fn test_zone_fallback_current_colors() {
+        let mut fallback = ZoneFallback::new();
+        let effect = ZoneEffect::Solid(Color::GREEN);
+        fallback.set_current_effect(effect);
+
+        let colors = fallback.get_current_colors(product_ids::APEX_PRO_TKL_2023, 0.0);
+        assert!(colors.is_some());
+        let colors = colors.unwrap();
+        assert_eq!(colors.len(), 9);
+        assert!(colors.iter().all(|&c| c == Color::GREEN));
+    }
+
+    #[test]
+    fn test_pattern_to_zone_effect_all() {
+        let fallback = ZoneFallback::new();
+        let patterns = ["rainbow", "breathing", "gradient", "solid", "alternating"];
+        for pattern in patterns {
+            assert!(
+                fallback.pattern_to_zone_effect(pattern).is_some(),
+                "Pattern {} should be supported",
+                pattern
+            );
+        }
+    }
 }

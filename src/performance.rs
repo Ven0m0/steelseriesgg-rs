@@ -579,13 +579,18 @@ impl EffectComputationCache {
 
     /// Evict least recently used cache entry.
     fn evict_lru(&mut self) {
-        if let Some((key_to_remove, _)) = self
+        let key_to_remove = self
             .cache
             .iter()
-            .min_by_key(|(_, entry)| (entry.access_count, entry.timestamp))
-        {
-            let key_to_remove = key_to_remove.clone();
-            self.cache.remove(&key_to_remove);
+            .min_by(|(_, a), (_, b)| {
+                a.access_count
+                    .cmp(&b.access_count)
+                    .then_with(|| a.timestamp.cmp(&b.timestamp))
+            })
+            .map(|(k, _)| k.clone());
+
+        if let Some(key) = key_to_remove {
+            self.cache.remove(&key);
         }
     }
 }

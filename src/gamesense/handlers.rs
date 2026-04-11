@@ -218,3 +218,145 @@ pub mod presets {
         ]
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_static_color_handler() {
+        let handler = static_color_handler(zones::FUNCTION_KEYS, Color::new(255, 128, 0));
+        match handler {
+            Handler::Keyboard { zone, color, mode } => {
+                assert_eq!(zone, zones::FUNCTION_KEYS);
+                assert!(mode.is_none());
+                match color {
+                    ColorHandler::Static { red, green, blue } => {
+                        assert_eq!(red, 255);
+                        assert_eq!(green, 128);
+                        assert_eq!(blue, 0);
+                    }
+                    _ => panic!("Expected Static color handler"),
+                }
+            }
+            _ => panic!("Expected Keyboard handler"),
+        }
+    }
+
+    #[test]
+    fn test_health_bar_handler() {
+        let handler = health_bar_handler(zones::MAIN_KEYBOARD);
+        match handler {
+            Handler::Keyboard { zone, color, mode } => {
+                assert_eq!(zone, zones::MAIN_KEYBOARD);
+                assert!(mode.is_none());
+                match color {
+                    ColorHandler::Gradient { gradient } => {
+                        assert_eq!(gradient.zero.red, 255);
+                        assert_eq!(gradient.zero.green, 0);
+                        assert_eq!(gradient.zero.blue, 0);
+                        assert_eq!(gradient.hundred.red, 0);
+                        assert_eq!(gradient.hundred.green, 255);
+                        assert_eq!(gradient.hundred.blue, 0);
+                    }
+                    _ => panic!("Expected Gradient color handler"),
+                }
+            }
+            _ => panic!("Expected Keyboard handler"),
+        }
+    }
+
+    #[test]
+    fn test_ammo_handler() {
+        let handler = ammo_handler(zones::NUMBER_KEYS);
+        match handler {
+            Handler::Keyboard { zone, color, .. } => {
+                assert_eq!(zone, zones::NUMBER_KEYS);
+                match color {
+                    ColorHandler::Gradient { gradient } => {
+                        assert_eq!(gradient.zero.red, 255);
+                        assert_eq!(gradient.zero.green, 200);
+                        assert_eq!(gradient.zero.blue, 0);
+                        assert_eq!(gradient.hundred.red, 255);
+                        assert_eq!(gradient.hundred.green, 255);
+                        assert_eq!(gradient.hundred.blue, 255);
+                    }
+                    _ => panic!("Expected Gradient color handler"),
+                }
+            }
+            _ => panic!("Expected Keyboard handler"),
+        }
+    }
+
+    #[test]
+    fn test_cooldown_handler() {
+        let handler = cooldown_handler("q");
+        match handler {
+            Handler::Keyboard { zone, color, .. } => {
+                assert_eq!(zone, "q");
+                match color {
+                    ColorHandler::Range { color: ranges } => {
+                        assert_eq!(ranges.len(), 4);
+
+                        assert_eq!(ranges[0].low, 0);
+                        assert_eq!(ranges[0].high, 25);
+                        assert_eq!(ranges[0].color.red, 255);
+
+                        assert_eq!(ranges[3].low, 76);
+                        assert_eq!(ranges[3].high, 100);
+                        assert_eq!(ranges[3].color.green, 255);
+                    }
+                    _ => panic!("Expected Range color handler"),
+                }
+            }
+            _ => panic!("Expected Keyboard handler"),
+        }
+    }
+
+    #[test]
+    fn test_fps_preset() {
+        let bindings = presets::fps_preset("TEST_GAME");
+        assert_eq!(bindings.len(), 2);
+
+        // Check health binding
+        assert_eq!(bindings[0].game, "TEST_GAME");
+        assert_eq!(bindings[0].event, "HEALTH");
+        assert_eq!(bindings[0].min_value, 0);
+        assert_eq!(bindings[0].max_value, 100);
+        assert_eq!(bindings[0].icon_id, Some(1));
+        assert_eq!(bindings[0].handlers.len(), 1);
+
+        // Check ammo binding
+        assert_eq!(bindings[1].game, "TEST_GAME");
+        assert_eq!(bindings[1].event, "AMMO");
+        assert_eq!(bindings[1].icon_id, Some(2));
+    }
+
+    #[test]
+    fn test_moba_preset() {
+        let bindings = presets::moba_preset("TEST_MOBA");
+        assert_eq!(bindings.len(), 6);
+
+        assert_eq!(bindings[0].event, "HEALTH");
+        assert_eq!(bindings[1].event, "MANA");
+        assert_eq!(bindings[2].event, "ABILITY_Q");
+        assert_eq!(bindings[3].event, "ABILITY_W");
+        assert_eq!(bindings[4].event, "ABILITY_E");
+        assert_eq!(bindings[5].event, "ABILITY_R");
+
+        // Verify mana handler
+        match &bindings[1].handlers[0] {
+            Handler::Keyboard { zone, color, .. } => {
+                assert_eq!(zone, zones::NUMBER_KEYS);
+                match color {
+                    ColorHandler::Gradient { gradient } => {
+                        assert_eq!(gradient.zero.blue, 100);
+                        assert_eq!(gradient.hundred.blue, 255);
+                    }
+                    _ => panic!("Expected Gradient handler for mana"),
+                }
+            }
+            _ => panic!("Expected Keyboard handler"),
+        }
+    }
+}

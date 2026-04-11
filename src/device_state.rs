@@ -8,12 +8,13 @@
 //! This module provides async device state persistence with write-behind caching to prevent
 //! blocking RGB updates during high-frequency operations.
 
-use parking_lot::{Mutex, RwLock};
+use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::hash::Hash;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use tokio::time::interval;
 use tracing::{debug, error, trace};
@@ -181,7 +182,7 @@ impl From<&HashMap<DeviceId, DeviceState>> for SerializableStates {
 pub struct DeviceStateStore {
     states: Arc<RwLock<HashMap<DeviceId, DeviceState>>>,
     state_file: PathBuf,
-    dirty_flag: Arc<Mutex<bool>>,
+    dirty_flag: Arc<AtomicBool>,
     write_behind_handle: Option<tokio::task::JoinHandle<()>>,
 }
 impl Drop for DeviceStateStore {
@@ -209,7 +210,7 @@ impl DeviceStateStore {
         }
 
         let states = Arc::new(RwLock::new(HashMap::new()));
-        let dirty_flag = Arc::new(Mutex::new(false));
+        let dirty_flag = Arc::new(AtomicBool::new(false));
 
         let mut store = Self {
             states: Arc::clone(&states),
@@ -235,7 +236,7 @@ impl DeviceStateStore {
     fn start_write_behind_task(
         states: Arc<RwLock<HashMap<DeviceId, DeviceState>>>,
         state_file: PathBuf,
-        dirty_flag: Arc<Mutex<bool>>,
+        dirty_flag: Arc<AtomicBool>,
     ) -> tokio::task::JoinHandle<()> {
         tokio::spawn(async move {
             let mut interval = interval(Duration::from_secs(5));
@@ -243,17 +244,8 @@ impl DeviceStateStore {
             loop {
                 interval.tick().await;
 
-                let should_write = {
-                    let mut dirty = dirty_flag.lock();
-                    if *dirty {
-                        *dirty = false;
-                        true
-                    } else {
-                        false
-                    }
-                };
-
-                if should_write {
+                // Atomic check-and-set for dirty flag
+                if dirty_flag.swap(false, Ordering::SeqCst) {
                     let result = Self::save_async(&states, &state_file).await;
 
                     if let Err(e) = result {
@@ -276,9 +268,6 @@ impl DeviceStateStore {
             SerializableStates::from(&*states_guard)
         }; // Lock released here
 
-        let content = serde_json::to_string_pretty(&serializable)
-            .map_err(|e| Error::SerializationMessage(format!("Failed to serialize state: {}", e)))?;
-
         // Use atomic write with temp file to prevent corruption
         let temp_file = state_file.with_extension("tmp");
 
@@ -287,6 +276,9 @@ impl DeviceStateStore {
         let state_file_clone = state_file.to_path_buf();
 
         tokio::task::spawn_blocking(move || -> Result<()> {
+            let content = serde_json::to_string_pretty(&serializable)
+                .map_err(|e| Error::SerializationMessage(format!("Failed to serialize state: {}", e)))?;
+
             #[cfg(unix)]
             {
                 use std::os::unix::fs::OpenOptionsExt;
@@ -357,16 +349,7 @@ impl DeviceStateStore {
     /// Mark state as dirty for async persistence.
     /// This is non-blocking and triggers background write-behind.
     fn mark_dirty(&self) {
-        if let Some(mut dirty) = self.dirty_flag.try_lock() {
-            *dirty = true;
-        } else {
-            // If lock is contended, spawn async task to set dirty flag
-            let dirty_flag = Arc::clone(&self.dirty_flag);
-            tokio::spawn(async move {
-                let mut dirty = dirty_flag.lock();
-                *dirty = true;
-            });
-        }
+        self.dirty_flag.store(true, Ordering::SeqCst);
     }
 
     /// Force immediate async save (for shutdown scenarios).
@@ -507,6 +490,38 @@ impl DeviceStateStore {
         Ok(())
     }
 
+    /// Update multiple device states in a single batch operation for better performance.
+    pub fn update_states(
+        &self,
+        keyboard_updates: Vec<(DeviceId, KeyboardState)>,
+        headset_updates: Vec<(DeviceId, HeadsetState)>,
+    ) -> Result<()> {
+        let mut states = self.states.write();
+        let mut changed = false;
+
+        for (id, keyboard) in keyboard_updates {
+            let state = states.entry(id).or_default();
+            if state.keyboard.as_ref() != Some(&keyboard) {
+                state.keyboard = Some(keyboard);
+                changed = true;
+            }
+        }
+
+        for (id, headset) in headset_updates {
+            let state = states.entry(id).or_default();
+            if state.headset.as_ref() != Some(&headset) {
+                state.headset = Some(headset);
+                changed = true;
+            }
+        }
+
+        drop(states);
+        if changed {
+            self.mark_dirty();
+        }
+        Ok(())
+    }
+
     /// List all devices with stored state.
     pub fn list_devices(&self) -> Vec<DeviceId> {
         let states = self.states.read();
@@ -521,12 +536,7 @@ impl DeviceStateStore {
         }
 
         // Force one final write if there are pending changes
-        let is_dirty = {
-            let dirty = self.dirty_flag.lock();
-            *dirty
-        };
-
-        if is_dirty {
+        if self.dirty_flag.load(Ordering::SeqCst) {
             self.save().await?;
         }
 
@@ -618,10 +628,10 @@ mod tests {
         store.update_headset(device_id.clone(), headset_state.clone())?;
 
         // Check dirty flag
-        {
-            let dirty = store.dirty_flag.lock();
-            assert!(*dirty, "Dirty flag should be set after update");
-        }
+        assert!(
+            store.dirty_flag.load(Ordering::SeqCst),
+            "Dirty flag should be set after update"
+        );
 
         // Force save to simulate write-behind execution and verify persistence
         store.save().await?;
@@ -699,15 +709,14 @@ mod tests {
             assert_eq!(keyboard.effect, effect);
             assert_eq!(keyboard.brightness, 100); // Default brightness
 
-            let dirty = store.dirty_flag.lock();
-            assert!(*dirty, "Should be dirty after new device update");
+            assert!(
+                store.dirty_flag.load(Ordering::SeqCst),
+                "Should be dirty after new device update"
+            );
         }
 
         // Reset dirty flag
-        {
-            let mut dirty = store.dirty_flag.lock();
-            *dirty = false;
-        }
+        store.dirty_flag.store(false, Ordering::SeqCst);
 
         // 2. Existing device - should update effect
         let new_effect = Effect::Spectrum { speed: 1.0 };
@@ -717,21 +726,22 @@ mod tests {
             let state = states.get(&device_id).unwrap();
             assert_eq!(state.keyboard.as_ref().unwrap().effect, new_effect);
 
-            let dirty = store.dirty_flag.lock();
-            assert!(*dirty, "Should be dirty after effect change");
+            assert!(
+                store.dirty_flag.load(Ordering::SeqCst),
+                "Should be dirty after effect change"
+            );
         }
 
         // Reset dirty flag
-        {
-            let mut dirty = store.dirty_flag.lock();
-            *dirty = false;
-        }
+        store.dirty_flag.store(false, Ordering::SeqCst);
 
         // 3. Same effect - should be no-op
         store.update_keyboard_effect(device_id.clone(), new_effect.clone())?;
         {
-            let dirty = store.dirty_flag.lock();
-            assert!(!*dirty, "Should NOT be dirty after same effect update");
+            assert!(
+                !store.dirty_flag.load(Ordering::SeqCst),
+                "Should NOT be dirty after same effect update"
+            );
         }
 
         Ok(())
@@ -751,6 +761,54 @@ mod tests {
 
         // Invalid interface integer
         assert!(DeviceId::from_key("1038:1234:A:serial:none").is_err());
+    }
+
+    #[tokio::test]
+    async fn test_update_states_batch() -> Result<()> {
+        let dir = tempdir().unwrap();
+        let state_file = dir.path().join("device_state.json");
+        let store = DeviceStateStore::with_path(state_file)?;
+
+        let k_id = DeviceId {
+            vendor_id: 0x1038,
+            product_id: 0x1234,
+            interface_number: 1,
+            serial_number: Some("k_serial".to_string()),
+            path: Some("path/k".to_string()),
+        };
+        let k_state = KeyboardState {
+            effect: Effect::Static {
+                color: crate::rgb::Color::BLUE,
+            },
+            brightness: 40,
+        };
+
+        let h_id = DeviceId {
+            vendor_id: 0x1038,
+            product_id: 0x5678,
+            interface_number: 0,
+            serial_number: Some("h_serial".to_string()),
+            path: Some("path/h".to_string()),
+        };
+        let h_state = HeadsetState {
+            sidetone: 10,
+            mic_volume: 100,
+            mic_muted: false,
+            eq_preset: "Game".to_string(),
+            auto_off_minutes: 60,
+        };
+
+        store.update_states(
+            vec![(k_id.clone(), k_state.clone())],
+            vec![(h_id.clone(), h_state.clone())],
+        )?;
+
+        let states = store.states.read();
+        assert_eq!(states.get(&k_id).unwrap().keyboard.as_ref().unwrap(), &k_state);
+        assert_eq!(states.get(&h_id).unwrap().headset.as_ref().unwrap(), &h_state);
+        assert!(store.dirty_flag.load(Ordering::SeqCst));
+
+        Ok(())
     }
 
     #[tokio::test]
@@ -776,15 +834,14 @@ mod tests {
             assert_eq!(keyboard.brightness, 50);
             assert_eq!(keyboard.effect, Effect::default());
 
-            let dirty = store.dirty_flag.lock();
-            assert!(*dirty, "Should be dirty after new device update");
+            assert!(
+                store.dirty_flag.load(Ordering::SeqCst),
+                "Should be dirty after new device update"
+            );
         }
 
         // Reset dirty flag
-        {
-            let mut dirty = store.dirty_flag.lock();
-            *dirty = false;
-        }
+        store.dirty_flag.store(false, Ordering::SeqCst);
 
         // 2. Existing device - should update brightness
         store.update_keyboard_brightness(device_id.clone(), 75)?;
@@ -793,21 +850,22 @@ mod tests {
             let state = states.get(&device_id).unwrap();
             assert_eq!(state.keyboard.as_ref().unwrap().brightness, 75);
 
-            let dirty = store.dirty_flag.lock();
-            assert!(*dirty, "Should be dirty after brightness change");
+            assert!(
+                store.dirty_flag.load(Ordering::SeqCst),
+                "Should be dirty after brightness change"
+            );
         }
 
         // Reset dirty flag
-        {
-            let mut dirty = store.dirty_flag.lock();
-            *dirty = false;
-        }
+        store.dirty_flag.store(false, Ordering::SeqCst);
 
         // 3. Same brightness - should be no-op
         store.update_keyboard_brightness(device_id.clone(), 75)?;
         {
-            let dirty = store.dirty_flag.lock();
-            assert!(!*dirty, "Should NOT be dirty after same brightness update");
+            assert!(
+                !store.dirty_flag.load(Ordering::SeqCst),
+                "Should NOT be dirty after same brightness update"
+            );
         }
 
         Ok(())
