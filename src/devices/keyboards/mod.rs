@@ -345,6 +345,13 @@ impl GenericKeyboard {
     ///
     /// Offloads the blocking hidapi write to `spawn_blocking` so the tokio
     /// worker thread is not stalled during HID I/O.
+    /// Build and send a HID command report to the keyboard asynchronously.
+    async fn send_command_async<C: crate::devices::HidCommand>(&self, command: C) -> Result<()> {
+        let mut buffer = [0u8; crate::devices::KEYBOARD_REPORT_SIZE];
+        let size = self.report_builder.build_report(command, &mut buffer)?;
+        self.send_report_async(&buffer[..size]).await
+    }
+
     async fn send_report_async(&self, data: &[u8]) -> Result<()> {
         use tracing::debug;
 
@@ -429,18 +436,14 @@ impl GenericKeyboard {
             for i in 0..self.zone_color_buffer.len() {
                 let color = self.zone_color_buffer[i];
                 let zone_index = (i + 1) as u8; // zones start at 1, not 0
-                let rgb_command = RgbZoneCommand::new_specific_zone(zone_index, color);
-                let mut buffer = [0u8; super::KEYBOARD_REPORT_SIZE];
-                let size = self.report_builder.build_report(rgb_command, &mut buffer)?;
-                self.send_report_async(&buffer[..size]).await?;
+                self.send_command_async(RgbZoneCommand::new_specific_zone(zone_index, color))
+                    .await?;
             }
             return Ok(());
         }
 
-        let rgb_command = RgbZoneCommand::new_all_zones(&self.zone_color_buffer);
-        let mut buffer = [0u8; super::KEYBOARD_REPORT_SIZE];
-        let size = self.report_builder.build_report(rgb_command, &mut buffer)?;
-        self.send_report_async(&buffer[..size]).await
+        self.send_command_async(RgbZoneCommand::new_all_zones(&self.zone_color_buffer))
+            .await
     }
 
     /// Update the cached actuation point value.
@@ -553,10 +556,7 @@ impl Keyboard for GenericKeyboard {
     }
 
     async fn set_brightness(&mut self, brightness: u8) -> Result<()> {
-        let brightness_command = BrightnessCommand::new(brightness);
-        let mut buffer = [0u8; 65];
-        let size = self.report_builder.build_report(brightness_command, &mut buffer)?;
-        self.send_report_async(&buffer[..size]).await
+        self.send_command_async(BrightnessCommand::new(brightness)).await
     }
 
     async fn apply(&mut self) -> Result<()> {
@@ -609,17 +609,12 @@ impl Keyboard for GenericKeyboard {
             ));
         }
 
-        let command = builder.build();
-        let mut buffer = [0u8; 65];
-        let size = self.report_builder.build_report(command, &mut buffer)?;
-        self.send_report_async(&buffer[..size]).await
+        self.send_command_async(builder.build()).await
     }
 
     async fn set_key_color_direct(&mut self, address: KeyAddress, color: Color) -> Result<()> {
-        let command = PerKeyRgbCommand::single_key(address, color);
-        let mut buffer = [0u8; 65];
-        let size = self.report_builder.build_report(command, &mut buffer)?;
-        self.send_report_async(&buffer[..size]).await
+        self.send_command_async(PerKeyRgbCommand::single_key(address, color))
+            .await
     }
 
     async fn set_key_colors_direct(&mut self, key_colors: &[(KeyAddress, Color)]) -> Result<()> {
@@ -633,10 +628,7 @@ impl Keyboard for GenericKeyboard {
             builder.add_key_matrix(*address, *color);
         }
 
-        let command = builder.build();
-        let mut buffer = [0u8; 65];
-        let size = self.report_builder.build_report(command, &mut buffer)?;
-        self.send_report_async(&buffer[..size]).await
+        self.send_command_async(builder.build()).await
     }
 
     async fn clear_per_key_rgb(&mut self) -> Result<()> {
@@ -676,10 +668,7 @@ impl Keyboard for GenericKeyboard {
             ));
         }
 
-        let command = builder.build();
-        let mut buffer = [0u8; 65];
-        let size = self.report_builder.build_report(command, &mut buffer)?;
-        self.send_report_async(&buffer[..size]).await
+        self.send_command_async(builder.build()).await
     }
 
     // === Zone-based RGB Fallback Implementation ===

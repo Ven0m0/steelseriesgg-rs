@@ -131,8 +131,7 @@ impl ApexProTkl2023 {
     /// Precision is limited to 0.1mm increments.
     pub fn set_actuation_point_mm(&mut self, mm: f32) -> Result<()> {
         let command = ActuationCommand::from_mm(mm);
-        command.validate()?;
-        self.send_actuation_command(command)
+        self.set_actuation_point(command.actuation_point)
     }
 
     #[cfg(feature = "experimental-apex-2023")]
