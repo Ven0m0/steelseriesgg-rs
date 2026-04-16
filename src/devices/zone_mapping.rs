@@ -703,13 +703,14 @@ mod tests {
         let colors = res.unwrap();
         // Both A and Q should map to the same MainKeys zone selected by the current mapping logic.
         // Verify that one zone contains a blended color produced from both inputs.
-        let a_zone_idx = map_key_to_zone(product_ids::APEX_PRO_TKL_2023, crate::devices::KeyId::A);
-        let q_zone_idx = map_key_to_zone(product_ids::APEX_PRO_TKL_2023, crate::devices::KeyId::Q);
+        let mapping = fallback.get_mapping(product_ids::APEX_PRO_TKL_2023).unwrap();
+        let a_zone_idx = fallback.map_key_to_zone(crate::devices::KeyId::A, mapping);
+        let q_zone_idx = fallback.map_key_to_zone(crate::devices::KeyId::Q, mapping);
         assert_eq!(
             a_zone_idx, q_zone_idx,
             "A and Q should map to the same zone for blending on Apex Pro TKL 2023"
         );
-        let zone_idx = a_zone_idx;
+        let zone_idx = a_zone_idx.unwrap();
         assert_eq!(
             colors[zone_idx],
             Color::blend(Color::RED, Color::BLUE, 0.5),

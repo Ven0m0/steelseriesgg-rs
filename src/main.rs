@@ -1384,7 +1384,7 @@ async fn cmd_profile(action: ProfileAction) -> Result<()> {
         }
 
         ProfileAction::Delete { name } => {
-            profile_manager.delete(&name).await?;
+            profile_manager.delete(&name)?;
             println!("Profile deleted: {}", name);
         }
     }
@@ -2110,7 +2110,7 @@ async fn cmd_server(port: u16) -> Result<()> {
 struct DaemonState {
     keyboards: HashMap<String, (Box<dyn Keyboard>, RgbController, DeviceInfo)>,
     headsets: HashMap<String, (Box<dyn Headset>, DeviceInfo)>,
-    gamesense_overlays: HashMap<String, (Color, std::time::Instant)>, // zone -> (color, expiry)
+    gamesense_overlays: Arc<HashMap<String, (Color, std::time::Instant)>>, // zone -> (color, expiry)
     /// Device fingerprints for tracking devices across reconnections
     device_fingerprints: HashMap<String, DeviceFingerprint>,
     /// Profile manager for applying settings to reconnected devices
@@ -2127,7 +2127,7 @@ impl DaemonState {
         Ok(Self {
             keyboards: HashMap::new(),
             headsets: HashMap::new(),
-            gamesense_overlays: HashMap::new(),
+            gamesense_overlays: Arc::new(HashMap::new()),
             device_fingerprints: HashMap::new(),
             profile_manager,
             state_store,
@@ -2926,8 +2926,7 @@ fn start_gamesense_server(config: &Config, daemon_state: Arc<RwLock<DaemonState>
 
                             // Use try_write to avoid blocking if the lock is busy
                             if let Ok(mut state_guard) = state.try_write() {
-                                state_guard
-                                    .gamesense_overlays
+                                Arc::make_mut(&mut state_guard.gamesense_overlays)
                                     .insert(zone_owned.clone(), (color, expiry));
                                 tracing::debug!("GameSense overlay: {} = {:?}", zone_owned, color);
                             } else {
@@ -2936,7 +2935,8 @@ fn start_gamesense_server(config: &Config, daemon_state: Arc<RwLock<DaemonState>
                                 let zone_deferred = zone_owned.clone();
                                 tokio::spawn(async move {
                                     let mut state = state_clone.write().await;
-                                    state.gamesense_overlays.insert(zone_deferred.clone(), (color, expiry));
+                                    Arc::make_mut(&mut state.gamesense_overlays)
+                                        .insert(zone_deferred.clone(), (color, expiry));
                                     tracing::debug!("GameSense overlay (deferred): {} = {:?}", zone_deferred, color);
                                 });
                             }
@@ -3070,7 +3070,10 @@ async fn run_animation_loop(daemon_state_anim: Arc<RwLock<DaemonState>>) {
 
             // Clean up expired overlays while we have the lock
             let now = std::time::Instant::now();
-            state.gamesense_overlays.retain(|_, (_, expiry)| *expiry > now);
+            let has_expired = state.gamesense_overlays.iter().any(|(_, (_, expiry))| *expiry <= now);
+            if has_expired {
+                Arc::make_mut(&mut state.gamesense_overlays).retain(|_, (_, expiry)| *expiry > now);
+            }
 
             // Collect data needed for RGB computation to minimize lock time
             // Reuse frame_data_buffer to avoid allocations
@@ -3101,12 +3104,8 @@ async fn run_animation_loop(daemon_state_anim: Arc<RwLock<DaemonState>>) {
                 count += 1;
             }
 
-            // Clone overlays only if there are any
-            let overlays = if state.gamesense_overlays.is_empty() {
-                Arc::new(HashMap::new())
-            } else {
-                Arc::new(state.gamesense_overlays.clone()) // Clone once, cheap Arc clones after
-            };
+            // Fast atomic clone of the Arc
+            let overlays = Arc::clone(&state.gamesense_overlays);
 
             (count, overlays, now)
         };
