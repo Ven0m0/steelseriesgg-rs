@@ -710,7 +710,12 @@ mod tests {
             a_zone_idx, q_zone_idx,
             "A and Q should map to the same zone for blending on Apex Pro TKL 2023"
         );
-        let zone_idx = a_zone_idx.unwrap();
+        assert!(
+            a_zone_idx.is_some(),
+            "A and Q should both map to a valid zone on Apex Pro TKL 2023"
+        );
+        let zone_idx =
+            a_zone_idx.expect("A and Q should both map to a valid zone on Apex Pro TKL 2023");
         assert_eq!(
             colors[zone_idx],
             Color::blend(Color::RED, Color::BLUE, 0.5),
