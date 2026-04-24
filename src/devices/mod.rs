@@ -48,7 +48,7 @@ impl fmt::Display for DeviceType {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct DeviceInfo {
     /// Device name
-    pub name: String,
+    pub name: std::borrow::Cow<'static, str>,
 
     /// Device type
     pub device_type: DeviceType,

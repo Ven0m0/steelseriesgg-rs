@@ -997,7 +997,7 @@ mod tests {
 
     fn create_test_device_info() -> DeviceInfo {
         DeviceInfo {
-            name: "Test Apex Pro TKL 2023".to_string(),
+            name: std::borrow::Cow::Borrowed("Test Apex Pro TKL 2023"),
             device_type: crate::devices::DeviceType::Keyboard,
             vendor_id: crate::STEELSERIES_VENDOR_ID,
             product_id: product_ids::APEX_PRO_TKL_2023,

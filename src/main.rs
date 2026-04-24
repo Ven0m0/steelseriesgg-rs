@@ -1384,7 +1384,7 @@ async fn cmd_profile(action: ProfileAction) -> Result<()> {
         }
 
         ProfileAction::Delete { name } => {
-profile_manager.delete_async(&name).await?;
+            profile_manager.delete_async(&name).await?;
             println!("Profile deleted: {}", name);
         }
     }
@@ -1941,7 +1941,7 @@ async fn cmd_performance(manager: &DeviceManager, action: PerformanceAction) -> 
                         }
 
                         let ops_per_second = operation_count as f64 / duration as f64;
-                        benchmark_results.insert(device_info.name.clone(), ops_per_second);
+                        benchmark_results.insert(device_info.name.to_string(), ops_per_second);
 
                         println!("      Operations/second: {:.1}", ops_per_second);
 
@@ -1986,7 +1986,7 @@ fn display_performance_stats(manager: &DeviceManager, keyboards: &[&DeviceInfo],
         for device_info in keyboards {
             if let Ok(keyboard) = manager.open_keyboard(device_info) {
                 if let Some(stats) = keyboard.get_rgb_performance_stats() {
-                    all_stats.insert(device_info.name.clone(), stats.clone());
+                    all_stats.insert(device_info.name.to_string(), stats.clone());
                 }
             }
         }
@@ -2044,7 +2044,7 @@ fn export_performance_stats(
         for device_info in keyboards {
             if let Ok(keyboard) = manager.open_keyboard(device_info) {
                 if let Some(stats) = keyboard.get_rgb_performance_stats() {
-                    all_stats.insert(device_info.name.clone(), stats.clone());
+                    all_stats.insert(device_info.name.to_string(), stats.clone());
                 }
             }
         }
@@ -2276,9 +2276,13 @@ impl DaemonState {
 
     /// Get list of connected device names
     fn device_names(&self) -> Vec<String> {
-        let mut names: Vec<String> = self.keyboards.values().map(|(_, _, info)| info.name.clone()).collect();
+        let mut names: Vec<String> = self
+            .keyboards
+            .values()
+            .map(|(_, _, info)| info.name.to_string())
+            .collect();
 
-        names.extend(self.headsets.values().map(|(_, info)| info.name.clone()));
+        names.extend(self.headsets.values().map(|(_, info)| info.name.to_string()));
         names
     }
 }
@@ -2389,7 +2393,7 @@ async fn cmd_status(_initial_manager: &DeviceManager, device_filter: &str, refre
 
             let pb = multi_progress.add(ProgressBar::new_spinner());
             pb.set_style(spinner_style.clone());
-            pb.set_prefix(device_info.name.clone());
+            pb.set_prefix(device_info.name.to_string());
 
             let device_type_str = match device_info.device_type {
                 DeviceType::Keyboard => "Keyboard",
@@ -2473,7 +2477,7 @@ async fn cmd_status(_initial_manager: &DeviceManager, device_filter: &str, refre
             };
 
             rows.push(DeviceRow {
-                name: device_info.name.clone(),
+                name: device_info.name.to_string(),
                 device_type: device_type_str.to_string(),
                 vid_pid: format!("{:04X}:{:04X}", device_info.vendor_id, device_info.product_id),
                 path: device_info.path.clone(),

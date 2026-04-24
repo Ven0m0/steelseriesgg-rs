@@ -91,7 +91,7 @@ pub struct DeviceInfoSummary {
 impl From<&DeviceInfo> for DeviceInfoSummary {
     fn from(info: &DeviceInfo) -> Self {
         Self {
-            name: info.name.clone(),
+            name: info.name.to_string(),
             vendor_id: info.vendor_id,
             product_id: info.product_id,
             interface_number: info.interface_number,

@@ -188,7 +188,7 @@ impl DeviceManager {
             let device_type = device_type_from_product_id(product_id);
 
             // Use static str and convert to String only once
-            let name = device_name_from_product_id(product_id).to_string();
+            let name = std::borrow::Cow::Borrowed(device_name_from_product_id(product_id));
 
             // Avoid double allocation: to_string_lossy returns Cow, into_owned is more efficient
             let path = device.path().to_string_lossy().into_owned();
@@ -445,7 +445,7 @@ impl DeviceManager {
 
             let product_id = device.product_id();
             let device_type = device_type_from_product_id(product_id);
-            let name = device_name_from_product_id(product_id).to_string();
+            let name = std::borrow::Cow::Borrowed(device_name_from_product_id(product_id));
             let path = device.path().to_string_lossy().into_owned();
 
             let info = DeviceInfo {
@@ -709,7 +709,7 @@ mod tests {
 
     fn create_test_device_info(serial: Option<String>) -> DeviceInfo {
         DeviceInfo {
-            name: "Test Device".to_string(),
+            name: std::borrow::Cow::Borrowed("Test Device"),
             device_type: DeviceType::Keyboard,
             vendor_id: 0x1038,
             product_id: 0x1612,

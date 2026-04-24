@@ -1257,7 +1257,7 @@ pub mod test_helpers {
     /// Create a mock device info for testing.
     pub fn mock_device_info() -> DeviceInfo {
         DeviceInfo {
-            name: "Mock Apex Pro TKL".to_string(),
+            name: std::borrow::Cow::Borrowed("Mock Apex Pro TKL"),
             device_type: DeviceType::Keyboard,
             vendor_id: 0x1038,
             product_id: 0x1628,
