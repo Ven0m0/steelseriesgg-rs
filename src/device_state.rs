@@ -203,8 +203,6 @@ impl DeviceStateStore {
         Self::with_path(state_file)
     }
 
-    /// Create a new device state store with a specific path (useful for testing).
-
     /// Create a new device state store asynchronously.
     pub async fn new_async() -> Result<Self> {
         let state_file = Config::config_dir()
@@ -381,7 +379,7 @@ impl DeviceStateStore {
         } else {
             // Try legacy format (direct HashMap<DeviceId, DeviceState>) for backward compat
             // This will likely fail on current broken files, which is expected
-            serde_json::from_str(&content)?
+            serde_json::from_str(content)?
         };
 
         // Update the async states
