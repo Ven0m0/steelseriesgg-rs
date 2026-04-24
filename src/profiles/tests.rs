@@ -157,7 +157,7 @@ async fn benchmark_profile_deletion() {
 
     let start = Instant::now();
     for i in 0..num_profiles {
-manager.delete_async(&format!("Profile_{}", i)).await.unwrap();
+        manager.delete_async(&format!("Profile_{}", i)).await.unwrap();
     }
     let duration = start.elapsed();
 
