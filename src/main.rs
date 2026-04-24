@@ -2585,10 +2585,11 @@ async fn cmd_test_device(manager: &DeviceManager, device: &str, benchmark: bool,
     }
 
     // Try to find and open the device by name or path
+    let device_lower = device.to_lowercase();
     let device_info = manager
         .devices()
         .into_iter()
-        .find(|d| d.name.to_lowercase().contains(&device.to_lowercase()) || d.path.contains(device))
+        .find(|d| d.name.to_lowercase().contains(&device_lower) || d.path.contains(device))
         .ok_or_else(|| {
             Error::Other(format!(
                 "Device '{}' not found. Use 'ssgg devices' to list available devices.",
