@@ -90,8 +90,6 @@ pub struct ZoneMapping {
     pub zone_count: usize,
     /// Detailed information for each zone
     pub zones: Vec<ZoneInfo>,
-    /// Zone index to position lookup
-    zone_positions: HashMap<usize, ZonePosition>,
 }
 
 impl ZoneMapping {
@@ -102,7 +100,6 @@ impl ZoneMapping {
             name,
             zone_count: 0,
             zones: Vec::new(),
-            zone_positions: HashMap::new(),
         }
     }
 
@@ -110,7 +107,6 @@ impl ZoneMapping {
     pub fn add_zone(&mut self, position: ZonePosition, name: String, critical: bool, led_count: usize) {
         let index = self.zones.len();
         let zone_info = ZoneInfo::new(index, position, name, critical, led_count);
-        self.zone_positions.insert(index, position);
         self.zones.push(zone_info);
         self.zone_count = self.zones.len();
     }
@@ -122,18 +118,15 @@ impl ZoneMapping {
 
     /// Get zone index by position.
     pub fn find_zone_by_position(&self, position: ZonePosition) -> Option<usize> {
-        self.zone_positions
-            .iter()
-            .find(|(_, &pos)| pos == position)
-            .map(|(&index, _)| index)
+        self.zones.iter().find(|z| z.position == position).map(|z| z.index)
     }
 
     /// Get all zones with a specific position.
     pub fn get_zones_by_position(&self, position: ZonePosition) -> Vec<usize> {
-        self.zone_positions
+        self.zones
             .iter()
-            .filter(|(_, &pos)| pos == position)
-            .map(|(&index, _)| index)
+            .filter(|z| z.position == position)
+            .map(|z| z.index)
             .collect()
     }
 
@@ -714,8 +707,7 @@ mod tests {
             a_zone_idx.is_some(),
             "A and Q should both map to a valid zone on Apex Pro TKL 2023"
         );
-        let zone_idx =
-            a_zone_idx.expect("A and Q should both map to a valid zone on Apex Pro TKL 2023");
+        let zone_idx = a_zone_idx.expect("A and Q should both map to a valid zone on Apex Pro TKL 2023");
         assert_eq!(
             colors[zone_idx],
             Color::blend(Color::RED, Color::BLUE, 0.5),
