@@ -204,6 +204,51 @@ impl DeviceStateStore {
     }
 
     /// Create a new device state store with a specific path (useful for testing).
+
+    /// Create a new device state store asynchronously.
+    pub async fn new_async() -> Result<Self> {
+        let state_file = Config::config_dir()
+            .ok_or_else(|| Error::InvalidConfig("could not determine config directory".to_string()))?
+            .join("device_state.json");
+
+        Self::with_path_async(state_file).await
+    }
+
+    /// Create a new device state store asynchronously with a specific path.
+    pub async fn with_path_async(state_file: PathBuf) -> Result<Self> {
+        let parent = state_file.parent().map(|p| p.to_path_buf());
+        if let Some(parent) = parent {
+            tokio::task::spawn_blocking(move || std::fs::create_dir_all(parent))
+                .await
+                .map_err(|e| Error::Other(format!("Task join error: {}", e)))??;
+        }
+
+        let states = Arc::new(RwLock::new(HashMap::new()));
+        let dirty_flag = Arc::new(AtomicBool::new(false));
+
+        let mut store = Self {
+            states: Arc::clone(&states),
+            state_file: state_file.clone(),
+            dirty_flag: Arc::clone(&dirty_flag),
+            write_behind_handle: None,
+        };
+
+        // Load existing state if available
+        if store.state_file.exists() {
+            let path_clone = store.state_file.clone();
+            let file_content = tokio::task::spawn_blocking(move || std::fs::read_to_string(&path_clone))
+                .await
+                .map_err(|e| Error::Other(format!("Task join error: {}", e)))??;
+            store.load_from_str(&file_content)?;
+        }
+
+        // Start the write-behind background task
+        let write_handle = Self::start_write_behind_task(states, state_file, dirty_flag);
+        store.write_behind_handle = Some(write_handle);
+
+        Ok(store)
+    }
+
     pub fn with_path(state_file: PathBuf) -> Result<Self> {
         if let Some(parent) = state_file.parent() {
             std::fs::create_dir_all(parent)?;
@@ -221,7 +266,8 @@ impl DeviceStateStore {
 
         // Load existing state if available
         if store.state_file.exists() {
-            store.load_sync()?;
+            let file_content = std::fs::read_to_string(&store.state_file)?;
+            store.load_from_str(&file_content)?;
         }
 
         // Start the write-behind background task
@@ -322,12 +368,10 @@ impl DeviceStateStore {
         Ok(())
     }
 
-    /// Load device states from disk synchronously (used during initialization).
-    fn load_sync(&mut self) -> Result<()> {
-        let content = std::fs::read_to_string(&self.state_file)?;
-
+    /// Load device states from a string synchronously (used during initialization).
+    fn load_from_str(&mut self, content: &str) -> Result<()> {
         // Try new format first (string-keyed map)
-        let loaded_states = if let Ok(serializable) = serde_json::from_str::<SerializableStates>(&content) {
+        let loaded_states = if let Ok(serializable) = serde_json::from_str::<SerializableStates>(content) {
             // Convert back to DeviceId-keyed map
             serializable
                 .0
@@ -342,7 +386,7 @@ impl DeviceStateStore {
 
         // Update the async states
         *self.states.write() = loaded_states;
-        debug!("Loaded device states from disk synchronously");
+        debug!("Loaded device states from string synchronously");
         Ok(())
     }
 
@@ -571,7 +615,7 @@ mod tests {
         let dir = tempdir().unwrap();
         let state_file = dir.path().join("device_state.json");
 
-        let store = DeviceStateStore::with_path(state_file.clone())?;
+        let store = DeviceStateStore::with_path_async(state_file.clone()).await?;
 
         let device_id = DeviceId {
             vendor_id: 0x1038,
@@ -594,7 +638,7 @@ mod tests {
         store.save().await?;
 
         // Create new store and verify load
-        let store2 = DeviceStateStore::with_path(state_file.clone())?;
+        let store2 = DeviceStateStore::with_path_async(state_file.clone()).await?;
         let loaded_state = store2.get(&device_id).expect("Should have state");
 
         assert_eq!(loaded_state.keyboard.unwrap(), keyboard_state);
@@ -607,7 +651,7 @@ mod tests {
         let dir = tempdir().unwrap();
         let state_file = dir.path().join("device_state.json");
 
-        let store = DeviceStateStore::with_path(state_file.clone())?;
+        let store = DeviceStateStore::with_path_async(state_file.clone()).await?;
 
         let device_id = DeviceId {
             vendor_id: 0x1038,
@@ -664,7 +708,7 @@ mod tests {
 
         std::fs::write(&state_file, initial_json)?;
 
-        let store = DeviceStateStore::with_path(state_file.clone())?;
+        let store = DeviceStateStore::with_path_async(state_file.clone()).await?;
 
         // New device ID with path/interface
         let new_device_id = DeviceId {
@@ -686,7 +730,7 @@ mod tests {
     async fn test_update_keyboard_effect() -> Result<()> {
         let dir = tempdir().unwrap();
         let state_file = dir.path().join("device_state.json");
-        let store = DeviceStateStore::with_path(state_file)?;
+        let store = DeviceStateStore::with_path_async(state_file).await?;
 
         let device_id = DeviceId {
             vendor_id: 0x1038,
@@ -767,7 +811,7 @@ mod tests {
     async fn test_update_states_batch() -> Result<()> {
         let dir = tempdir().unwrap();
         let state_file = dir.path().join("device_state.json");
-        let store = DeviceStateStore::with_path(state_file)?;
+        let store = DeviceStateStore::with_path_async(state_file).await?;
 
         let k_id = DeviceId {
             vendor_id: 0x1038,
@@ -815,7 +859,7 @@ mod tests {
     async fn test_update_keyboard_brightness() -> Result<()> {
         let dir = tempdir().unwrap();
         let state_file = dir.path().join("device_state.json");
-        let store = DeviceStateStore::with_path(state_file)?;
+        let store = DeviceStateStore::with_path_async(state_file).await?;
 
         let device_id = DeviceId {
             vendor_id: 0x1038,

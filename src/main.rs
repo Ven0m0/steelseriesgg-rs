@@ -784,7 +784,7 @@ async fn cmd_rgb(manager: &DeviceManager, action: RgbAction) -> Result<()> {
     println!("Using keyboard: {}", keyboard_info.name);
 
     // Open device state store for persistence
-    let state_store = DeviceStateStore::new()?;
+    let state_store = DeviceStateStore::new_async().await?;
     let device_id = DeviceId::from(keyboard_info);
 
     // Open the keyboard using the abstraction layer
@@ -1315,7 +1315,7 @@ async fn cmd_profile(action: ProfileAction) -> Result<()> {
                 println!("Loading profile: {}", profile.name);
 
                 let device_manager = DeviceManager::new()?;
-                let state_store = DeviceStateStore::new()?;
+                let state_store = DeviceStateStore::new_async().await?;
 
                 // Apply keyboard settings if present
                 if let Some(ref keyboard_profile) = profile.keyboard {
@@ -1362,7 +1362,7 @@ async fn cmd_profile(action: ProfileAction) -> Result<()> {
 
         ProfileAction::Save { name } => {
             let mut profile = Profile::new(name.clone());
-            let state_store = DeviceStateStore::new()?;
+            let state_store = DeviceStateStore::new_async().await?;
             let device_manager = DeviceManager::new()?;
 
             // Capture keyboard settings from state store
@@ -2121,7 +2121,7 @@ struct DaemonState {
 
 impl DaemonState {
     async fn new() -> Result<Self> {
-        let state_store = DeviceStateStore::new()?;
+        let state_store = DeviceStateStore::new_async().await?;
         let profile_manager = ProfileManager::new().await.ok(); // Optional - don't fail if profiles unavailable
 
         Ok(Self {

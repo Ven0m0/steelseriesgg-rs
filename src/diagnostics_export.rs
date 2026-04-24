@@ -187,7 +187,7 @@ async fn collect_device_states() -> Result<Vec<DeviceSnapshot>> {
     debug!("Collecting state for {} connected devices", devices.len());
 
     // Initialize device state store to query current states
-    let state_store = DeviceStateStore::new().map_err(|e| {
+    let state_store = DeviceStateStore::new_async().await.map_err(|e| {
         warn!("Failed to initialize device state store: {}", e);
         e
     });
