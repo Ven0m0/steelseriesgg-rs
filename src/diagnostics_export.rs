@@ -146,8 +146,9 @@ pub fn get_recent_errors() -> Vec<ErrorLog> {
 /// This function performs CPU-intensive operations and should be called
 /// within tokio::task::spawn_blocking from async contexts.
 fn collect_system_info_blocking() -> Result<SystemInfo> {
-    let mut sys = System::new_all();
-    sys.refresh_all();
+    let mut sys = System::new();
+    sys.refresh_cpu_all();
+    sys.refresh_memory();
 
     let os_name = System::name().unwrap_or_else(|| "Unknown".to_string());
     let kernel_version = System::kernel_version().unwrap_or_else(|| "Unknown".to_string());
