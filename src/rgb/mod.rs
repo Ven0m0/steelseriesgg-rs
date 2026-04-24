@@ -312,7 +312,7 @@ impl EffectEngine {
     /// Create a new effect engine with default adaptive timing.
     pub fn new(effect: Effect, zone_count: usize) -> Self {
         let mut engine = Self {
-            effect: effect.clone(),
+            effect,
             start_time: Instant::now(),
             zone_count,
             cached_colors: vec![Color::BLACK; zone_count],
@@ -330,7 +330,7 @@ impl EffectEngine {
     /// Create a new effect engine with specific timing mode.
     pub fn with_timing_mode(effect: Effect, zone_count: usize, timing_mode: TimingMode) -> Self {
         let mut engine = Self {
-            effect: effect.clone(),
+            effect,
             start_time: Instant::now(),
             zone_count,
             cached_colors: vec![Color::BLACK; zone_count],
