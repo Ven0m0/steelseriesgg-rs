@@ -1384,7 +1384,7 @@ async fn cmd_profile(action: ProfileAction) -> Result<()> {
         }
 
         ProfileAction::Delete { name } => {
-profile_manager.delete_async(&name).await?;
+            profile_manager.delete_async(&name).await?;
             println!("Profile deleted: {}", name);
         }
     }
@@ -1406,7 +1406,7 @@ async fn cmd_pollrate(action: PollrateAction) -> Result<()> {
                 println!();
             }
 
-            set_poll_rate(DeviceType::Mouse, poll_rate)?;
+            set_poll_rate(DeviceType::Mouse, poll_rate).await?;
             println!("Mouse polling rate set to {} Hz", rate);
 
             if persistent {
@@ -1427,7 +1427,7 @@ async fn cmd_pollrate(action: PollrateAction) -> Result<()> {
                 println!();
             }
 
-            set_poll_rate(DeviceType::Keyboard, poll_rate)?;
+            set_poll_rate(DeviceType::Keyboard, poll_rate).await?;
             println!("Keyboard polling rate set to {} Hz", rate);
 
             if persistent {
@@ -1442,12 +1442,12 @@ async fn cmd_pollrate(action: PollrateAction) -> Result<()> {
             println!("Current USB Polling Rates:");
             println!();
 
-            match get_poll_rate(DeviceType::Mouse) {
+            match get_poll_rate(DeviceType::Mouse).await {
                 Ok(rate) => println!("  Mouse:    {} Hz", rate.to_hz()),
                 Err(e) => println!("  Mouse:    Error: {}", e),
             }
 
-            match get_poll_rate(DeviceType::Keyboard) {
+            match get_poll_rate(DeviceType::Keyboard).await {
                 Ok(rate) => println!("  Keyboard: {} Hz", rate.to_hz()),
                 Err(e) => println!("  Keyboard: Error: {}", e),
             }
@@ -2289,7 +2289,7 @@ async fn cmd_daemon(mut manager: DeviceManager) -> Result<()> {
     let config = Config::load_async().await?;
 
     // Apply saved polling rates
-    apply_saved_poll_rates(&config);
+    apply_saved_poll_rates(&config).await;
 
     // Initialize daemon state
     let daemon_state = Arc::new(RwLock::new(DaemonState::new().await?));
@@ -2800,12 +2800,12 @@ async fn cmd_verify_performance(
     Ok(())
 }
 
-fn apply_saved_poll_rates(config: &Config) {
+async fn apply_saved_poll_rates(config: &Config) {
     use steelseries_gg::pollrate::{DeviceType, PollRate, set_poll_rate};
 
     if let Some(mouse_hz) = config.poll_rate.mouse_hz {
         match PollRate::from_hz(mouse_hz) {
-            Ok(rate) => match set_poll_rate(DeviceType::Mouse, rate) {
+            Ok(rate) => match set_poll_rate(DeviceType::Mouse, rate).await {
                 Ok(()) => info!("Applied mouse poll rate: {} Hz", mouse_hz),
                 Err(e) => tracing::warn!("Failed to set mouse poll rate: {}", e),
             },
@@ -2821,7 +2821,7 @@ fn apply_saved_poll_rates(config: &Config) {
 
     if let Some(keyboard_hz) = config.poll_rate.keyboard_hz {
         match PollRate::from_hz(keyboard_hz) {
-            Ok(rate) => match set_poll_rate(DeviceType::Keyboard, rate) {
+            Ok(rate) => match set_poll_rate(DeviceType::Keyboard, rate).await {
                 Ok(()) => info!("Applied keyboard poll rate: {} Hz", keyboard_hz),
                 Err(e) => tracing::warn!("Failed to set keyboard poll rate: {}", e),
             },

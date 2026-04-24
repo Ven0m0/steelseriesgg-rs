@@ -146,10 +146,12 @@ fn is_root() -> bool {
 /// use steelseries_gg::pollrate::{set_poll_rate, DeviceType, PollRate};
 ///
 /// // Requires root privileges
-/// set_poll_rate(DeviceType::Mouse, PollRate::Hz1000)?;
+/// tokio::runtime::Runtime::new().unwrap().block_on(async {
+///     set_poll_rate(DeviceType::Mouse, PollRate::Hz1000).await
+/// })?;
 /// # Ok::<(), steelseries_gg::Error>(())
 /// ```
-pub fn set_poll_rate(device_type: DeviceType, rate: PollRate) -> Result<()> {
+pub async fn set_poll_rate(device_type: DeviceType, rate: PollRate) -> Result<()> {
     if !is_root() {
         let bin_name = match std::env::current_exe() {
             Ok(path) => path
@@ -170,7 +172,7 @@ pub fn set_poll_rate(device_type: DeviceType, rate: PollRate) -> Result<()> {
     let path = device_type.sysfs_path();
     let value = rate.to_sysfs_value().to_string();
 
-    std::fs::write(path, &value).map_err(|e| {
+    tokio::fs::write(path, &value).await.map_err(|e| {
         Error::Io(std::io::Error::new(
             e.kind(),
             format!(
@@ -197,14 +199,16 @@ pub fn set_poll_rate(device_type: DeviceType, rate: PollRate) -> Result<()> {
 /// ```no_run
 /// use steelseries_gg::pollrate::{get_poll_rate, DeviceType};
 ///
-/// let rate = get_poll_rate(DeviceType::Mouse)?;
+/// let rate = tokio::runtime::Runtime::new().unwrap().block_on(async {
+///     get_poll_rate(DeviceType::Mouse).await
+/// })?;
 /// println!("Current mouse poll rate: {} Hz", rate.to_hz());
 /// # Ok::<(), steelseries_gg::Error>(())
 /// ```
-pub fn get_poll_rate(device_type: DeviceType) -> Result<PollRate> {
+pub async fn get_poll_rate(device_type: DeviceType) -> Result<PollRate> {
     let path = device_type.sysfs_path();
 
-    let content = std::fs::read_to_string(path).map_err(|e| {
+    let content = tokio::fs::read_to_string(path).await.map_err(|e| {
         Error::Io(std::io::Error::new(
             e.kind(),
             format!(
