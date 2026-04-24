@@ -152,6 +152,14 @@ impl Config {
         Ok(config)
     }
 
+    /// Save configuration to file asynchronously.
+    pub async fn save_async(&self) -> Result<()> {
+        let config = self.clone();
+        tokio::task::spawn_blocking(move || config.save())
+            .await
+            .map_err(|e| crate::error::Error::Other(e.to_string()))?
+    }
+
     /// Save configuration to file.
     pub fn save(&self) -> Result<()> {
         let dir = match Self::config_dir() {

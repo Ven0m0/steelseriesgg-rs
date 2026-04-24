@@ -1384,7 +1384,7 @@ async fn cmd_profile(action: ProfileAction) -> Result<()> {
         }
 
         ProfileAction::Delete { name } => {
-profile_manager.delete_async(&name).await?;
+            profile_manager.delete_async(&name).await?;
             println!("Profile deleted: {}", name);
         }
     }
@@ -1410,9 +1410,9 @@ async fn cmd_pollrate(action: PollrateAction) -> Result<()> {
             println!("Mouse polling rate set to {} Hz", rate);
 
             if persistent {
-                let mut config = Config::load()?;
+                let mut config = Config::load_async().await?;
                 config.poll_rate.mouse_hz = Some(rate);
-                config.save()?;
+                config.save_async().await?;
                 println!("Setting saved to config (will apply on daemon startup)");
             }
         }
@@ -1431,9 +1431,9 @@ async fn cmd_pollrate(action: PollrateAction) -> Result<()> {
             println!("Keyboard polling rate set to {} Hz", rate);
 
             if persistent {
-                let mut config = Config::load()?;
+                let mut config = Config::load_async().await?;
                 config.poll_rate.keyboard_hz = Some(rate);
-                config.save()?;
+                config.save_async().await?;
                 println!("Setting saved to config (will apply on daemon startup)");
             }
         }
