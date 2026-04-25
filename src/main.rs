@@ -1361,7 +1361,7 @@ async fn cmd_profile(action: ProfileAction) -> Result<()> {
         }
 
         ProfileAction::Save { name } => {
-            let mut profile = Profile::new(name.clone());
+            let mut profile = Profile::new(name);
             let state_store = DeviceStateStore::new()?;
             let device_manager = DeviceManager::new()?;
 
@@ -1379,12 +1379,12 @@ async fn cmd_profile(action: ProfileAction) -> Result<()> {
                 }
             }
 
-            profile_manager.set(profile)?;
-            println!("Profile saved: {}", name);
+            let saved_profile = profile_manager.set(profile)?;
+            println!("Profile saved: {}", saved_profile.name);
         }
 
         ProfileAction::Delete { name } => {
-profile_manager.delete_async(&name).await?;
+            profile_manager.delete_async(&name).await?;
             println!("Profile deleted: {}", name);
         }
     }

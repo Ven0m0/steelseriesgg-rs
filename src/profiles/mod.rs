@@ -230,10 +230,18 @@ impl ProfileManager {
     }
 
     /// Add or update a profile.
-    pub fn set(&mut self, profile: Profile) -> Result<()> {
+    pub fn set(&mut self, profile: Profile) -> Result<&Profile> {
         self.save(&profile)?;
-        self.profiles.insert(profile.name.clone(), profile);
-        Ok(())
+        let name = profile.name.clone();
+        use std::collections::hash_map::Entry;
+        let profile_ref = match self.profiles.entry(name) {
+            Entry::Occupied(mut e) => {
+                e.insert(profile);
+                e.into_mut()
+            }
+            Entry::Vacant(e) => e.insert(profile),
+        };
+        Ok(profile_ref)
     }
 
     /// Delete a profile.
