@@ -1384,7 +1384,7 @@ async fn cmd_profile(action: ProfileAction) -> Result<()> {
         }
 
         ProfileAction::Delete { name } => {
-profile_manager.delete_async(&name).await?;
+            profile_manager.delete_async(&name).await?;
             println!("Profile deleted: {}", name);
         }
     }
@@ -2624,8 +2624,6 @@ async fn cmd_test_device(manager: &DeviceManager, device: &str, benchmark: bool,
     }
 }
 
-/// Verify RGB performance metrics over time.
-
 // Format metrics with color coding using Display structs to avoid intermediate allocations
 struct FpsDisplay(f32, f32);
 impl std::fmt::Display for FpsDisplay {
@@ -2664,13 +2662,13 @@ impl<'a, T: std::fmt::Display> std::fmt::Display for MaybeColored<'a, T> {
     }
 }
 
+/// Verify RGB performance metrics over time.
 async fn cmd_verify_performance(
     manager: &DeviceManager,
     duration: u64,
     effect_name: &str,
     output: Option<String>,
 ) -> Result<()> {
-
     use std::io::{self, IsTerminal, Write};
     use steelseries_gg::performance::PerformanceMonitor;
     use tokio::time::{Duration, interval};
