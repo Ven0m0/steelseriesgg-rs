@@ -2625,13 +2625,52 @@ async fn cmd_test_device(manager: &DeviceManager, device: &str, benchmark: bool,
 }
 
 /// Verify RGB performance metrics over time.
+
+// Format metrics with color coding using Display structs to avoid intermediate allocations
+struct FpsDisplay(f32, f32);
+impl std::fmt::Display for FpsDisplay {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:.1}/{:.1}", self.0, self.1)
+    }
+}
+
+struct FrameTimeDisplay(f32);
+impl std::fmt::Display for FrameTimeDisplay {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:.2}ms", self.0)
+    }
+}
+
+struct Colored<'a, T: std::fmt::Display> {
+    val: &'a T,
+    color_code: &'static str,
+}
+impl<'a, T: std::fmt::Display> std::fmt::Display for Colored<'a, T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "\x1b[{}m{}\x1b[0m", self.color_code, self.val)
+    }
+}
+
+enum MaybeColored<'a, T: std::fmt::Display> {
+    Colored(Colored<'a, T>),
+    Plain(&'a T),
+}
+impl<'a, T: std::fmt::Display> std::fmt::Display for MaybeColored<'a, T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Colored(c) => std::fmt::Display::fmt(c, f),
+            Self::Plain(p) => std::fmt::Display::fmt(p, f),
+        }
+    }
+}
+
 async fn cmd_verify_performance(
     manager: &DeviceManager,
     duration: u64,
     effect_name: &str,
     output: Option<String>,
 ) -> Result<()> {
-    use colored::Colorize;
+
     use std::io::{self, IsTerminal, Write};
     use steelseries_gg::performance::PerformanceMonitor;
     use tokio::time::{Duration, interval};
@@ -2712,42 +2751,30 @@ async fn cmd_verify_performance(
                 let metrics = monitor.metrics();
                 let elapsed = start_time.elapsed().as_secs();
 
-                // Format metrics with color coding
-                let fps_str = format!("{:.1}/{:.1}", metrics.actual_fps, metrics.target_fps);
+                // Format metrics with color coding using Display structs to avoid intermediate allocations
+                let fps_display = FpsDisplay(metrics.actual_fps, metrics.target_fps);
                 let fps_colored = if use_colors {
                     let fps_ratio = metrics.actual_fps / metrics.target_fps;
-                    if fps_ratio >= 0.8 {
-                        fps_str.green()
-                    } else if fps_ratio >= 0.6 {
-                        fps_str.yellow()
-                    } else {
-                        fps_str.red()
-                    }
+                    let code = if fps_ratio >= 0.8 { "32" } else if fps_ratio >= 0.6 { "33" } else { "31" };
+                    MaybeColored::Colored(Colored { val: &fps_display, color_code: code })
                 } else {
-                    fps_str.into()
+                    MaybeColored::Plain(&fps_display)
                 };
 
-                let frame_time_str = format!("{:.2}ms", metrics.frame_time);
+                let frame_time_display = FrameTimeDisplay(metrics.frame_time);
                 let frame_time_colored = if use_colors {
-                    if metrics.frame_time <= 20.0 {
-                        frame_time_str.green()
-                    } else {
-                        frame_time_str.yellow()
-                    }
+                    let code = if metrics.frame_time <= 20.0 { "32" } else { "33" };
+                    MaybeColored::Colored(Colored { val: &frame_time_display, color_code: code })
                 } else {
-                    frame_time_str.into()
+                    MaybeColored::Plain(&frame_time_display)
                 };
 
-                let dropped_str = format!("{}", metrics.dropped_frames);
                 let dropped_colored = if use_colors && metrics.dropped_frames > 0 {
                     let drop_rate = metrics.dropped_frames as f32 / metrics.total_frames as f32;
-                    if drop_rate > 0.05 {
-                        dropped_str.red()
-                    } else {
-                        dropped_str.yellow()
-                    }
+                    let code = if drop_rate > 0.05 { "31" } else { "33" };
+                    MaybeColored::Colored(Colored { val: &metrics.dropped_frames, color_code: code })
                 } else {
-                    dropped_str.into()
+                    MaybeColored::Plain(&metrics.dropped_frames)
                 };
 
                 print!(
