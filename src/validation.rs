@@ -313,8 +313,7 @@ impl ResourceValidator {
         self.memory_tracker.add_sample().await?;
 
         // Set CPU baseline (would be improved with actual CPU monitoring)
-        let sample = MemorySample::new().await?;
-        self.cpu_baseline = Some(sample.cpu_percent);
+        self.cpu_baseline = self.memory_tracker.latest_sample().map(|s| s.cpu_percent);
 
         Ok(())
     }
