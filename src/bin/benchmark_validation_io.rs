@@ -6,11 +6,23 @@ fn main() {
     let start = Instant::now();
     let iters = 1000;
 
-    rt.block_on(async {
-        for _ in 0..iters {
-            let _ = MemorySample::new().await;
+    let benchmark_result = rt.block_on(async {
+        for iteration in 0..iters {
+            if let Err(err) = MemorySample::new().await {
+                return Err((iteration, err));
+            }
         }
+        Ok(())
     });
+
+    if let Err((iteration, err)) = benchmark_result {
+        eprintln!(
+            "Benchmark aborted after {} successful iterations: failed to collect memory sample: {}",
+            iteration,
+            err
+        );
+        return;
+    }
 
     let elapsed = start.elapsed();
     println!("Baseline: {} iterations took {:?}", iters, elapsed);
