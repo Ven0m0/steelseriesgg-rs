@@ -58,8 +58,11 @@ impl MemorySample {
         // Count file descriptors in /proc/self/fd
         let mut fd_count = 0;
         if let Ok(mut entries) = tokio::fs::read_dir("/proc/self/fd").await {
-            while let Ok(Some(_)) = entries.next_entry().await {
-                fd_count += 1;
+            loop {
+                match entries.next_entry().await? {
+                    Some(_) => fd_count += 1,
+                    None => break,
+                }
             }
         }
 
