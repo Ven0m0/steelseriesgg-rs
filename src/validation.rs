@@ -17,7 +17,7 @@ use crate::rgb::{Color, Effect, EffectEngine, PerKeyEffect};
 use colored::Colorize;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
-use std::fs;
+use tokio::fs;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tracing::debug;
 
@@ -40,11 +40,11 @@ pub struct MemorySample {
 
 impl MemorySample {
     /// Create a new memory sample by reading current system state.
-    pub fn new() -> Result<Self, Box<dyn std::error::Error>> {
+    pub async fn new() -> Result<Self, Box<dyn std::error::Error>> {
         let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?;
 
         // Read memory information from /proc/self/status
-        let status_content = fs::read_to_string("/proc/self/status")?;
+        let status_content = fs::read_to_string("/proc/self/status").await?;
         let mut rss_kb: u64 = 0;
         let mut vm_size_kb: u64 = 0;
 
@@ -57,12 +57,15 @@ impl MemorySample {
         }
 
         // Count file descriptors in /proc/self/fd
-        let fd_count = fs::read_dir("/proc/self/fd")
-            .map(|entries| entries.count() as u32)
-            .unwrap_or(0);
+        let mut fd_count = 0;
+        if let Ok(mut entries) = fs::read_dir("/proc/self/fd").await {
+            while let Ok(Some(_)) = entries.next_entry().await {
+                fd_count += 1;
+            }
+        }
 
         // Read CPU stats from /proc/self/stat for basic CPU usage estimation
-        let stat_content = fs::read_to_string("/proc/self/stat")?;
+        let stat_content = fs::read_to_string("/proc/self/stat").await?;
         let cpu_percent = Self::parse_cpu_usage(&stat_content).unwrap_or(0.0);
 
         // Heap usage approximation (RSS - executable size)
@@ -116,8 +119,8 @@ impl MemoryTracker {
     }
 
     /// Add a new memory sample.
-    pub fn add_sample(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        let sample = MemorySample::new()?;
+    pub async fn add_sample(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        let sample = MemorySample::new().await?;
 
         // Set baseline on first sample
         if self.baseline_rss.is_none() {
@@ -304,22 +307,22 @@ impl ResourceValidator {
     }
 
     /// Start baseline measurement period.
-    pub fn start_baseline_measurement(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn start_baseline_measurement(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         debug!("Starting resource baseline measurement");
 
         // Take initial memory sample
-        self.memory_tracker.add_sample()?;
+        self.memory_tracker.add_sample().await?;
 
         // Set CPU baseline (would be improved with actual CPU monitoring)
-        let sample = MemorySample::new()?;
+        let sample = MemorySample::new().await?;
         self.cpu_baseline = Some(sample.cpu_percent);
 
         Ok(())
     }
 
     /// Add a memory usage sample.
-    pub fn track_memory_usage(&mut self) -> Result<MemoryAnalysis, Box<dyn std::error::Error>> {
-        self.memory_tracker.add_sample()?;
+    pub async fn track_memory_usage(&mut self) -> Result<MemoryAnalysis, Box<dyn std::error::Error>> {
+        self.memory_tracker.add_sample().await?;
         Ok(self.memory_tracker.analyze_stability())
     }
 
