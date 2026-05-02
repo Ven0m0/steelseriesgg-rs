@@ -2656,8 +2656,8 @@ enum MaybeColored<'a, T: std::fmt::Display> {
 impl<'a, T: std::fmt::Display> std::fmt::Display for MaybeColored<'a, T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Colored(c) => std::fmt::Display::fmt(c, f),
-            Self::Plain(p) => std::fmt::Display::fmt(p, f),
+            Self::Colored(c) => c.fmt(f),
+            Self::Plain(p) => p.fmt(f),
         }
     }
 }
