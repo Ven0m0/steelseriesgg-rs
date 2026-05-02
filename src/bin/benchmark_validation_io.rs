@@ -1,5 +1,5 @@
-use steelseries_gg::validation::MemorySample;
 use std::time::Instant;
+use steelseries_gg::validation::MemorySample;
 
 fn main() {
     let rt = tokio::runtime::Runtime::new().unwrap();
