@@ -57,12 +57,13 @@ impl MemorySample {
         }
 
         // Count file descriptors in /proc/self/fd
-        let mut fd_count = 0;
-        if let Ok(mut entries) = fs::read_dir("/proc/self/fd").await {
-            while let Ok(Some(_)) = entries.next_entry().await {
-                fd_count += 1;
-            }
-        }
+        let fd_count = tokio::task::spawn_blocking(|| {
+            std::fs::read_dir("/proc/self/fd")
+                .map(|entries| entries.count() as u32)
+                .unwrap_or(0)
+        })
+        .await
+        .unwrap_or(0);
 
         // Read CPU stats from /proc/self/stat for basic CPU usage estimation
         let stat_content = fs::read_to_string("/proc/self/stat").await?;
