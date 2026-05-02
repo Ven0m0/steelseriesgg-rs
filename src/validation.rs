@@ -17,8 +17,8 @@ use crate::rgb::{Color, Effect, EffectEngine, PerKeyEffect};
 use colored::Colorize;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
-use tokio::fs;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use tokio::fs;
 use tracing::debug;
 
 /// Memory usage sample containing key system metrics.
