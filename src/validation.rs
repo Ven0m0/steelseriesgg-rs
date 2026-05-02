@@ -53,9 +53,7 @@ impl MemorySample {
                 let stat = std::fs::read_to_string("/proc/self/stat")?;
                 Ok((status, fds, stat))
             })
-            .await
-            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?
-            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
+            .await??;
 
         let mut rss_kb: u64 = 0;
         let mut vm_size_kb: u64 = 0;
