@@ -17,7 +17,6 @@ use crate::rgb::{Color, Effect, EffectEngine, PerKeyEffect};
 use colored::Colorize;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
-use std::fs;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tracing::debug;
 
@@ -40,11 +39,19 @@ pub struct MemorySample {
 
 impl MemorySample {
     /// Create a new memory sample by reading current system state.
-    pub fn new() -> Result<Self, Box<dyn std::error::Error>> {
+    pub async fn new() -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?;
 
-        // Read memory information from /proc/self/status
-        let status_content = fs::read_to_string("/proc/self/status")?;
+        let (status_content, fd_count, stat_content) = tokio::task::spawn_blocking(|| -> Result<(String, u32, String), std::io::Error> {
+            let status = std::fs::read_to_string("/proc/self/status")?;
+            let fds = std::fs::read_dir("/proc/self/fd")
+                .map(|entries| entries.count() as u32)
+                .unwrap_or(0);
+            let stat = std::fs::read_to_string("/proc/self/stat")?;
+            Ok((status, fds, stat))
+        }).await.map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?
+        .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
+
         let mut rss_kb: u64 = 0;
         let mut vm_size_kb: u64 = 0;
 
@@ -56,17 +63,9 @@ impl MemorySample {
             }
         }
 
-        // Count file descriptors in /proc/self/fd
-        let fd_count = fs::read_dir("/proc/self/fd")
-            .map(|entries| entries.count() as u32)
-            .unwrap_or(0);
-
-        // Read CPU stats from /proc/self/stat for basic CPU usage estimation
-        let stat_content = fs::read_to_string("/proc/self/stat")?;
         let cpu_percent = Self::parse_cpu_usage(&stat_content).unwrap_or(0.0);
 
-        // Heap usage approximation (RSS - executable size)
-        let heap_kb = rss_kb.saturating_sub(4096); // Rough approximation
+        let heap_kb = rss_kb.saturating_sub(4096);
 
         Ok(MemorySample {
             timestamp,
@@ -77,6 +76,8 @@ impl MemorySample {
             cpu_percent,
         })
     }
+
+
 
     /// Parse CPU usage from /proc/self/stat content.
     fn parse_cpu_usage(stat_content: &str) -> Option<f64> {
@@ -116,8 +117,8 @@ impl MemoryTracker {
     }
 
     /// Add a new memory sample.
-    pub fn add_sample(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        let sample = MemorySample::new()?;
+    pub async fn add_sample(&mut self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let sample = MemorySample::new().await?;
 
         // Set baseline on first sample
         if self.baseline_rss.is_none() {
@@ -133,6 +134,7 @@ impl MemoryTracker {
         self.samples.push_back(sample);
         Ok(())
     }
+
 
     /// Analyze memory stability and detect potential leaks.
     pub fn analyze_stability(&self) -> MemoryAnalysis {
@@ -304,24 +306,25 @@ impl ResourceValidator {
     }
 
     /// Start baseline measurement period.
-    pub fn start_baseline_measurement(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn start_baseline_measurement(&mut self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         debug!("Starting resource baseline measurement");
 
         // Take initial memory sample
-        self.memory_tracker.add_sample()?;
+        self.memory_tracker.add_sample().await?;
 
         // Set CPU baseline (would be improved with actual CPU monitoring)
-        let sample = MemorySample::new()?;
+        let sample = MemorySample::new().await?;
         self.cpu_baseline = Some(sample.cpu_percent);
 
         Ok(())
     }
 
     /// Add a memory usage sample.
-    pub fn track_memory_usage(&mut self) -> Result<MemoryAnalysis, Box<dyn std::error::Error>> {
-        self.memory_tracker.add_sample()?;
+    pub async fn track_memory_usage(&mut self) -> Result<MemoryAnalysis, Box<dyn std::error::Error + Send + Sync>> {
+        self.memory_tracker.add_sample().await?;
         Ok(self.memory_tracker.analyze_stability())
     }
+
 
     /// Record HID communication timing.
     pub fn record_hid_timing(&mut self, duration: Duration) {
