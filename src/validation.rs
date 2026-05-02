@@ -42,15 +42,18 @@ impl MemorySample {
     pub async fn new() -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?;
 
-        let (status_content, fd_count, stat_content) = tokio::task::spawn_blocking(|| -> Result<(String, u32, String), std::io::Error> {
-            let status = std::fs::read_to_string("/proc/self/status")?;
-            let fds = std::fs::read_dir("/proc/self/fd")
-                .map(|entries| entries.count() as u32)
-                .unwrap_or(0);
-            let stat = std::fs::read_to_string("/proc/self/stat")?;
-            Ok((status, fds, stat))
-        }).await.map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?
-        .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
+        let (status_content, fd_count, stat_content) =
+            tokio::task::spawn_blocking(|| -> Result<(String, u32, String), std::io::Error> {
+                let status = std::fs::read_to_string("/proc/self/status")?;
+                let fds = std::fs::read_dir("/proc/self/fd")
+                    .map(|entries| entries.count() as u32)
+                    .unwrap_or(0);
+                let stat = std::fs::read_to_string("/proc/self/stat")?;
+                Ok((status, fds, stat))
+            })
+            .await
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
 
         let mut rss_kb: u64 = 0;
         let mut vm_size_kb: u64 = 0;
@@ -76,8 +79,6 @@ impl MemorySample {
             cpu_percent,
         })
     }
-
-
 
     /// Parse CPU usage from /proc/self/stat content.
     fn parse_cpu_usage(stat_content: &str) -> Option<f64> {
@@ -134,7 +135,6 @@ impl MemoryTracker {
         self.samples.push_back(sample);
         Ok(())
     }
-
 
     /// Analyze memory stability and detect potential leaks.
     pub fn analyze_stability(&self) -> MemoryAnalysis {
@@ -324,7 +324,6 @@ impl ResourceValidator {
         self.memory_tracker.add_sample().await?;
         Ok(self.memory_tracker.analyze_stability())
     }
-
 
     /// Record HID communication timing.
     pub fn record_hid_timing(&mut self, duration: Duration) {
