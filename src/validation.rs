@@ -39,7 +39,7 @@ pub struct MemorySample {
 
 impl MemorySample {
     /// Create a new memory sample by reading current system state.
-    pub async fn new() -> Result<Self, Box<dyn std::error::Error>> {
+    pub async fn new() -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?;
 
         // Read memory information from /proc/self/status
