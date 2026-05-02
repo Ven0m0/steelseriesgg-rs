@@ -9,7 +9,7 @@ use axum::{
 use parking_lot::RwLock;
 use std::collections::HashMap;
 #[cfg(unix)]
-use std::fs::{self};
+use std::fs;
 use std::net::SocketAddr;
 #[cfg(unix)]
 use std::os::unix::fs::{DirBuilderExt, MetadataExt, OpenOptionsExt, PermissionsExt};
