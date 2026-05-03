@@ -315,7 +315,7 @@ impl EffectEngine {
             effect,
             start_time: Instant::now(),
             zone_count,
-            cached_colors: vec![Color::BLACK; zone_count],
+            cached_colors: Vec::with_capacity(zone_count),
             last_compute_time: Duration::ZERO,
             timing_mode: TimingMode::default(),
             cache_threshold: Duration::from_millis(16), // Base threshold
