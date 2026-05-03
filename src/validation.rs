@@ -18,7 +18,6 @@ use colored::Colorize;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-use tokio::fs;
 use tracing::debug;
 
 /// Memory usage sample containing key system metrics.
@@ -43,8 +42,21 @@ impl MemorySample {
     pub async fn new() -> Result<Self, Box<dyn std::error::Error>> {
         let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?;
 
-        // Read memory information from /proc/self/status
-        let status_content = fs::read_to_string("/proc/self/status").await?;
+        // Perform all synchronous /proc file reads in a single blocking task
+        // to minimize blocking the async executor and reduce spawn overhead
+        let (status_content, fd_count, stat_content) = tokio::task::spawn_blocking(|| {
+            let status = std::fs::read_to_string("/proc/self/status")?;
+
+            let fds = std::fs::read_dir("/proc/self/fd")
+                .map(|entries| entries.count() as u32)
+                .unwrap_or(0);
+
+            let stat = std::fs::read_to_string("/proc/self/stat")?;
+
+            Ok::<_, std::io::Error>((status, fds, stat))
+        })
+        .await??;
+
         let mut rss_kb: u64 = 0;
         let mut vm_size_kb: u64 = 0;
 
@@ -56,17 +68,6 @@ impl MemorySample {
             }
         }
 
-        // Count file descriptors in /proc/self/fd
-        let fd_count = tokio::task::spawn_blocking(|| {
-            std::fs::read_dir("/proc/self/fd")
-                .map(|entries| entries.count() as u32)
-                .unwrap_or(0)
-        })
-        .await
-        .unwrap_or(0);
-
-        // Read CPU stats from /proc/self/stat for basic CPU usage estimation
-        let stat_content = fs::read_to_string("/proc/self/stat").await?;
         let cpu_percent = Self::parse_cpu_usage(&stat_content).unwrap_or(0.0);
 
         // Heap usage approximation (RSS - executable size)
