@@ -72,9 +72,9 @@ tabled = "0.20.0"
 # Error handling
 thiserror = "2.0.18"
 # Async runtime - only include needed features to reduce binary size
-tokio = { version = "1.52.1", default-features = false, features = ["rt-multi-thread", "macros", "signal", "fs"] }
+tokio = { version = "1.52.2", default-features = false, features = ["rt-multi-thread", "macros", "signal", "fs"] }
 toml = "1.1.2"
-tower-http = { version = "0.6.8", default-features = false, features = ["cors"] }
+tower-http = { version = "0.6.10", default-features = false, features = ["cors"] }
 
 # Logging
 tracing = "0.1.44"
