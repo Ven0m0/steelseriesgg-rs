@@ -10,12 +10,24 @@ permissions:
 env:
   CARGO_TERM_COLOR: never
   NO_COLOR: true
-  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 jobs:
   build:
     name: Build
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        features:
+          - ""
+          - "--features audio"
+          - "--all-features"
+        include:
+          - features: ""
+            artifact_suffix: "default"
+          - features: "--features audio"
+            artifact_suffix: "audio"
+          - features: "--all-features"
+            artifact_suffix: "all-features"
     steps:
       - uses: actions/checkout@v6
       - name: Setup Rust Toolchain for GitHub CI
@@ -26,7 +38,11 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends libpulse-dev
-      - name: Restore modification times
-        uses: chetan/git-restore-mtime-action@v2
       - name: Build release binary
         run: cargo build --release --locked ${{ matrix.features }}
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: ssgg-${{ matrix.artifact_suffix }}
+          path: target/release/ssgg
+          if-no-files-found: error
