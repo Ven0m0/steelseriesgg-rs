@@ -19,7 +19,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: Setup Rust Toolchain for GitHub CI
-        uses: actions-rust-lang/setup-rust-toolchain@v1.16.0
+        uses: actions-rust-lang/setup-rust-toolchain@v1.16.1
         with:
           components: clippy, rustfmt
       - name: Install system dependencies
