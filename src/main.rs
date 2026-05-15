@@ -2589,7 +2589,7 @@ async fn cmd_test_device(manager: &DeviceManager, device: &str, benchmark: bool,
     let device_info = manager
         .devices()
         .into_iter()
-        .find(|d| d.name.to_lowercase().contains(&device_lower) || d.path.contains(device))
+        .find(|d| d.path.contains(device) || d.name.to_lowercase().contains(&device_lower))
         .ok_or_else(|| {
             Error::Other(format!(
                 "Device '{}' not found. Use 'ssgg devices' to list available devices.",
