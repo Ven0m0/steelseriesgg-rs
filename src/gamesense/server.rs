@@ -392,6 +392,34 @@ mod tests {
     }
 
     #[test]
+    fn test_server_new() {
+        // Valid address
+        let server = GameSenseServer::new("127.0.0.1", 0);
+        assert!(server.is_ok());
+        assert_eq!(server.unwrap().address().ip().to_string(), "127.0.0.1");
+
+        // Valid IPv6 address
+        let server_v6 = GameSenseServer::new("[::1]", 0);
+        assert!(server_v6.is_ok());
+        assert_eq!(server_v6.unwrap().address().ip().to_string(), "::1");
+    }
+
+    #[test]
+    fn test_server_new_invalid_address() {
+        // Invalid host
+        let result = GameSenseServer::new("invalid_host", 8080);
+        assert!(matches!(result, Err(Error::GameSense(ref m)) if m.contains("Invalid bind address")));
+
+        // Empty host
+        let result = GameSenseServer::new("", 8080);
+        assert!(matches!(result, Err(Error::GameSense(ref m)) if m.contains("Invalid bind address")));
+
+        // Invalid IP format
+        let result = GameSenseServer::new("127.0.0.1.1", 8080);
+        assert!(matches!(result, Err(Error::GameSense(ref m)) if m.contains("Invalid bind address")));
+    }
+
+    #[test]
     fn test_compute_color_gradient() {
         let handler = ColorHandler::Gradient {
             gradient: GradientSpec {
