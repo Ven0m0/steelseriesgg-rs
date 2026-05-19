@@ -30,8 +30,7 @@ fn main() {
 
     // Fill with 104 keys (standard full-size keyboard)
     for i in 0..104 {
-        cmd.key_colors
-            .insert(KeyAddress::new(i), Color::RED);
+        cmd.key_colors.insert(KeyAddress::new(i), Color::RED);
     }
 
     let iterations = 100_000;
