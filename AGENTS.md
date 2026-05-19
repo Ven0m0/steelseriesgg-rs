@@ -55,7 +55,7 @@ When prose docs and code disagree, trust these files:
 ## Toolchain and CI
 
 **Toolchain**: Rust 1.95.0 stable (pinned in `rust-toolchain.toml`).
-MSRV for environments that ignore the toolchain file: 1.88.
+MSRV declared in `Cargo.toml` (`rust-version`): 1.94.1.
 
 | Step | Command |
 |------|---------|
@@ -64,7 +64,12 @@ MSRV for environments that ignore the toolchain file: 1.88.
 | Test | `cargo test --locked` |
 | Release build | `cargo build --release --locked` |
 
-CI runs format, clippy, test, and build across a feature matrix (`""`, `--features sonar`, `--features audio`). The `audio` feature requires `libpulse-dev` on Debian or Ubuntu.
+CI feature matrix per job:
+- **fmt**: default features only
+- **clippy** and **build**: `""`, `--features sonar`, `--features audio`
+- **test**: `""`, `--features sonar` (audio excluded — requires `libpulse-dev`)
+
+The `audio` feature requires `libpulse-dev` on Debian or Ubuntu.
 
 **Run the smallest relevant subset** for any given change. For a pure Rust change, full matrix is overkill; for a feature-gated module, include its feature flag.
 
@@ -98,7 +103,7 @@ CI runs format, clippy, test, and build across a feature matrix (`""`, `--featur
 ## Rust conventions
 
 - Naming: `snake_case` for functions and modules, `PascalCase` for types and traits, `SCREAMING_SNAKE_CASE` for constants.
-- `rustfmt.toml`: edition 2024 style, max 120 columns, 4-space indentation.
+- `rustfmt.toml`: rustfmt `edition = "2024"` style (distinct from Cargo's `edition = "2021"`), max 120 columns, 4-space indentation.
 - Prefer `&T` borrows over owned values when ownership is not needed.
 - No panics in non-test code unless explicitly fatal and documented.
 - No mutable global state.
