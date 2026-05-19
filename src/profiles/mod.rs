@@ -213,7 +213,9 @@ impl ProfileManager {
         {
             let mut options = OpenOptions::new();
             options.write(true).create(true).truncate(true).mode(0o600);
-            let file = options.open(&path)?;
+
+            let file = crate::fs_utils::secure_open(&path, &options)
+                .map_err(|e| Error::Profile(e.to_string()))?;
             let mut perms = file.metadata()?.permissions();
             perms.set_mode(0o600);
             file.set_permissions(perms)?;
