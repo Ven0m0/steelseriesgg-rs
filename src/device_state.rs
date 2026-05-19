@@ -757,7 +757,7 @@ mod tests {
         assert!(DeviceId::from_key("103G:1234:1:serial:none").is_err());
 
         // Invalid hex product_id
-        assert!(DeviceId::from_key("1038:XXXX:1:serial:none").is_err());
+        assert!(DeviceId::from_key("1038:G123:1:serial:none").is_err());
 
         // Invalid interface integer
         assert!(DeviceId::from_key("1038:1234:A:serial:none").is_err());
