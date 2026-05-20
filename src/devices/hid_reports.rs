@@ -709,7 +709,9 @@ impl Apex2023DirectCommand {
 
     /// Create an empty direct command.
     pub fn new() -> Self {
-        Self { key_colors: smallvec::SmallVec::new() }
+        Self {
+            key_colors: smallvec::SmallVec::new(),
+        }
     }
 
     /// Add or update a logical key color.
