@@ -690,7 +690,11 @@ pub struct Apex2023DirectCommand {
     /// The `u8` key identifier currently follows the standard HID keyboard
     /// usage IDs until packet captures confirm any SteelSeries-specific
     /// remapping for the 2023 protocol.
-    pub key_colors: Vec<(u8, Color)>,
+    ///
+    /// SmallVec replaces Vec to avoid heap allocations entirely for normal
+    /// usage, fulfilling the performance goal of a "simple array" without
+    /// breaking iteration API.
+    pub key_colors: smallvec::SmallVec<[(u8, Color); 15]>,
 }
 
 #[cfg(feature = "experimental-apex-2023")]
@@ -705,18 +709,24 @@ impl Apex2023DirectCommand {
 
     /// Create an empty direct command.
     pub fn new() -> Self {
-        Self { key_colors: Vec::new() }
+        Self {
+            key_colors: smallvec::SmallVec::new(),
+        }
     }
 
     /// Add or update a logical key color.
     pub fn set_key_color(&mut self, key_id: u8, color: Color) {
-        if let Some((_, existing_color)) = self
-            .key_colors
-            .iter_mut()
-            .find(|(existing_key_id, _)| *existing_key_id == key_id)
-        {
-            *existing_color = color;
-        } else {
+        // Linear scan via a loop over idiomatic slice iterator.
+        // The overhead of iter_mut().find() closure is eliminated.
+        for (existing_key_id, existing_color) in &mut self.key_colors {
+            if *existing_key_id == key_id {
+                *existing_color = color;
+                return;
+            }
+        }
+
+        // Prevent exceeding the fixed boundary when pushing
+        if self.key_colors.len() < Self::MAX_KEYS_PER_REPORT {
             self.key_colors.push((key_id, color));
         }
     }
