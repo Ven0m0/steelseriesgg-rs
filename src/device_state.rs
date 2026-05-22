@@ -178,6 +178,23 @@ impl From<&HashMap<DeviceId, DeviceState>> for SerializableStates {
     }
 }
 
+/// A zero-copy wrapper for serializing device states without cloning.
+struct SerializableStatesRef<'a>(&'a HashMap<DeviceId, DeviceState>);
+
+impl<'a> Serialize for SerializableStatesRef<'a> {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeMap;
+        let mut map = serializer.serialize_map(Some(self.0.len()))?;
+        for (id, state) in self.0 {
+            map.serialize_entry(&id.to_key(), state)?;
+        }
+        map.end()
+    }
+}
+
 /// Manager for device state persistence with async write-behind caching.
 pub struct DeviceStateStore {
     states: Arc<RwLock<HashMap<DeviceId, DeviceState>>>,
@@ -263,9 +280,11 @@ impl DeviceStateStore {
         states: &Arc<RwLock<HashMap<DeviceId, DeviceState>>>,
         state_file: &std::path::Path,
     ) -> Result<()> {
-        let serializable = {
+        let content = {
             let states_guard = states.read();
-            SerializableStates::from(&*states_guard)
+            let serializable = SerializableStatesRef(&states_guard);
+            serde_json::to_string_pretty(&serializable)
+                .map_err(|e| Error::SerializationMessage(format!("Failed to serialize state: {}", e)))?
         }; // Lock released here
 
         // Use atomic write with temp file to prevent corruption
@@ -276,9 +295,6 @@ impl DeviceStateStore {
         let state_file_clone = state_file.to_path_buf();
 
         tokio::task::spawn_blocking(move || -> Result<()> {
-            let content = serde_json::to_string_pretty(&serializable)
-                .map_err(|e| Error::SerializationMessage(format!("Failed to serialize state: {}", e)))?;
-
             #[cfg(unix)]
             {
                 use std::os::unix::fs::OpenOptionsExt;
