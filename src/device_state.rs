@@ -538,6 +538,21 @@ impl DeviceStateStore {
         Ok(())
     }
 
+    /// Update multiple device states using a closure for maximum efficiency.
+    /// The closure receives a mutable reference to the internal state map and
+    /// should return true if any changes were made.
+    pub fn update_states_with<F>(&self, f: F) -> Result<()>
+    where
+        F: FnOnce(&mut HashMap<DeviceId, DeviceState>) -> bool,
+    {
+        let mut states = self.states.write();
+        if f(&mut *states) {
+            drop(states);
+            self.mark_dirty();
+        }
+        Ok(())
+    }
+
     /// List all devices with stored state.
     pub fn list_devices(&self) -> Vec<DeviceId> {
         let states = self.states.read();
@@ -614,6 +629,60 @@ mod tests {
         let loaded_state = store2.get(&device_id).expect("Should have state");
 
         assert_eq!(loaded_state.keyboard.unwrap(), keyboard_state);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_update_states_with() -> Result<()> {
+        let dir = tempdir().unwrap();
+        let state_file = dir.path().join("device_state.json");
+        let store = DeviceStateStore::with_path(state_file)?;
+
+        let device_id = DeviceId {
+            vendor_id: 0x1038,
+            product_id: 0x1234,
+            interface_number: 1,
+            serial_number: Some("serial123".to_string()),
+            path: Some("path/to/device".to_string()),
+        };
+
+        // 1. Initial update
+        store.update_states_with(|states| {
+            let state = states.entry(device_id.clone()).or_default();
+            state.keyboard = Some(KeyboardState {
+                effect: Effect::Static {
+                    color: crate::rgb::Color::RED,
+                },
+                brightness: 100,
+            });
+            true
+        })?;
+
+        assert!(store.dirty_flag.load(Ordering::SeqCst));
+        store.dirty_flag.store(false, Ordering::SeqCst);
+
+        // 2. No-op update
+        store.update_states_with(|_states| {
+            false
+        })?;
+
+        assert!(!store.dirty_flag.load(Ordering::SeqCst));
+
+        // 3. Update existing
+        store.update_states_with(|states| {
+            if let Some(state) = states.get_mut(&device_id) {
+                if let Some(ref mut k) = state.keyboard {
+                    k.brightness = 50;
+                    return true;
+                }
+            }
+            false
+        })?;
+
+        assert!(store.dirty_flag.load(Ordering::SeqCst));
+        let state = store.get(&device_id).unwrap();
+        assert_eq!(state.keyboard.unwrap().brightness, 50);
 
         Ok(())
     }
