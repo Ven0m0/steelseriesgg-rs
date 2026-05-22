@@ -8,6 +8,7 @@ use tracing::{Level, debug, info, warn};
 use tracing_subscriber::FmtSubscriber;
 
 use steelseries_gg::config::Config;
+use steelseries_gg::fs_utils::{secure_write, secure_write_async};
 use steelseries_gg::device_state::{DeviceId, DeviceStateStore, KeyboardState};
 use steelseries_gg::devices::headsets::Headset;
 use steelseries_gg::devices::keyboards::Keyboard;
@@ -1785,7 +1786,7 @@ async fn cmd_validate(
             content
         };
 
-        tokio::fs::write(&output_path, export_content)
+        secure_write_async(output_path.clone(), export_content)
             .await
             .map_err(|e| Error::FileSystemError(format!("Failed to write report: {}", e)))?;
 
@@ -1966,7 +1967,7 @@ async fn cmd_performance(manager: &DeviceManager, action: PerformanceAction) -> 
                     "results": benchmark_results
                 });
 
-                std::fs::write(&output_path, serde_json::to_string_pretty(&benchmark_data)?)
+                secure_write(&output_path, serde_json::to_string_pretty(&benchmark_data)?)
                     .map_err(|e| Error::DeviceCommunication(format!("Failed to write benchmark: {}", e)))?;
 
                 println!("📄 Benchmark results exported to: {}", output_path);
@@ -2054,7 +2055,7 @@ fn export_performance_stats(
             "devices": all_stats
         });
 
-        std::fs::write(output_path, serde_json::to_string_pretty(&export_data)?)
+        secure_write(output_path, serde_json::to_string_pretty(&export_data)?)
             .map_err(|e| Error::DeviceCommunication(format!("Failed to write stats: {}", e)))?;
     } else {
         let mut content = String::new();
@@ -2090,7 +2091,7 @@ fn export_performance_stats(
             }
         }
 
-        std::fs::write(output_path, content)
+        secure_write(output_path, content)
             .map_err(|e| Error::DeviceCommunication(format!("Failed to write stats: {}", e)))?;
     }
 
@@ -2820,10 +2821,9 @@ async fn cmd_verify_performance(
 
     // Export to JSON if requested
     if let Some(output_path) = output {
-        use std::fs;
         let json = serde_json::to_string_pretty(&metrics)
             .map_err(|e| Error::Other(format!("Failed to serialize metrics: {}", e)))?;
-        fs::write(&output_path, json).map_err(|e| Error::Other(format!("Failed to write {}: {}", output_path, e)))?;
+        secure_write(&output_path, json).map_err(|e| Error::Other(format!("Failed to write {}: {}", output_path, e)))?;
         println!("\nMetrics exported to: {}", output_path);
     }
 

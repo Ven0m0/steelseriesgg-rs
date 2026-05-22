@@ -342,12 +342,11 @@ impl DeviceStateStore {
             #[cfg(unix)]
             {
                 use std::os::unix::fs::OpenOptionsExt;
+
                 let mut options = std::fs::OpenOptions::new();
                 options.write(true).create(true).truncate(true).mode(0o600);
 
-                let mut file = options
-                    .open(&temp_file_clone)
-                    .map_err(|e| Error::FileSystemError(format!("Failed to open temp file: {}", e)))?;
+                let mut file = crate::fs_utils::secure_open(&temp_file_clone, &options)?;
 
                 let mut perms = file
                     .metadata()
@@ -789,7 +788,7 @@ mod tests {
             legacy_id_str
         );
 
-        std::fs::write(&state_file, initial_json)?;
+        crate::fs_utils::secure_write(&state_file, initial_json)?;
 
         let store = DeviceStateStore::with_path_async(state_file.clone()).await?;
 
