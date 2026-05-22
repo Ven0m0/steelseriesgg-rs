@@ -648,11 +648,11 @@ pub fn print_device_summary(manager: &DeviceManager) {
     }
 
     // Group by (vendor_id, product_id, serial_number) - use pre-allocated HashMap
-    let mut grouped: HashMap<(u16, u16, Option<String>), Vec<DeviceInfo>> = HashMap::with_capacity(devices.len());
+    let mut grouped: HashMap<(u16, u16, Option<&str>), Vec<&DeviceInfo>> = HashMap::with_capacity(devices.len());
 
     for device in devices {
-        let key = (device.vendor_id, device.product_id, device.serial_number.clone());
-        grouped.entry(key).or_default().push(device.clone());
+        let key = (device.vendor_id, device.product_id, device.serial_number.as_deref());
+        grouped.entry(key).or_default().push(device);
     }
 
     // Convert to sorted vec with pre-allocated capacity
@@ -705,7 +705,6 @@ pub fn print_device_summary(manager: &DeviceManager) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::devices::{DeviceInfo, DeviceType};
 
     fn create_test_device_info(serial: Option<String>) -> DeviceInfo {
         DeviceInfo {
