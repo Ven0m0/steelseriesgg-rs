@@ -97,15 +97,7 @@ impl GameSenseServer {
                     .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
                     .allow_headers([header::CONTENT_TYPE])
                     .allow_origin(AllowOrigin::predicate(|origin: &HeaderValue, _parts: &_| {
-                        let origin_bytes = origin.as_bytes();
-                        origin_bytes == b"http://localhost"
-                            || origin_bytes.starts_with(b"http://localhost:")
-                            || origin_bytes == b"https://localhost"
-                            || origin_bytes.starts_with(b"https://localhost:")
-                            || origin_bytes == b"http://127.0.0.1"
-                            || origin_bytes.starts_with(b"http://127.0.0.1:")
-                            || origin_bytes == b"https://127.0.0.1"
-                            || origin_bytes.starts_with(b"https://127.0.0.1:")
+                        is_origin_allowed(origin)
                     })),
             )
             .with_state(state)
@@ -229,6 +221,52 @@ impl GameSenseServer {
 }
 
 type AppState = Arc<RwLock<ServerState>>;
+
+/// Check if an origin is allowed for GameSense API.
+fn is_origin_allowed(origin: &HeaderValue) -> bool {
+    // Origin header must be valid UTF-8 and a valid URI
+    let Ok(origin_str) = origin.to_str() else {
+        return false;
+    };
+
+    // Parse as URI to safely extract host
+    let Ok(uri) = origin_str.parse::<axum::http::Uri>() else {
+        return false;
+    };
+
+    // Strictly validate host and ensure it doesn't contain a colon (port bypass)
+    // Note: URI parser might sometimes treat 'localhost:evil.com' as host='localhost'
+    // with a non-numeric port that it then ignores or misinterprets.
+    // We also check for any characters that shouldn't be in a clean hostname.
+    match uri.host() {
+        Some(host) => {
+            // Check for standard local hosts.
+            // Note: uri.host() typically strips brackets from IPv6 addresses, but we check both
+            // to be safe across different versions/implementations.
+            let is_allowed_host = host == "localhost" || host == "127.0.0.1" || host == "::1" || host == "[::1]";
+
+            // Additional check: ensure the full authority doesn't have suspicious characters
+            // and if a port is present, it must be numeric.
+            let is_clean = if let Some(auth) = uri.authority() {
+                let auth_str = auth.as_str();
+                // Find the port separator, taking into account IPv6 brackets
+                let port_start = if auth_str.starts_with('[') { auth_str.find("]:").map(|i| i + 1) } else { auth_str.find(':') };
+
+                if let Some(port_idx) = port_start {
+                    let port_part = &auth_str[port_idx + 1..];
+                    !port_part.is_empty() && port_part.chars().all(|c| c.is_ascii_digit())
+                } else {
+                    true
+                }
+            } else {
+                true
+            };
+
+            is_allowed_host && is_clean
+        }
+        None => false,
+    }
+}
 
 /// Server info endpoint.
 async fn server_info() -> Json<serde_json::Value> {
@@ -509,6 +547,29 @@ mod tests {
 
         // Test value outside ranges
         assert!(compute_color(&handler, 150).is_none());
+    }
+
+    #[test]
+    fn test_cors_origin_predicate() {
+        use axum::http::HeaderValue;
+
+        // Allowed origins
+        assert!(is_origin_allowed(&HeaderValue::from_static("http://localhost")));
+        assert!(is_origin_allowed(&HeaderValue::from_static("https://localhost")));
+        assert!(is_origin_allowed(&HeaderValue::from_static("http://localhost:8080")));
+        assert!(is_origin_allowed(&HeaderValue::from_static("http://127.0.0.1")));
+        assert!(is_origin_allowed(&HeaderValue::from_static("http://127.0.0.1:3000")));
+        assert!(is_origin_allowed(&HeaderValue::from_static("http://[::1]")));
+        assert!(is_origin_allowed(&HeaderValue::from_static("http://[::1]:1234")));
+
+        // Malicious or invalid origins
+        assert!(!is_origin_allowed(&HeaderValue::from_static("http://localhost.evil.com")));
+        assert!(!is_origin_allowed(&HeaderValue::from_static("http://127.0.0.1.attacker.com")));
+        assert!(!is_origin_allowed(&HeaderValue::from_static("http://localhost:evil.com")));
+        assert!(!is_origin_allowed(&HeaderValue::from_static("http://not-localhost")));
+        assert!(!is_origin_allowed(&HeaderValue::from_static("http://192.168.1.1")));
+        assert!(!is_origin_allowed(&HeaderValue::from_static("null")));
+        assert!(!is_origin_allowed(&HeaderValue::from_static("")));
     }
 
     #[test]
