@@ -852,4 +852,11 @@ mod tests {
         assert_eq!(stats.cache_hit_rate, 0.0);
         assert_eq!(stats.current_refresh_rate, 60.0);
     }
+
+    #[test]
+    fn test_estimate_memory_usage() {
+        let expected = (8 * 1024 * 1024) + (1024 * 1024) + (512 * 1024);
+        assert_eq!(estimate_memory_usage(), expected);
+        assert_eq!(estimate_memory_usage(), 9_961_472);
+    }
 }
