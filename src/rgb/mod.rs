@@ -643,18 +643,26 @@ impl PerKeyEffectEngine {
         // cleanly without clearing the map or duplicating logic.
         if self.cached_key_colors.is_empty() {
             // First run: Iterate all keys from mapping and populate
-            let mut new_colors = HashMap::with_capacity(self.key_mapping.total_keys);
-            for key in self.key_mapping.get_all_keys() {
-                let mut color = Color::BLACK;
-                Self::apply_effect_static(
-                    &self.effect,
-                    *key,
-                    &mut color,
-                    &self.key_mapping,
-                    &self.reactive_state,
-                    elapsed_secs,
-                );
-                new_colors.insert(*key, color);
+            let keys = self.key_mapping.get_all_keys();
+            let mut new_colors = HashMap::with_capacity(keys.len());
+
+            if let PerKeyEffect::Static { color } = self.effect {
+                for key in keys {
+                    new_colors.insert(*key, color);
+                }
+            } else {
+                for key in keys {
+                    let mut color = Color::BLACK;
+                    Self::apply_effect_static(
+                        &self.effect,
+                        *key,
+                        &mut color,
+                        &self.key_mapping,
+                        &self.reactive_state,
+                        elapsed_secs,
+                    );
+                    new_colors.insert(*key, color);
+                }
             }
             self.cached_key_colors = new_colors;
         } else {
