@@ -2823,7 +2823,8 @@ async fn cmd_verify_performance(
     if let Some(output_path) = output {
         let json = serde_json::to_string_pretty(&metrics)
             .map_err(|e| Error::Other(format!("Failed to serialize metrics: {}", e)))?;
-        secure_write(&output_path, json)
+        secure_write_async(output_path.clone(), json)
+            .await
             .map_err(|e| Error::Other(format!("Failed to write {}: {}", output_path, e)))?;
         println!("\nMetrics exported to: {}", output_path);
     }
