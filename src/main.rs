@@ -1967,8 +1967,9 @@ async fn cmd_performance(manager: &DeviceManager, action: PerformanceAction) -> 
                     "results": benchmark_results
                 });
 
-                secure_write(&output_path, serde_json::to_string_pretty(&benchmark_data)?)
-                    .map_err(|e| Error::DeviceCommunication(format!("Failed to write benchmark: {}", e)))?;
+                secure_write_async(output_path.clone(), serde_json::to_string_pretty(&benchmark_data)?)
+                    .await
+                    .map_err(|e| Error::FileSystemError(format!("Failed to write benchmark: {}", e)))?;
 
                 println!("📄 Benchmark results exported to: {}", output_path);
             }
