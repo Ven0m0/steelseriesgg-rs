@@ -8,7 +8,6 @@ use tracing::{Level, debug, info, warn};
 use tracing_subscriber::FmtSubscriber;
 
 use steelseries_gg::config::Config;
-use steelseries_gg::fs_utils::{secure_write, secure_write_async};
 use steelseries_gg::device_state::{DeviceId, DeviceStateStore, KeyboardState};
 use steelseries_gg::devices::headsets::Headset;
 use steelseries_gg::devices::keyboards::Keyboard;
@@ -17,6 +16,7 @@ use steelseries_gg::devices::{
     diagnostics::{init_global_diagnostics, with_global_diagnostics},
     discovery::{DeviceFingerprint, HotPlugEvent, print_device_summary},
 };
+use steelseries_gg::fs_utils::{secure_write, secure_write_async};
 use steelseries_gg::gamesense::GameSenseServer;
 use steelseries_gg::profiles::{KeyboardProfile, Profile, ProfileManager};
 use steelseries_gg::rgb::{Color, Effect, RgbController, WaveDirection};
@@ -2823,7 +2823,8 @@ async fn cmd_verify_performance(
     if let Some(output_path) = output {
         let json = serde_json::to_string_pretty(&metrics)
             .map_err(|e| Error::Other(format!("Failed to serialize metrics: {}", e)))?;
-        secure_write(&output_path, json).map_err(|e| Error::Other(format!("Failed to write {}: {}", output_path, e)))?;
+        secure_write(&output_path, json)
+            .map_err(|e| Error::Other(format!("Failed to write {}: {}", output_path, e)))?;
         println!("\nMetrics exported to: {}", output_path);
     }
 

@@ -250,7 +250,11 @@ fn is_origin_allowed(origin: &HeaderValue) -> bool {
             let is_clean = if let Some(auth) = uri.authority() {
                 let auth_str = auth.as_str();
                 // Find the port separator, taking into account IPv6 brackets
-                let port_start = if auth_str.starts_with('[') { auth_str.find("]:").map(|i| i + 1) } else { auth_str.find(':') };
+                let port_start = if auth_str.starts_with('[') {
+                    auth_str.find("]:").map(|i| i + 1)
+                } else {
+                    auth_str.find(':')
+                };
 
                 if let Some(port_idx) = port_start {
                     let port_part = &auth_str[port_idx + 1..];
@@ -563,9 +567,15 @@ mod tests {
         assert!(is_origin_allowed(&HeaderValue::from_static("http://[::1]:1234")));
 
         // Malicious or invalid origins
-        assert!(!is_origin_allowed(&HeaderValue::from_static("http://localhost.evil.com")));
-        assert!(!is_origin_allowed(&HeaderValue::from_static("http://127.0.0.1.attacker.com")));
-        assert!(!is_origin_allowed(&HeaderValue::from_static("http://localhost:evil.com")));
+        assert!(!is_origin_allowed(&HeaderValue::from_static(
+            "http://localhost.evil.com"
+        )));
+        assert!(!is_origin_allowed(&HeaderValue::from_static(
+            "http://127.0.0.1.attacker.com"
+        )));
+        assert!(!is_origin_allowed(&HeaderValue::from_static(
+            "http://localhost:evil.com"
+        )));
         assert!(!is_origin_allowed(&HeaderValue::from_static("http://not-localhost")));
         assert!(!is_origin_allowed(&HeaderValue::from_static("http://192.168.1.1")));
         assert!(!is_origin_allowed(&HeaderValue::from_static("null")));

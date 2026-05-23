@@ -18,8 +18,7 @@ fn main() {
     if let Err((iteration, err)) = benchmark_result {
         eprintln!(
             "Benchmark aborted after {} successful iterations: failed to collect memory sample: {}",
-            iteration,
-            err
+            iteration, err
         );
         return;
     }

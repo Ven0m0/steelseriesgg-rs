@@ -587,7 +587,7 @@ impl DeviceStateStore {
         F: FnOnce(&mut HashMap<DeviceId, DeviceState>) -> bool,
     {
         let mut states = self.states.write();
-        if f(&mut *states) {
+        if f(&mut states) {
             drop(states);
             self.mark_dirty();
         }
@@ -704,9 +704,7 @@ mod tests {
         store.dirty_flag.store(false, Ordering::SeqCst);
 
         // 2. No-op update
-        store.update_states_with(|_states| {
-            false
-        })?;
+        store.update_states_with(|_states| false)?;
 
         assert!(!store.dirty_flag.load(Ordering::SeqCst));
 

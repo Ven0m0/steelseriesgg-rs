@@ -1,6 +1,6 @@
 use std::fs;
-use tempfile::tempdir;
 use steelseries_gg::fs_utils::{secure_write, secure_write_async};
+use tempfile::tempdir;
 
 #[cfg(unix)]
 #[test]
