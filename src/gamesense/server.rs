@@ -203,11 +203,8 @@ impl GameSenseServer {
 
             // Fallback for non-unix platforms
             let json = serde_json::to_string_pretty(content)?;
-            let mut options = std::fs::OpenOptions::new();
-            options.write(true).create(true).truncate(true);
+            crate::fs_utils::secure_write(&path, json.as_bytes())?;
 
-            let mut file = options.open(path)?;
-            std::io::Write::write_all(&mut file, json.as_bytes())?;
             debug!("Wrote JSON to {:?}", path);
         }
 
