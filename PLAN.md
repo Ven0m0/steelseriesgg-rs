@@ -77,8 +77,7 @@ the fallback string.
 1. Add `pub const ARCTIS_NOVA_PRO_OMNI: u16 = 0x2290;` to the `product_ids` block.
 2. Add `ARCTIS_NOVA_PRO_OMNI` to the `DeviceType::Headset` arm of `device_type_from_product_id`.
 3. Add `ARCTIS_NOVA_PRO_OMNI => "Arctis Nova Pro Omni"` to `device_name_from_product_id`.
-4. Add `ARCTIS_NOVA_PRO_OMNI` to `zone_count_for_product_id` with a sensible default (0 until
-   the control protocol is verified; the Omni uses a different HID dialect from the wired Nova Pro).
+4. No change needed to `zone_count_for_product_id` (keyboard-only); headset PIDs should rely on existing defaults until RGB support is implemented.
 5. Extend the existing unit test block to cover the new PID.
 
 ### Notes
