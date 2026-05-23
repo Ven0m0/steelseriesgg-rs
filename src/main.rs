@@ -2194,36 +2194,8 @@ impl DaemonState {
                             }
                         } else if let Some(ref profile_manager) = self.profile_manager {
                             // Try to apply default profile
-                            if let Some(default_profile) = profile_manager.get("default") {
-                                if let Some(ref keyboard_profile) = default_profile.keyboard {
-                                    rgb_controller.set_effect(keyboard_profile.effect.clone());
-                                    rgb_controller.set_brightness(keyboard_profile.brightness as f32 / 100.0);
-
-                                    match &keyboard_profile.effect {
-                                        Effect::Static { color } => {
-                                            if let Err(e) = keyboard.set_color(*color).await {
-                                                warn!("Failed to apply default profile color to {}: {}", info.name, e);
-                                            }
-                                        }
-                                        Effect::Off => {
-                                            if let Err(e) = keyboard.set_color(Color::BLACK).await {
-                                                warn!("Failed to turn off {} (default profile): {}", info.name, e);
-                                            }
-                                        }
-                                        _ => {
-                                            info!(
-                                                "Applied default animated profile for {} (will be handled by animation loop)",
-                                                info.name
-                                            );
-                                        }
-                                    }
-
-                                    info!(
-                                        "Applied default profile to {}: brightness={}%, effect={:?}",
-                                        info.name, keyboard_profile.brightness, keyboard_profile.effect
-                                    );
-                                }
-                            }
+                            Self::apply_default_profile(profile_manager, keyboard.as_mut(), &mut rgb_controller, info)
+                                .await;
                         }
 
                         // Store device information
@@ -2268,6 +2240,47 @@ impl DaemonState {
         }
 
         Ok(())
+    }
+
+    async fn apply_default_profile(
+        profile_manager: &ProfileManager,
+        keyboard: &mut dyn Keyboard,
+        rgb_controller: &mut RgbController,
+        info: &DeviceInfo,
+    ) {
+        let Some(default_profile) = profile_manager.get("default") else {
+            return;
+        };
+        let Some(ref keyboard_profile) = default_profile.keyboard else {
+            return;
+        };
+
+        rgb_controller.set_effect(keyboard_profile.effect.clone());
+        rgb_controller.set_brightness(keyboard_profile.brightness as f32 / 100.0);
+
+        match &keyboard_profile.effect {
+            Effect::Static { color } => {
+                if let Err(e) = keyboard.set_color(*color).await {
+                    warn!("Failed to apply default profile color to {}: {}", info.name, e);
+                }
+            }
+            Effect::Off => {
+                if let Err(e) = keyboard.set_color(Color::BLACK).await {
+                    warn!("Failed to turn off {} (default profile): {}", info.name, e);
+                }
+            }
+            _ => {
+                info!(
+                    "Applied default animated profile for {} (will be handled by animation loop)",
+                    info.name
+                );
+            }
+        }
+
+        info!(
+            "Applied default profile to {}: brightness={}%, effect={:?}",
+            info.name, keyboard_profile.brightness, keyboard_profile.effect
+        );
     }
 
     /// Get current device count for monitoring
