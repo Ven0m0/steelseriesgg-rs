@@ -877,16 +877,10 @@ impl Keyboard for GenericKeyboard {
                 if key_colors.is_empty() {
                     ZoneEffect::Solid(Color::BLACK)
                 } else {
-                    let mut total_r = 0u32;
-                    let mut total_g = 0u32;
-                    let mut total_b = 0u32;
                     let count = key_colors.len() as u32;
-
-                    for color in key_colors.values() {
-                        total_r += color.r as u32;
-                        total_g += color.g as u32;
-                        total_b += color.b as u32;
-                    }
+                    let (total_r, total_g, total_b) = key_colors.values().fold((0u32, 0u32, 0u32), |(r, g, b), c| {
+                        (r + c.r as u32, g + c.g as u32, b + c.b as u32)
+                    });
 
                     let avg_color = Color::new(
                         (total_r / count) as u8,
