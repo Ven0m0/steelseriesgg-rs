@@ -1980,19 +1980,33 @@ async fn cmd_performance(manager: &DeviceManager, action: PerformanceAction) -> 
     Ok(())
 }
 
-fn display_performance_stats(manager: &DeviceManager, keyboards: &[&DeviceInfo], json: bool) -> Result<()> {
-    if json {
-        let mut all_stats = HashMap::new();
+struct StatsMapSerializer<'a> {
+    manager: &'a DeviceManager,
+    keyboards: &'a [&'a DeviceInfo],
+}
 
-        for device_info in keyboards {
-            if let Ok(keyboard) = manager.open_keyboard(device_info) {
+impl<'a> serde::Serialize for StatsMapSerializer<'a> {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeMap;
+        let mut map = serializer.serialize_map(None)?;
+        for device_info in self.keyboards {
+            if let Ok(keyboard) = self.manager.open_keyboard(device_info) {
                 if let Some(stats) = keyboard.get_rgb_performance_stats() {
-                    all_stats.insert(device_info.name.to_string(), stats.clone());
+                    map.serialize_entry(&device_info.name, stats)?;
                 }
             }
         }
+        map.end()
+    }
+}
 
-        println!("{}", serde_json::to_string_pretty(&all_stats)?);
+fn display_performance_stats(manager: &DeviceManager, keyboards: &[&DeviceInfo], json: bool) -> Result<()> {
+    if json {
+        let stats_map = StatsMapSerializer { manager, keyboards };
+        println!("{}", serde_json::to_string_pretty(&stats_map)?);
     } else {
         println!("📊 RGB Performance Statistics:");
         println!();
@@ -2040,19 +2054,10 @@ fn export_performance_stats(
     json: bool,
 ) -> Result<()> {
     if json {
-        let mut all_stats = HashMap::new();
-
-        for device_info in keyboards {
-            if let Ok(keyboard) = manager.open_keyboard(device_info) {
-                if let Some(stats) = keyboard.get_rgb_performance_stats() {
-                    all_stats.insert(device_info.name.to_string(), stats.clone());
-                }
-            }
-        }
-
+        let stats_map = StatsMapSerializer { manager, keyboards };
         let export_data = serde_json::json!({
             "timestamp": chrono::Utc::now().to_rfc3339(),
-            "devices": all_stats
+            "devices": stats_map
         });
 
         secure_write(output_path, serde_json::to_string_pretty(&export_data)?)
