@@ -1828,7 +1828,7 @@ async fn cmd_performance(manager: &DeviceManager, action: PerformanceAction) -> 
                     display_performance_stats(manager, &keyboards, json)?;
 
                     if let Some(ref output_path) = output {
-                        export_performance_stats(manager, &keyboards, output_path, json)?;
+                        export_performance_stats(manager, &keyboards, output_path, json).await?;
                     }
 
                     tokio::time::sleep(Duration::from_secs(interval_seconds)).await;
@@ -1837,7 +1837,7 @@ async fn cmd_performance(manager: &DeviceManager, action: PerformanceAction) -> 
                 display_performance_stats(manager, &keyboards, json)?;
 
                 if let Some(output_path) = output {
-                    export_performance_stats(manager, &keyboards, &output_path, json)?;
+                    export_performance_stats(manager, &keyboards, &output_path, json).await?;
                     println!("📄 Performance stats exported to: {}", output_path);
                 }
             }
@@ -2033,7 +2033,7 @@ fn display_performance_stats(manager: &DeviceManager, keyboards: &[&DeviceInfo],
     Ok(())
 }
 
-fn export_performance_stats(
+async fn export_performance_stats(
     manager: &DeviceManager,
     keyboards: &[&DeviceInfo],
     output_path: &str,
@@ -2055,7 +2055,8 @@ fn export_performance_stats(
             "devices": all_stats
         });
 
-        secure_write(output_path, serde_json::to_string_pretty(&export_data)?)
+        secure_write_async(output_path.to_string(), serde_json::to_string_pretty(&export_data)?)
+            .await
             .map_err(|e| Error::DeviceCommunication(format!("Failed to write stats: {}", e)))?;
     } else {
         let mut content = String::new();
@@ -2091,7 +2092,8 @@ fn export_performance_stats(
             }
         }
 
-        secure_write(output_path, content)
+        secure_write_async(output_path.to_string(), content)
+            .await
             .map_err(|e| Error::DeviceCommunication(format!("Failed to write stats: {}", e)))?;
     }
 
