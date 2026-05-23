@@ -297,8 +297,8 @@ All 87 `KeyId → KeyAddress` mappings in `src/devices/key_mapping.rs` are place
 
 ### Implementation tasks
 
-1. Extract verified `KeyAddress(row, col)` values for all 87 keys (or the TKL subset).
-2. Replace placeholder `KeyAddress::new(row, col)` calls with verified values.
+1. Extract verified HID codes or physical matrix addresses for all 87 keys (or the TKL subset).
+2. Replace placeholder KeyAddress::new(hid_code) calls with verified values.
 3. Remove or update `⚠️ PLACEHOLDER` warnings in `KEY_MAPPING_RESEARCH.md`.
 4. Confirm `simulate_per_key_with_zones()` fallback is no longer triggered.
 
