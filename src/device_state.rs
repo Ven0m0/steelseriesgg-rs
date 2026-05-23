@@ -171,7 +171,6 @@ pub struct DeviceState {
 #[serde(transparent)]
 struct SerializableStates(HashMap<String, DeviceState>);
 
-
 /// A zero-copy wrapper for serializing device states without cloning.
 struct SerializableStatesRef<'a>(&'a HashMap<DeviceId, DeviceState>);
 
