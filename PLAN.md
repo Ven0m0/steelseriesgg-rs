@@ -16,7 +16,7 @@ active TODO backlog into a single prioritized implementation order.
 
 ## 1. Constraints to preserve
 
-- Read `CLAUDE.md` before making code changes.
+- Read `CLAUDE.md` (same content as `AGENTS.md`) before making code changes.
 - Treat these files as source of truth when prose docs drift:
   - `Cargo.toml`, `rust-toolchain.toml`, `.github/workflows/ci.yml`, `src/devices/hid_reports.rs`
 - Keep `hidapi = "=2.6.6"` pinned unless a task explicitly requires changing it.
