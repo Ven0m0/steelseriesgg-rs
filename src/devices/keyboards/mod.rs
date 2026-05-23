@@ -50,7 +50,12 @@ pub trait Keyboard: Device {
 
     // === Per-Key RGB Control ===
 
-    /// Check if per-key RGB control is supported by this keyboard.
+    /// Check if per-key RGB key-mapping is available for this keyboard.
+    ///
+    /// ⚠️ **Experimental**: returning `true` means a HID key mapping exists, but the
+    /// per-key protocol (`CommandCode::PerKeyRgb`, `0x23`) has not been confirmed on
+    /// hardware. Calls to `set_key_color` / `set_key_colors` may be silently ignored by
+    /// the device until the packet format is verified via USB capture.
     fn supports_per_key_rgb(&self) -> bool {
         false
     }
@@ -62,37 +67,49 @@ pub trait Keyboard: Device {
 
     /// Set RGB color for a specific key by logical key ID.
     ///
-    /// Uses the keyboard's key mapping to convert logical key IDs to matrix addresses.
+    /// Uses the keyboard's key mapping to convert logical key IDs to HID codes.
     /// Returns an error if the key is not found in the mapping or per-key RGB is not supported.
+    ///
+    /// ⚠️ **Experimental**: uses `CommandCode::PerKeyRgb` (`0x23`), a placeholder command whose
+    /// packet format has not been confirmed on hardware. The device may silently ignore this command.
     async fn set_key_color(&mut self, _key_id: KeyId, _color: Color) -> Result<()> {
         Err(Error::DeviceCommunication("Per-key RGB not supported".to_string()))
     }
 
     /// Set RGB colors for multiple keys by logical key IDs.
     ///
-    /// Uses the keyboard's key mapping to convert logical key IDs to matrix addresses.
+    /// Uses the keyboard's key mapping to convert logical key IDs to HID codes.
     /// Keys not found in the mapping are ignored with a warning.
+    ///
+    /// ⚠️ **Experimental**: uses `CommandCode::PerKeyRgb` (`0x23`), a placeholder command whose
+    /// packet format has not been confirmed on hardware. The device may silently ignore this command.
     async fn set_key_colors(&mut self, _key_colors: &[(KeyId, Color)]) -> Result<()> {
         Ok(())
     }
 
-    /// Set RGB color for a specific key by direct matrix address.
+    /// Set RGB color for a specific key by direct HID code address.
     ///
-    /// Bypasses key mapping and directly addresses the key matrix.
-    /// Use with caution - invalid addresses may cause device issues.
+    /// Bypasses key mapping and directly addresses keys by USB HID Usage ID.
+    ///
+    /// ⚠️ **Experimental**: uses `CommandCode::PerKeyRgb` (`0x23`), a placeholder command whose
+    /// packet format has not been confirmed on hardware.
     async fn set_key_color_direct(&mut self, _address: KeyAddress, _color: Color) -> Result<()> {
         Ok(())
     }
 
-    /// Set RGB colors for multiple keys by direct matrix addresses.
+    /// Set RGB colors for multiple keys by direct HID code addresses.
     ///
-    /// Bypasses key mapping and directly addresses the key matrix.
-    /// Use with caution - invalid addresses may cause device issues.
+    /// Bypasses key mapping and directly addresses keys by USB HID Usage ID.
+    ///
+    /// ⚠️ **Experimental**: uses `CommandCode::PerKeyRgb` (`0x23`), a placeholder command whose
+    /// packet format has not been confirmed on hardware.
     async fn set_key_colors_direct(&mut self, _key_colors: &[(KeyAddress, Color)]) -> Result<()> {
         Ok(())
     }
 
     /// Set all keys to black (turn off per-key RGB).
+    ///
+    /// ⚠️ **Experimental**: uses `CommandCode::PerKeyRgb` (`0x23`); see `set_key_color`.
     async fn clear_per_key_rgb(&mut self) -> Result<()> {
         Ok(())
     }

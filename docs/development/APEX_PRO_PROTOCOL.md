@@ -159,7 +159,9 @@ The `write_padded_report()` function in `src/devices/mod.rs` includes a deduplic
 [0x00] [0x23] [hid_code] [R] [G] [B] [padding]
 ```
 
-> **✅ BREAKTHROUGH (2026-03-27):** Reverse engineering of SteelSeriesGG107.0.0Setup.exe revealed that SteelSeries uses **USB HID keycodes** (not row/col matrix addresses) for per-key addressing. The `hidCode` values are standard USB HID Usage IDs (0x04-0x64 for standard keys).
+> ⚠️ **UNVERIFIED** — the packet format above is speculative. The command byte `0x23` and the field layout have **not been confirmed via USB capture**. The device may silently ignore this report or require a different structure.
+
+> **Key-addressing breakthrough (2026-03-27):** Reverse engineering of SteelSeriesGG107.0.0Setup.exe confirmed that SteelSeries uses **USB HID keycodes** (not row/col matrix addresses) for per-key identification. The `hidCode` values are standard USB HID Usage IDs (0x04-0x64 for standard keys). The addressing *scheme* is verified; the *packet format* is not.
 
 **Key Findings:**
 - **Key Addressing:** Uses USB HID Usage IDs (e.g., 0x04 = A, 0x05 = B, 0x28 = Enter)

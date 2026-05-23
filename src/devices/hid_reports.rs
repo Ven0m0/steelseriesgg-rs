@@ -56,7 +56,7 @@ impl fmt::Display for CommandCode {
             CommandCode::Brightness => write!(f, "BRIGHTNESS"),
             CommandCode::ReactiveMode => write!(f, "REACTIVE"),
             CommandCode::ColorShift => write!(f, "COLOR_SHIFT"),
-            CommandCode::PerKeyRgb => write!(f, "PERKEY_RGB_22"),
+            CommandCode::PerKeyRgb => write!(f, "PERKEY_RGB_EXPERIMENTAL"),
             CommandCode::Apex2023Direct => write!(f, "APEX2023_DIRECT"),
             CommandCode::ActuationControl => write!(f, "ACTUATION_CTRL"),
         }

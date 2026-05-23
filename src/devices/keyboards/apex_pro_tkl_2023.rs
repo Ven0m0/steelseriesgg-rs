@@ -65,7 +65,10 @@ impl ApexProTkl2023 {
 
     /// Whether this is the wireless variant.
     fn is_wireless(&self) -> bool {
-        self.inner.info().product_id == product_ids::APEX_PRO_TKL_2023_WIRELESS
+        matches!(
+            self.inner.info().product_id,
+            product_ids::APEX_PRO_TKL_2023_WIRELESS | product_ids::APEX_PRO_TKL_2023_WIRELESS_2
+        )
     }
 
     /// Send the 0x4B initialization feature report required by new protocol.

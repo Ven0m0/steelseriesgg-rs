@@ -336,6 +336,9 @@ pub mod product_ids {
     // system, so we treat 0x1628 as the canonical 2023 TKL PID here.
     pub const APEX_PRO_TKL_2023: u16 = 0x1628;
     pub const APEX_PRO_TKL_2023_WIRELESS: u16 = 0x1632;
+    // PID 0x1630 is a different SKU of the Apex Pro TKL Wireless (2023), treated as
+    // identical to 0x1632 until hardware confirms otherwise (issue #165).
+    pub const APEX_PRO_TKL_2023_WIRELESS_2: u16 = 0x1630;
     pub const APEX_3: u16 = 0x161A;
     pub const APEX_3_TKL: u16 = 0x1622;
     pub const APEX_5: u16 = 0x161C;
@@ -355,6 +358,7 @@ pub mod product_ids {
     pub const ARCTIS_NOVA_5: u16 = 0x12EA;
     pub const ARCTIS_NOVA_3: u16 = 0x12EC;
     pub const ARCTIS_NOVA_1: u16 = 0x12EE;
+    pub const ARCTIS_NOVA_PRO_OMNI: u16 = 0x2290;
 }
 
 /// Get device type from product ID.
@@ -363,7 +367,15 @@ pub fn device_type_from_product_id(product_id: u16) -> DeviceType {
 
     match product_id {
         // Keyboards
-        APEX_PRO | APEX_PRO_TKL | APEX_PRO_TKL_2023 | APEX_PRO_TKL_2023_WIRELESS | APEX_3 | APEX_3_TKL | APEX_5 | APEX_7
+        APEX_PRO
+        | APEX_PRO_TKL
+        | APEX_PRO_TKL_2023
+        | APEX_PRO_TKL_2023_WIRELESS
+        | APEX_PRO_TKL_2023_WIRELESS_2
+        | APEX_3
+        | APEX_3_TKL
+        | APEX_5
+        | APEX_7
         | APEX_7_TKL => DeviceType::Keyboard,
 
         // Headsets
@@ -378,7 +390,8 @@ pub fn device_type_from_product_id(product_id: u16) -> DeviceType {
         | ARCTIS_NOVA_PRO_WIRELESS
         | ARCTIS_NOVA_5
         | ARCTIS_NOVA_3
-        | ARCTIS_NOVA_1 => DeviceType::Headset,
+        | ARCTIS_NOVA_1
+        | ARCTIS_NOVA_PRO_OMNI => DeviceType::Headset,
 
         _ => DeviceType::Unknown,
     }
@@ -392,7 +405,7 @@ pub fn device_name_from_product_id(product_id: u16) -> &'static str {
         APEX_PRO => "Apex Pro",
         APEX_PRO_TKL => "Apex Pro TKL",
         APEX_PRO_TKL_2023 => "Apex Pro TKL (2023)",
-        APEX_PRO_TKL_2023_WIRELESS => "Apex Pro TKL (2023) Wireless",
+        APEX_PRO_TKL_2023_WIRELESS | APEX_PRO_TKL_2023_WIRELESS_2 => "Apex Pro TKL (2023) Wireless",
         APEX_3 => "Apex 3",
         APEX_3_TKL => "Apex 3 TKL",
         APEX_5 => "Apex 5",
@@ -410,6 +423,7 @@ pub fn device_name_from_product_id(product_id: u16) -> &'static str {
         ARCTIS_NOVA_5 => "Arctis Nova 5",
         ARCTIS_NOVA_3 => "Arctis Nova 3",
         ARCTIS_NOVA_1 => "Arctis Nova 1",
+        ARCTIS_NOVA_PRO_OMNI => "Arctis Nova Pro Omni",
         _ => "Unknown SteelSeries Device",
     }
 }
@@ -420,11 +434,11 @@ pub fn zone_count_for_product_id(product_id: u16) -> usize {
     use product_ids::*;
 
     match product_id {
-        APEX_3 => 10,                                                // Apex 3 - 10 zones
-        APEX_3_TKL => 9,                                             // Apex 3 TKL - 9 zones
-        APEX_PRO_TKL_2023 | APEX_PRO_TKL_2023_WIRELESS => 9,         // Apex Pro TKL (2023) - 9 zones
-        APEX_PRO | APEX_PRO_TKL | APEX_5 | APEX_7 | APEX_7_TKL => 1, // Single zone for now
-        _ => 1,                                                      // Default single zone
+        APEX_3 => 10,                                                                       // Apex 3 - 10 zones
+        APEX_3_TKL => 9,                                                                    // Apex 3 TKL - 9 zones
+        APEX_PRO_TKL_2023 | APEX_PRO_TKL_2023_WIRELESS | APEX_PRO_TKL_2023_WIRELESS_2 => 9, // Apex Pro TKL (2023) - 9 zones
+        APEX_PRO | APEX_PRO_TKL | APEX_5 | APEX_7 | APEX_7_TKL => 1,                        // Single zone for now
+        _ => 1,                                                                             // Default single zone
     }
 }
 
@@ -484,5 +498,33 @@ mod tests {
         // Test zone_count_for_product_id
         assert_eq!(zone_count_for_product_id(APEX_3), 10);
         assert_eq!(zone_count_for_product_id(0xFFFF), 1);
+    }
+
+    #[test]
+    fn test_arctis_nova_pro_omni_pid() {
+        use product_ids::*;
+
+        assert_eq!(ARCTIS_NOVA_PRO_OMNI, 0x2290);
+        assert_eq!(device_type_from_product_id(ARCTIS_NOVA_PRO_OMNI), DeviceType::Headset);
+        assert_eq!(
+            device_name_from_product_id(ARCTIS_NOVA_PRO_OMNI),
+            "Arctis Nova Pro Omni"
+        );
+    }
+
+    #[test]
+    fn test_apex_pro_tkl_2023_wireless_2_pid() {
+        use product_ids::*;
+
+        assert_eq!(APEX_PRO_TKL_2023_WIRELESS_2, 0x1630);
+        assert_eq!(
+            device_type_from_product_id(APEX_PRO_TKL_2023_WIRELESS_2),
+            DeviceType::Keyboard
+        );
+        assert_eq!(
+            device_name_from_product_id(APEX_PRO_TKL_2023_WIRELESS_2),
+            "Apex Pro TKL (2023) Wireless"
+        );
+        assert_eq!(zone_count_for_product_id(APEX_PRO_TKL_2023_WIRELESS_2), 9);
     }
 }
