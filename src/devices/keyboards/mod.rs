@@ -830,16 +830,7 @@ impl Keyboard for GenericKeyboard {
             },
 
             PerKeyEffect::Spectrum { speed: _ } => ZoneEffect::Wave {
-                colors: vec![
-                    Color::RED,
-                    Color::ORANGE,
-                    Color::YELLOW,
-                    Color::GREEN,
-                    Color::CYAN,
-                    Color::BLUE,
-                    Color::PURPLE,
-                    Color::MAGENTA,
-                ],
+                colors: Color::RAINBOW_COLORS.to_vec(),
                 offset: 0.0,
             },
 

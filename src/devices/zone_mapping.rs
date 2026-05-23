@@ -503,16 +503,7 @@ impl ZoneFallback {
     pub fn pattern_to_zone_effect(&self, pattern: &str) -> Option<ZoneEffect> {
         match pattern.to_lowercase().as_str() {
             "rainbow" => Some(ZoneEffect::Wave {
-                colors: vec![
-                    Color::RED,
-                    Color::ORANGE,
-                    Color::YELLOW,
-                    Color::GREEN,
-                    Color::CYAN,
-                    Color::BLUE,
-                    Color::PURPLE,
-                    Color::MAGENTA,
-                ],
+                colors: Color::RAINBOW_COLORS.to_vec(),
                 offset: 0.0,
             }),
             "breathing" => Some(ZoneEffect::Breathing {

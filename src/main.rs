@@ -830,15 +830,7 @@ async fn cmd_rgb(manager: &DeviceManager, action: RgbAction) -> Result<()> {
                 },
                 "spectrum" => Effect::Spectrum { speed },
                 "wave" => Effect::Wave {
-                    colors: vec![
-                        Color::RED,
-                        Color::ORANGE,
-                        Color::YELLOW,
-                        Color::GREEN,
-                        Color::CYAN,
-                        Color::BLUE,
-                        Color::PURPLE,
-                    ],
+                    colors: Color::DEFAULT_COLORS.to_vec(),
                     speed,
                     direction: WaveDirection::LeftToRight,
                 },
@@ -1104,16 +1096,7 @@ async fn cmd_per_key_rgb(keyboard: &mut Box<dyn Keyboard>, action: PerKeyAction)
 
 // Helper functions for pattern testing
 async fn test_rainbow_pattern(keyboard: &mut Box<dyn Keyboard>) -> Result<()> {
-    let colors = [
-        Color::RED,
-        Color::ORANGE,
-        Color::YELLOW,
-        Color::GREEN,
-        Color::CYAN,
-        Color::BLUE,
-        Color::PURPLE,
-        Color::MAGENTA,
-    ];
+    let colors = Color::RAINBOW_COLORS;
 
     if keyboard.supports_per_key_rgb() {
         // Use logical key mapping if available

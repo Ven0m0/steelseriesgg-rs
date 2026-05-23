@@ -56,6 +56,29 @@ impl Color {
     /// Pink.
     pub const PINK: Color = Color::new(255, 105, 180);
 
+    /// Default 7-color sequence for wave effects.
+    pub const DEFAULT_COLORS: [Color; 7] = [
+        Color::RED,
+        Color::ORANGE,
+        Color::YELLOW,
+        Color::GREEN,
+        Color::CYAN,
+        Color::BLUE,
+        Color::PURPLE,
+    ];
+
+    /// Standard 8-color rainbow sequence.
+    pub const RAINBOW_COLORS: [Color; 8] = [
+        Color::RED,
+        Color::ORANGE,
+        Color::YELLOW,
+        Color::GREEN,
+        Color::CYAN,
+        Color::BLUE,
+        Color::PURPLE,
+        Color::MAGENTA,
+    ];
+
     /// Blend between two colors.
     #[inline]
     pub fn blend(a: Color, b: Color, t: f32) -> Color {
