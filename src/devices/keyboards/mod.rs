@@ -512,15 +512,9 @@ impl GenericKeyboard {
             return Color::BLACK;
         }
 
-        let mut total_r = 0u32;
-        let mut total_g = 0u32;
-        let mut total_b = 0u32;
-
-        for (_, color) in key_colors {
-            total_r += color.r as u32;
-            total_g += color.g as u32;
-            total_b += color.b as u32;
-        }
+        let (total_r, total_g, total_b) = key_colors.iter().fold((0u32, 0u32, 0u32), |(r, g, b), (_, color)| {
+            (r + color.r as u32, g + color.g as u32, b + color.b as u32)
+        });
 
         let count = key_colors.len() as u32;
         Color::new(
@@ -830,16 +824,7 @@ impl Keyboard for GenericKeyboard {
             },
 
             PerKeyEffect::Spectrum { speed: _ } => ZoneEffect::Wave {
-                colors: vec![
-                    Color::RED,
-                    Color::ORANGE,
-                    Color::YELLOW,
-                    Color::GREEN,
-                    Color::CYAN,
-                    Color::BLUE,
-                    Color::PURPLE,
-                    Color::MAGENTA,
-                ],
+                colors: Color::RAINBOW_COLORS.to_vec(),
                 offset: 0.0,
             },
 
@@ -877,16 +862,11 @@ impl Keyboard for GenericKeyboard {
                 if key_colors.is_empty() {
                     ZoneEffect::Solid(Color::BLACK)
                 } else {
-                    let mut total_r = 0u32;
-                    let mut total_g = 0u32;
-                    let mut total_b = 0u32;
+                    let (total_r, total_g, total_b) =
+                        key_colors.values().fold((0u32, 0u32, 0u32), |(r, g, b), color| {
+                            (r + color.r as u32, g + color.g as u32, b + color.b as u32)
+                        });
                     let count = key_colors.len() as u32;
-
-                    for color in key_colors.values() {
-                        total_r += color.r as u32;
-                        total_g += color.g as u32;
-                        total_b += color.b as u32;
-                    }
 
                     let avg_color = Color::new(
                         (total_r / count) as u8,

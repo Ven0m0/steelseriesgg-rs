@@ -830,15 +830,7 @@ async fn cmd_rgb(manager: &DeviceManager, action: RgbAction) -> Result<()> {
                 },
                 "spectrum" => Effect::Spectrum { speed },
                 "wave" => Effect::Wave {
-                    colors: vec![
-                        Color::RED,
-                        Color::ORANGE,
-                        Color::YELLOW,
-                        Color::GREEN,
-                        Color::CYAN,
-                        Color::BLUE,
-                        Color::PURPLE,
-                    ],
+                    colors: Color::DEFAULT_COLORS.to_vec(),
                     speed,
                     direction: WaveDirection::LeftToRight,
                 },
@@ -1104,16 +1096,7 @@ async fn cmd_per_key_rgb(keyboard: &mut Box<dyn Keyboard>, action: PerKeyAction)
 
 // Helper functions for pattern testing
 async fn test_rainbow_pattern(keyboard: &mut Box<dyn Keyboard>) -> Result<()> {
-    let colors = [
-        Color::RED,
-        Color::ORANGE,
-        Color::YELLOW,
-        Color::GREEN,
-        Color::CYAN,
-        Color::BLUE,
-        Color::PURPLE,
-        Color::MAGENTA,
-    ];
+    let colors = Color::RAINBOW_COLORS;
 
     if keyboard.supports_per_key_rgb() {
         // Use logical key mapping if available
@@ -1828,7 +1811,7 @@ async fn cmd_performance(manager: &DeviceManager, action: PerformanceAction) -> 
                     display_performance_stats(manager, &keyboards, json)?;
 
                     if let Some(ref output_path) = output {
-                        export_performance_stats(manager, &keyboards, output_path, json)?;
+                        export_performance_stats(manager, &keyboards, output_path, json).await?;
                     }
 
                     tokio::time::sleep(Duration::from_secs(interval_seconds)).await;
@@ -1837,7 +1820,7 @@ async fn cmd_performance(manager: &DeviceManager, action: PerformanceAction) -> 
                 display_performance_stats(manager, &keyboards, json)?;
 
                 if let Some(output_path) = output {
-                    export_performance_stats(manager, &keyboards, &output_path, json)?;
+                    export_performance_stats(manager, &keyboards, &output_path, json).await?;
                     println!("📄 Performance stats exported to: {}", output_path);
                 }
             }
@@ -1980,19 +1963,33 @@ async fn cmd_performance(manager: &DeviceManager, action: PerformanceAction) -> 
     Ok(())
 }
 
-fn display_performance_stats(manager: &DeviceManager, keyboards: &[&DeviceInfo], json: bool) -> Result<()> {
-    if json {
-        let mut all_stats = HashMap::new();
+struct StatsMapSerializer<'a> {
+    manager: &'a DeviceManager,
+    keyboards: &'a [&'a DeviceInfo],
+}
 
-        for device_info in keyboards {
-            if let Ok(keyboard) = manager.open_keyboard(device_info) {
+impl<'a> serde::Serialize for StatsMapSerializer<'a> {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeMap;
+        let mut map = serializer.serialize_map(None)?;
+        for device_info in self.keyboards {
+            if let Ok(keyboard) = self.manager.open_keyboard(device_info) {
                 if let Some(stats) = keyboard.get_rgb_performance_stats() {
-                    all_stats.insert(device_info.name.to_string(), stats.clone());
+                    map.serialize_entry(&device_info.name, stats)?;
                 }
             }
         }
+        map.end()
+    }
+}
 
-        println!("{}", serde_json::to_string_pretty(&all_stats)?);
+fn display_performance_stats(manager: &DeviceManager, keyboards: &[&DeviceInfo], json: bool) -> Result<()> {
+    if json {
+        let stats_map = StatsMapSerializer { manager, keyboards };
+        println!("{}", serde_json::to_string_pretty(&stats_map)?);
     } else {
         println!("📊 RGB Performance Statistics:");
         println!();
@@ -2033,30 +2030,22 @@ fn display_performance_stats(manager: &DeviceManager, keyboards: &[&DeviceInfo],
     Ok(())
 }
 
-fn export_performance_stats(
+async fn export_performance_stats(
     manager: &DeviceManager,
     keyboards: &[&DeviceInfo],
     output_path: &str,
     json: bool,
 ) -> Result<()> {
     if json {
-        let mut all_stats = HashMap::new();
-
-        for device_info in keyboards {
-            if let Ok(keyboard) = manager.open_keyboard(device_info) {
-                if let Some(stats) = keyboard.get_rgb_performance_stats() {
-                    all_stats.insert(device_info.name.to_string(), stats.clone());
-                }
-            }
-        }
-
+        let stats_map = StatsMapSerializer { manager, keyboards };
         let export_data = serde_json::json!({
             "timestamp": chrono::Utc::now().to_rfc3339(),
-            "devices": all_stats
+            "devices": stats_map
         });
 
-        secure_write(output_path, serde_json::to_string_pretty(&export_data)?)
-            .map_err(|e| Error::DeviceCommunication(format!("Failed to write stats: {}", e)))?;
+        secure_write_async(output_path.to_string(), serde_json::to_string_pretty(&export_data)?)
+            .await
+            .map_err(|e| Error::FileSystemError(format!("Failed to write stats: {}", e)))?;
     } else {
         let mut content = String::new();
         content.push_str("# RGB Performance Statistics Report\n\n");
@@ -2091,8 +2080,9 @@ fn export_performance_stats(
             }
         }
 
-        secure_write(output_path, content)
-            .map_err(|e| Error::DeviceCommunication(format!("Failed to write stats: {}", e)))?;
+        secure_write_async(output_path.to_string(), content)
+            .await
+            .map_err(|e| Error::FileSystemError(format!("Failed to write stats: {}", e)))?;
     }
 
     Ok(())
@@ -2194,36 +2184,8 @@ impl DaemonState {
                             }
                         } else if let Some(ref profile_manager) = self.profile_manager {
                             // Try to apply default profile
-                            if let Some(default_profile) = profile_manager.get("default") {
-                                if let Some(ref keyboard_profile) = default_profile.keyboard {
-                                    rgb_controller.set_effect(keyboard_profile.effect.clone());
-                                    rgb_controller.set_brightness(keyboard_profile.brightness as f32 / 100.0);
-
-                                    match &keyboard_profile.effect {
-                                        Effect::Static { color } => {
-                                            if let Err(e) = keyboard.set_color(*color).await {
-                                                warn!("Failed to apply default profile color to {}: {}", info.name, e);
-                                            }
-                                        }
-                                        Effect::Off => {
-                                            if let Err(e) = keyboard.set_color(Color::BLACK).await {
-                                                warn!("Failed to turn off {} (default profile): {}", info.name, e);
-                                            }
-                                        }
-                                        _ => {
-                                            info!(
-                                                "Applied default animated profile for {} (will be handled by animation loop)",
-                                                info.name
-                                            );
-                                        }
-                                    }
-
-                                    info!(
-                                        "Applied default profile to {}: brightness={}%, effect={:?}",
-                                        info.name, keyboard_profile.brightness, keyboard_profile.effect
-                                    );
-                                }
-                            }
+                            Self::apply_default_profile(profile_manager, keyboard.as_mut(), &mut rgb_controller, info)
+                                .await;
                         }
 
                         // Store device information
@@ -2268,6 +2230,47 @@ impl DaemonState {
         }
 
         Ok(())
+    }
+
+    async fn apply_default_profile(
+        profile_manager: &ProfileManager,
+        keyboard: &mut dyn Keyboard,
+        rgb_controller: &mut RgbController,
+        info: &DeviceInfo,
+    ) {
+        let Some(default_profile) = profile_manager.get("default") else {
+            return;
+        };
+        let Some(ref keyboard_profile) = default_profile.keyboard else {
+            return;
+        };
+
+        rgb_controller.set_effect(keyboard_profile.effect.clone());
+        rgb_controller.set_brightness(keyboard_profile.brightness as f32 / 100.0);
+
+        match &keyboard_profile.effect {
+            Effect::Static { color } => {
+                if let Err(e) = keyboard.set_color(*color).await {
+                    warn!("Failed to apply default profile color to {}: {}", info.name, e);
+                }
+            }
+            Effect::Off => {
+                if let Err(e) = keyboard.set_color(Color::BLACK).await {
+                    warn!("Failed to turn off {} (default profile): {}", info.name, e);
+                }
+            }
+            _ => {
+                info!(
+                    "Applied default animated profile for {} (will be handled by animation loop)",
+                    info.name
+                );
+            }
+        }
+
+        info!(
+            "Applied default profile to {}: brightness={}%, effect={:?}",
+            info.name, keyboard_profile.brightness, keyboard_profile.effect
+        );
     }
 
     /// Get current device count for monitoring
@@ -3169,17 +3172,17 @@ async fn run_animation_loop(daemon_state_anim: Arc<RwLock<DaemonState>>) {
             // First, remove the keyboard entry from the map while holding the lock
             let keyboard_entry = {
                 let mut state = daemon_state_anim.write().await;
-                state.keyboards.remove(serial.as_str())
+                state.keyboards.remove_entry(serial.as_str())
             };
 
-            if let Some((mut keyboard, controller, other)) = keyboard_entry {
+            if let Some((owned_serial, (mut keyboard, controller, other))) = keyboard_entry {
                 if let Err(e) = keyboard.set_zone_colors(colors).await {
                     tracing::warn!("Failed to update keyboard {}: {}", serial, e);
                 }
 
                 // Reinsert the keyboard entry after the async operation completes
                 let mut state = daemon_state_anim.write().await;
-                state.keyboards.insert(serial.clone(), (keyboard, controller, other));
+                state.keyboards.insert(owned_serial, (keyboard, controller, other));
             }
         }
 

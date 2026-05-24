@@ -26,13 +26,13 @@ type RgbCallback = Box<dyn Fn(&str, u8, u8, u8) + Send + Sync>;
 /// Shared server state.
 struct ServerState {
     /// Registered games - pre-allocate capacity for typical usage
-    games: HashMap<String, GameMetadata>,
+    games: HashMap<Arc<String>, GameMetadata>,
 
     /// Event bindings per game - use nested HashMap with better initial capacity
-    bindings: HashMap<String, HashMap<String, EventBinding>>,
+    bindings: HashMap<Arc<String>, HashMap<Arc<String>, EventBinding>>,
 
     /// Last event values - optimize for frequent access
-    event_values: HashMap<String, HashMap<String, i32>>,
+    event_values: HashMap<Arc<String>, HashMap<Arc<String>, i32>>,
 
     /// Callback for RGB updates.
     rgb_callback: Option<RgbCallback>,
@@ -203,11 +203,8 @@ impl GameSenseServer {
 
             // Fallback for non-unix platforms
             let json = serde_json::to_string_pretty(content)?;
-            let mut options = std::fs::OpenOptions::new();
-            options.write(true).create(true).truncate(true);
+            crate::fs_utils::secure_write(&path, json.as_bytes())?;
 
-            let mut file = options.open(path)?;
-            std::io::Write::write_all(&mut file, json.as_bytes())?;
             debug!("Wrote JSON to {:?}", path);
         }
 
@@ -291,7 +288,7 @@ async fn register_game(
 
     info!("Registering game: {} ({})", metadata.game_display_name, metadata.game);
 
-    state.games.insert(metadata.game.clone(), metadata);
+    state.games.insert(Arc::new(metadata.game.clone()), metadata);
 
     (StatusCode::OK, Json(ApiResponse::success()))
 }
@@ -305,8 +302,22 @@ async fn bind_event(
 
     debug!("Binding event: {}:{}", binding.game, binding.event);
 
-    let game_bindings = state.bindings.entry(binding.game.clone()).or_default();
-    game_bindings.insert(binding.event.clone(), binding);
+    // Reuse existing Arc<String> keys to avoid allocations on hot paths
+    let game_key = state
+        .games
+        .get_key_value(&binding.game)
+        .map(|(k, _)| Arc::clone(k))
+        .or_else(|| state.bindings.get_key_value(&binding.game).map(|(k, _)| Arc::clone(k)))
+        .unwrap_or_else(|| Arc::new(binding.game.clone()));
+
+    let game_bindings = state.bindings.entry(game_key).or_default();
+
+    let event_key = game_bindings
+        .get_key_value(&binding.event)
+        .map(|(k, _)| Arc::clone(k))
+        .unwrap_or_else(|| Arc::new(binding.event.clone()));
+
+    game_bindings.insert(event_key, binding);
 
     (StatusCode::OK, Json(ApiResponse::success()))
 }
@@ -318,11 +329,22 @@ async fn game_event(State(state): State<AppState>, Json(event): Json<GameEvent>)
     // Store the event value with write lock (brief critical section)
     {
         let mut state_write = state.write();
-        state_write
-            .event_values
-            .entry(event.game.clone())
-            .or_default()
-            .insert(event.event.clone(), event.data.value);
+
+        let game_key = state_write
+            .bindings
+            .get_key_value(&event.game)
+            .map(|(k, _)| Arc::clone(k))
+            .or_else(|| state_write.games.get_key_value(&event.game).map(|(k, _)| Arc::clone(k)))
+            .unwrap_or_else(|| Arc::new(event.game.clone()));
+
+        let game_events = state_write.event_values.entry(game_key).or_default();
+
+        let event_key = game_events
+            .get_key_value(&event.event)
+            .map(|(k, _)| Arc::clone(k))
+            .unwrap_or_else(|| Arc::new(event.event.clone()));
+
+        game_events.insert(event_key, event.data.value);
     } // Write lock released here
 
     // Process handlers with read lock to allow concurrent event handling

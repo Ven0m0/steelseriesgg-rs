@@ -171,13 +171,6 @@ pub struct DeviceState {
 #[serde(transparent)]
 struct SerializableStates(HashMap<String, DeviceState>);
 
-impl From<&HashMap<DeviceId, DeviceState>> for SerializableStates {
-    fn from(states: &HashMap<DeviceId, DeviceState>) -> Self {
-        let map = states.iter().map(|(id, state)| (id.to_key(), state.clone())).collect();
-        SerializableStates(map)
-    }
-}
-
 /// A zero-copy wrapper for serializing device states without cloning.
 struct SerializableStatesRef<'a>(&'a HashMap<DeviceId, DeviceState>);
 
