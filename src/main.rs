@@ -3253,21 +3253,37 @@ async fn wait_for_shutdown() -> Result<()> {
 
 async fn save_final_device_states(daemon_state: Arc<RwLock<DaemonState>>) {
     let state = daemon_state.read().await;
-    let mut keyboard_updates = Vec::new();
 
-    for (_keyboard, controller, info) in state.keyboards.values() {
-        let device_id = DeviceId::from(info);
-        let final_state = KeyboardState {
-            effect: controller.effect().clone(),
-            brightness: (controller.brightness() * 100.0) as u8,
-        };
-        keyboard_updates.push((device_id, final_state));
-    }
+    let update_result = state.state_store.update_states_with(|states| {
+        let mut changed = false;
+        for (_keyboard, controller, info) in state.keyboards.values() {
+            let brightness = (controller.brightness() * 100.0) as u8;
+            let effect = controller.effect();
 
-    // Currently we don't extract headset state, but we provide the empty vector for the batch call
-    let headset_updates = Vec::new();
+            // Find existing entry or create a new one. We only clone info to DeviceId if
+            // we really need to insert a new entry, or if we find it easier to use the entry API.
+            // Using loose match to avoid unnecessary DeviceId clones when possible.
+            let device_id = DeviceId::from(info);
+            let device_state = states.entry(device_id).or_default();
 
-    if let Err(e) = state.state_store.update_states(keyboard_updates, headset_updates) {
+            if let Some(ref mut k_state) = device_state.keyboard {
+                if k_state.brightness != brightness || &k_state.effect != effect {
+                    k_state.brightness = brightness;
+                    k_state.effect = effect.clone();
+                    changed = true;
+                }
+            } else {
+                device_state.keyboard = Some(KeyboardState {
+                    effect: effect.clone(),
+                    brightness,
+                });
+                changed = true;
+            }
+        }
+        changed
+    });
+
+    if let Err(e) = update_result {
         warn!("Failed to batch update final states: {}", e);
     } else {
         debug!(
