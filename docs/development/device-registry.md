@@ -22,8 +22,8 @@ Source: `src/devices/mod.rs` (ssgg), cross-referenced with connected hardware.
 | `APEX_7` | 0x1612 | Apex 7 | 1 | No | No | Unverified |
 | `APEX_7_TKL` | 0x1616 | Apex 7 TKL | 1 | No | No | Unverified |
 
-**Zone count note**: `APEX_PRO`, `APEX_PRO_TKL`, `APEX_5`, `APEX_7`, `APEX_7_TKL` all return `1` 
-zone in `zone_count_for_product_id()`. These devices likely have multiple zones — pending 
+**Zone count note**: `APEX_PRO`, `APEX_PRO_TKL`, `APEX_5`, `APEX_7`, `APEX_7_TKL` all return `1`
+zone in `zone_count_for_product_id()`. These devices likely have multiple zones — pending
 verification from GG.Models.dll decompilation or USBPcap captures.
 
 ### Headsets
