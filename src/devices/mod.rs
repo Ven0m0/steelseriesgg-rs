@@ -329,32 +329,75 @@ pub fn find_hidraw_for_interface(vendor_id: u16, product_id: u16, interface: usi
 
 pub mod product_ids {
     // Keyboards - Apex Series
+    // Source: GG firmware registry (firmware/<VID<<16|PID>/version.json), 2026-05-26.
+    // Formula: folder_id = (VID << 16) | PID, VID = 0x1038 for all SteelSeries devices.
     pub const APEX_PRO: u16 = 0x1610;
-    pub const APEX_PRO_TKL: u16 = 0x1614;
-    // NOTE: On actual Apex Pro TKL (2023) hardware we observe PID 0x1628.
-    // The previously documented 0x1618 value does not match the device on this
-    // system, so we treat 0x1628 as the canonical 2023 TKL PID here.
-    pub const APEX_PRO_TKL_2023: u16 = 0x1628;
-    pub const APEX_PRO_TKL_2023_WIRELESS: u16 = 0x1632;
-    pub const APEX_3: u16 = 0x161A;
-    pub const APEX_3_TKL: u16 = 0x1622;
-    pub const APEX_5: u16 = 0x161C;
     pub const APEX_7: u16 = 0x1612;
-    pub const APEX_7_TKL: u16 = 0x1616;
+    pub const APEX_PRO_TKL: u16 = 0x1614;
+    // GG firmware names this "apex_150" — different product from Apex 7 TKL.
+    pub const APEX_150: u16 = 0x1616;
+    // GG firmware confirms apex_7_tkl = 0x1618. Previously ssgg had 0x1616 here (wrong).
+    pub const APEX_7_TKL: u16 = 0x1618;
+    pub const APEX_3: u16 = 0x161A;
+    pub const APEX_5: u16 = 0x161C;
+    // Unverified — GG firmware names; no hardware confirmation for RGB protocol.
+    pub const APEX_PRO_MINI: u16 = 0x161E;
+    pub const APEX_9_MINI: u16 = 0x1620;
+    pub const APEX_3_TKL: u16 = 0x1622;
+    pub const APEX_PRO_MINI_WIRELESS_DONGLE: u16 = 0x1624;
+    pub const APEX_PRO_MINI_WIRELESS: u16 = 0x1626;
+    // NOTE: On actual Apex Pro TKL (2023) hardware we observe PID 0x1628.
+    // GG firmware calls this "apex_pro_tkl_2022" internally.
+    pub const APEX_PRO_TKL_2023: u16 = 0x1628;
+    // PID 0x1630 is the wireless dongle (TX); 0x1632 is the wireless headset (RX).
+    pub const APEX_PRO_TKL_2023_WIRELESS_2: u16 = 0x1630;
+    pub const APEX_PRO_TKL_2023_WIRELESS: u16 = 0x1632;
+    // Unverified — GG firmware names; no hardware confirmation.
+    pub const APEX_9_TKL: u16 = 0x1634;
+    pub const APEX_PRO_2024: u16 = 0x1640;
+    pub const APEX_PRO_TKL_2024: u16 = 0x1642;
+    pub const APEX_PRO_TKL_WIRELESS_2024_DONGLE: u16 = 0x1644;
+    pub const APEX_PRO_TKL_WIRELESS_2024: u16 = 0x1646;
+    pub const APEX_PRO_MINI_2024: u16 = 0x1648;
+    pub const APEX_5_2024: u16 = 0x1650;
+    pub const APEX_7_2024: u16 = 0x1652;
 
     // Headsets - Arctis Series
-    pub const ARCTIS_1: u16 = 0x12AD; // Note: ARCTIS_7 (2017) also uses this ID
-    pub const ARCTIS_1_WIRELESS: u16 = 0x12B3;
-    pub const ARCTIS_5: u16 = 0x12AA;
-    pub const ARCTIS_7_2019: u16 = 0x12CF;
-    pub const ARCTIS_9: u16 = 0x12C2;
+    // Source: GG firmware registry, 2026-05-26.
     pub const ARCTIS_PRO: u16 = 0x1252;
     pub const ARCTIS_PRO_WIRELESS: u16 = 0x1290;
+    pub const ARCTIS_5: u16 = 0x12AA; // arctis_5_2018
+    // 0x12AD is the Arctis 7 (2018) TX dongle in GG firmware. Also used as Arctis 1 ID.
+    pub const ARCTIS_1: u16 = 0x12AD;
+    pub const ARCTIS_1_WIRELESS: u16 = 0x12B3; // arctis_1w_tx
+    pub const ARCTIS_9: u16 = 0x12C2; // arctis_9_tx
+    pub const ARCTIS_NOVA_PRO_WIRED: u16 = 0x12CB; // arctis_nova_pro (wired, GG firmware)
+    // 0x12CF not found in GG firmware registry; community-reported PID for Arctis 7 2019.
+    pub const ARCTIS_7_2019: u16 = 0x12CF;
+    // 0x12E0 is the Nova Pro Wireless TX dongle in GG firmware (arctis_nova_pro_wireless_tx).
     pub const ARCTIS_NOVA_PRO: u16 = 0x12E0;
+    // 0x12E4 not found in GG firmware registry; keeping for backward compat.
     pub const ARCTIS_NOVA_PRO_WIRELESS: u16 = 0x12E4;
+    pub const ARCTIS_NOVA_3: u16 = 0x12EC; // arctis_nova_3
+    // 0x12EA and 0x12EE not in GG firmware registry; may be community-sourced or wrong.
+    // GG's Arctis Nova 5 uses 0x2230 (RX) / 0x2232 (TX).
     pub const ARCTIS_NOVA_5: u16 = 0x12EA;
-    pub const ARCTIS_NOVA_3: u16 = 0x12EC;
     pub const ARCTIS_NOVA_1: u16 = 0x12EE;
+    // Arctis Nova 7 series (unverified — GG firmware names only, no protocol confirmation).
+    pub const ARCTIS_NOVA_7_RX: u16 = 0x2200;
+    pub const ARCTIS_NOVA_7_TX: u16 = 0x2202;
+    pub const ARCTIS_NOVA_7X_RX: u16 = 0x2204;
+    pub const ARCTIS_NOVA_7X_TX: u16 = 0x2206;
+    pub const ARCTIS_NOVA_7P_RX: u16 = 0x2208;
+    pub const ARCTIS_NOVA_7P_TX: u16 = 0x220A;
+    // Arctis Nova 5 correct PIDs (GG firmware); 0x12EA above may be wrong.
+    pub const ARCTIS_NOVA_5_RX: u16 = 0x2230;
+    pub const ARCTIS_NOVA_5_TX: u16 = 0x2232;
+    // Arctis Nova Pro Omni — confirmed added in PR #244.
+    pub const ARCTIS_NOVA_PRO_OMNI: u16 = 0x2290;
+    // Arctis Nova 3 Wireless (unverified — GG firmware names only).
+    pub const ARCTIS_NOVA_3_WIRELESS_RX: u16 = 0x2267;
+    pub const ARCTIS_NOVA_3_WIRELESS_TX: u16 = 0x2269;
 }
 
 /// Get device type from product ID.
@@ -363,22 +406,55 @@ pub fn device_type_from_product_id(product_id: u16) -> DeviceType {
 
     match product_id {
         // Keyboards
-        APEX_PRO | APEX_PRO_TKL | APEX_PRO_TKL_2023 | APEX_PRO_TKL_2023_WIRELESS | APEX_3 | APEX_3_TKL | APEX_5 | APEX_7
-        | APEX_7_TKL => DeviceType::Keyboard,
+        APEX_PRO
+        | APEX_7
+        | APEX_PRO_TKL
+        | APEX_150
+        | APEX_7_TKL
+        | APEX_3
+        | APEX_5
+        | APEX_PRO_MINI
+        | APEX_9_MINI
+        | APEX_3_TKL
+        | APEX_PRO_MINI_WIRELESS_DONGLE
+        | APEX_PRO_MINI_WIRELESS
+        | APEX_PRO_TKL_2023
+        | APEX_PRO_TKL_2023_WIRELESS_2
+        | APEX_PRO_TKL_2023_WIRELESS
+        | APEX_9_TKL
+        | APEX_PRO_2024
+        | APEX_PRO_TKL_2024
+        | APEX_PRO_TKL_WIRELESS_2024_DONGLE
+        | APEX_PRO_TKL_WIRELESS_2024
+        | APEX_PRO_MINI_2024
+        | APEX_5_2024
+        | APEX_7_2024 => DeviceType::Keyboard,
 
         // Headsets
-        ARCTIS_1  // Note: This ID covers ARCTIS_1 and ARCTIS_7 (2017)
-        | ARCTIS_1_WIRELESS
-        | ARCTIS_5
-        | ARCTIS_7_2019
-        | ARCTIS_9
-        | ARCTIS_PRO
+        ARCTIS_PRO
         | ARCTIS_PRO_WIRELESS
+        | ARCTIS_5
+        | ARCTIS_1
+        | ARCTIS_1_WIRELESS
+        | ARCTIS_9
+        | ARCTIS_NOVA_PRO_WIRED
+        | ARCTIS_7_2019
         | ARCTIS_NOVA_PRO
         | ARCTIS_NOVA_PRO_WIRELESS
-        | ARCTIS_NOVA_5
         | ARCTIS_NOVA_3
-        | ARCTIS_NOVA_1 => DeviceType::Headset,
+        | ARCTIS_NOVA_5
+        | ARCTIS_NOVA_1
+        | ARCTIS_NOVA_7_RX
+        | ARCTIS_NOVA_7_TX
+        | ARCTIS_NOVA_7X_RX
+        | ARCTIS_NOVA_7X_TX
+        | ARCTIS_NOVA_7P_RX
+        | ARCTIS_NOVA_7P_TX
+        | ARCTIS_NOVA_5_RX
+        | ARCTIS_NOVA_5_TX
+        | ARCTIS_NOVA_PRO_OMNI
+        | ARCTIS_NOVA_3_WIRELESS_RX
+        | ARCTIS_NOVA_3_WIRELESS_TX => DeviceType::Headset,
 
         _ => DeviceType::Unknown,
     }
@@ -390,26 +466,51 @@ pub fn device_name_from_product_id(product_id: u16) -> &'static str {
 
     match product_id {
         APEX_PRO => "Apex Pro",
-        APEX_PRO_TKL => "Apex Pro TKL",
-        APEX_PRO_TKL_2023 => "Apex Pro TKL (2023)",
-        APEX_PRO_TKL_2023_WIRELESS => "Apex Pro TKL (2023) Wireless",
-        APEX_3 => "Apex 3",
-        APEX_3_TKL => "Apex 3 TKL",
-        APEX_5 => "Apex 5",
         APEX_7 => "Apex 7",
+        APEX_PRO_TKL => "Apex Pro TKL",
+        APEX_150 => "Apex 150",
         APEX_7_TKL => "Apex 7 TKL",
-        ARCTIS_1 => "Arctis 1 / Arctis 7 (2017)",
-        ARCTIS_1_WIRELESS => "Arctis 1 Wireless",
-        ARCTIS_5 => "Arctis 5",
-        ARCTIS_7_2019 => "Arctis 7 (2019)",
-        ARCTIS_9 => "Arctis 9",
+        APEX_3 => "Apex 3",
+        APEX_5 => "Apex 5",
+        APEX_PRO_MINI => "Apex Pro Mini",
+        APEX_9_MINI => "Apex 9 Mini",
+        APEX_3_TKL => "Apex 3 TKL",
+        APEX_PRO_MINI_WIRELESS_DONGLE => "Apex Pro Mini Wireless (Dongle)",
+        APEX_PRO_MINI_WIRELESS => "Apex Pro Mini Wireless",
+        APEX_PRO_TKL_2023 => "Apex Pro TKL (2023)",
+        APEX_PRO_TKL_2023_WIRELESS | APEX_PRO_TKL_2023_WIRELESS_2 => "Apex Pro TKL (2023) Wireless",
+        APEX_9_TKL => "Apex 9 TKL",
+        APEX_PRO_2024 => "Apex Pro (2024)",
+        APEX_PRO_TKL_2024 => "Apex Pro TKL (2024)",
+        APEX_PRO_TKL_WIRELESS_2024_DONGLE => "Apex Pro TKL Wireless (2024) (Dongle)",
+        APEX_PRO_TKL_WIRELESS_2024 => "Apex Pro TKL Wireless (2024)",
+        APEX_PRO_MINI_2024 => "Apex Pro Mini (2024)",
+        APEX_5_2024 => "Apex 5 (2024)",
+        APEX_7_2024 => "Apex 7 (2024)",
         ARCTIS_PRO => "Arctis Pro",
         ARCTIS_PRO_WIRELESS => "Arctis Pro Wireless",
-        ARCTIS_NOVA_PRO => "Arctis Nova Pro",
+        ARCTIS_5 => "Arctis 5",
+        ARCTIS_1 => "Arctis 1 / Arctis 7 (2018)",
+        ARCTIS_1_WIRELESS => "Arctis 1 Wireless",
+        ARCTIS_9 => "Arctis 9",
+        ARCTIS_NOVA_PRO_WIRED => "Arctis Nova Pro",
+        ARCTIS_7_2019 => "Arctis 7 (2019)",
+        ARCTIS_NOVA_PRO => "Arctis Nova Pro Wireless (TX)",
         ARCTIS_NOVA_PRO_WIRELESS => "Arctis Nova Pro Wireless",
-        ARCTIS_NOVA_5 => "Arctis Nova 5",
         ARCTIS_NOVA_3 => "Arctis Nova 3",
+        ARCTIS_NOVA_5 => "Arctis Nova 5",
         ARCTIS_NOVA_1 => "Arctis Nova 1",
+        ARCTIS_NOVA_7_RX => "Arctis Nova 7 (RX)",
+        ARCTIS_NOVA_7_TX => "Arctis Nova 7 (TX)",
+        ARCTIS_NOVA_7X_RX => "Arctis Nova 7X (RX)",
+        ARCTIS_NOVA_7X_TX => "Arctis Nova 7X (TX)",
+        ARCTIS_NOVA_7P_RX => "Arctis Nova 7P (RX)",
+        ARCTIS_NOVA_7P_TX => "Arctis Nova 7P (TX)",
+        ARCTIS_NOVA_5_RX => "Arctis Nova 5 (RX)",
+        ARCTIS_NOVA_5_TX => "Arctis Nova 5 (TX)",
+        ARCTIS_NOVA_PRO_OMNI => "Arctis Nova Pro Omni",
+        ARCTIS_NOVA_3_WIRELESS_RX => "Arctis Nova 3 Wireless (RX)",
+        ARCTIS_NOVA_3_WIRELESS_TX => "Arctis Nova 3 Wireless (TX)",
         _ => "Unknown SteelSeries Device",
     }
 }
@@ -420,11 +521,12 @@ pub fn zone_count_for_product_id(product_id: u16) -> usize {
     use product_ids::*;
 
     match product_id {
-        APEX_3 => 10,                                                // Apex 3 - 10 zones
-        APEX_3_TKL => 9,                                             // Apex 3 TKL - 9 zones
-        APEX_PRO_TKL_2023 | APEX_PRO_TKL_2023_WIRELESS => 9,         // Apex Pro TKL (2023) - 9 zones
-        APEX_PRO | APEX_PRO_TKL | APEX_5 | APEX_7 | APEX_7_TKL => 1, // Single zone for now
-        _ => 1,                                                      // Default single zone
+        APEX_3 => 10,
+        APEX_3_TKL => 9,
+        APEX_PRO_TKL_2023 | APEX_PRO_TKL_2023_WIRELESS | APEX_PRO_TKL_2023_WIRELESS_2 => 9,
+        // Zone counts for these models are unverified — 1 is a safe default until captured.
+        APEX_PRO | APEX_PRO_TKL | APEX_5 | APEX_7 | APEX_7_TKL | APEX_150 => 1,
+        _ => 1,
     }
 }
 
@@ -484,5 +586,33 @@ mod tests {
         // Test zone_count_for_product_id
         assert_eq!(zone_count_for_product_id(APEX_3), 10);
         assert_eq!(zone_count_for_product_id(0xFFFF), 1);
+    }
+
+    #[test]
+    fn test_arctis_nova_pro_omni_pid() {
+        use product_ids::*;
+
+        assert_eq!(ARCTIS_NOVA_PRO_OMNI, 0x2290);
+        assert_eq!(device_type_from_product_id(ARCTIS_NOVA_PRO_OMNI), DeviceType::Headset);
+        assert_eq!(
+            device_name_from_product_id(ARCTIS_NOVA_PRO_OMNI),
+            "Arctis Nova Pro Omni"
+        );
+    }
+
+    #[test]
+    fn test_apex_pro_tkl_2023_wireless_2_pid() {
+        use product_ids::*;
+
+        assert_eq!(APEX_PRO_TKL_2023_WIRELESS_2, 0x1630);
+        assert_eq!(
+            device_type_from_product_id(APEX_PRO_TKL_2023_WIRELESS_2),
+            DeviceType::Keyboard
+        );
+        assert_eq!(
+            device_name_from_product_id(APEX_PRO_TKL_2023_WIRELESS_2),
+            "Apex Pro TKL (2023) Wireless"
+        );
+        assert_eq!(zone_count_for_product_id(APEX_PRO_TKL_2023_WIRELESS_2), 9);
     }
 }

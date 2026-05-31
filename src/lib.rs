@@ -19,6 +19,7 @@ pub mod device_state;
 pub mod devices;
 pub mod diagnostics_export;
 pub mod error;
+pub mod fs_utils;
 pub mod gamesense;
 pub mod performance;
 pub mod pollrate;

@@ -1,0 +1,16 @@
+     ____
+    / _  |   Frida 17.9.11 - A world-class dynamic instrumentation toolkit
+   | (_| |
+    > _  |   Commands:
+   /_/ |_|       help      -> Displays the help system
+   . . . .       object?   -> Display information about 'object'
+   . . . .       exit/quit -> Exit
+   . . . .
+   . . . .   More info at https://frida.re/docs/home/
+   . . . .
+   . . . .   Connected to Local System (id=local)
+Attaching...
+message:[Local::PID::69020 ]->  {'type': 'send', 'payload': 'Found hid.dll'} data: None
+message: {'type': 'send', 'payload': 'addrs: set=0x7ffaf7a63980 get=0x7ffaf7a637e0'} data: None
+message: {'type': 'send', 'payload': 'SetFeature hooked at 0x7ffaf7a63980'} data: None
+message: {'type': 'send', 'payload': 'GetFeature hooked at 0x7ffaf7a637e0'} data: None

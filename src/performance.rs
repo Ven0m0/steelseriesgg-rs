@@ -418,7 +418,7 @@ pub struct EffectComputationCache {
     max_age: Duration,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 struct EffectCacheKey {
     effect_hash: u64,
     time_bucket: u64, // Rounded to reduce cache fragmentation
@@ -579,18 +579,13 @@ impl EffectComputationCache {
 
     /// Evict least recently used cache entry.
     fn evict_lru(&mut self) {
-        let key_to_remove = self
+        if let Some(key_to_remove) = self
             .cache
             .iter()
-            .min_by(|(_, a), (_, b)| {
-                a.access_count
-                    .cmp(&b.access_count)
-                    .then_with(|| a.timestamp.cmp(&b.timestamp))
-            })
-            .map(|(k, _)| k.clone());
-
-        if let Some(key) = key_to_remove {
-            self.cache.remove(&key);
+            .min_by_key(|(_, entry)| (entry.access_count, entry.timestamp))
+            .map(|(k, _)| *k)
+        {
+            self.cache.remove(&key_to_remove);
         }
     }
 }
@@ -851,5 +846,12 @@ mod tests {
         assert_eq!(stats.total_computations, 0);
         assert_eq!(stats.cache_hit_rate, 0.0);
         assert_eq!(stats.current_refresh_rate, 60.0);
+    }
+
+    #[test]
+    fn test_estimate_memory_usage() {
+        let expected = (8 * 1024 * 1024) + (1024 * 1024) + (512 * 1024);
+        assert_eq!(estimate_memory_usage(), expected);
+        assert_eq!(estimate_memory_usage(), 9_961_472);
     }
 }

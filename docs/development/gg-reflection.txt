@@ -1,0 +1,196 @@
+ERROR loading C:\Program Files\SteelSeries\GG\GG.Interop.Services.dll: Exception calling "GetTypes" with "0" argument(s): "Unable to load one or more of the requested types.
+Could not load file or assembly 'GG.Models, Version=1.1.26.0, Culture=neutral, PublicKeyToken=null'. The system cannot find the file specified.
+Could not load file or assembly 'GG.Models, Version=1.1.26.0, Culture=neutral, PublicKeyToken=null'. The system cannot find the file specified.
+Could not load file or assembly 'GG.Models, Version=1.1.26.0, Culture=neutral, PublicKeyToken=null'. The system cannot find the file specified.
+Could not load file or assembly 'GG.Models, Version=1.1.26.0, Culture=neutral, PublicKeyToken=null'. The system cannot find the file specified."
+=== GG.Models ===
+  TYPE: GG.Models.WebSocket.Events.KeyboardShortcutMessage
+    METHOD: GetType()
+    METHOD: GetHashCode()
+    FIELD: String s_keyboardShortcut
+  TYPE: GG.Models.WebSocket.Events.PrismSyncResetIdleMessage
+    METHOD: GetType()
+    METHOD: GetHashCode()
+  TYPE: GG.Models.WebSocket.Events.PrismSyncTriggerMessage
+    METHOD: GetType()
+    METHOD: GetHashCode()
+    FIELD: String s_prismSyncTrigger
+  TYPE: GG.Models.WebSocket.Events.RecordingDeviceMessage
+    METHOD: GetType()
+    METHOD: GetHashCode()
+  TYPE: GG.Models.WebSocket.Events.SseCommandBindingMessage
+    METHOD: GetType()
+    METHOD: GetHashCode()
+    FIELD: String s_sseCommandBinding
+  TYPE: GG.Models.Logger.ConsoleColors
+    METHOD: GetValue()
+    METHOD: GetHashCode()
+    METHOD: GetTypeCode()
+    METHOD: GetType()
+  TYPE: GG.Models.InputLib.ComboTrigger
+    METHOD: get_EqualityContract()
+    METHOD: get_HIDCode()
+    METHOD: set_HIDCode(UInt16 value)
+    METHOD: get_Page()
+    METHOD: set_Page(Byte value)
+    METHOD: get_Type()
+    METHOD: set_Type(Byte value)
+    METHOD: get_Direction()
+    METHOD: set_Direction(SByte value)
+    METHOD: get_Modifier()
+    METHOD: set_Modifier(Byte value)
+    METHOD: GetHashCode()
+    METHOD: GetType()
+    FIELD: UInt16 <HIDCode>k__BackingField
+    FIELD: Byte <Page>k__BackingField
+    FIELD: Byte <Type>k__BackingField
+    FIELD: Byte <Modifier>k__BackingField
+  TYPE: GG.Models.InputLib.DeviceEvent
+    METHOD: get_EqualityContract()
+    METHOD: get_Function()
+    METHOD: set_Function(Byte value)
+    METHOD: get_Page()
+    METHOD: set_Page(Byte value)
+    METHOD: get_Code()
+    METHOD: set_Code(UInt16 value)
+    METHOD: get_Data()
+    METHOD: set_Data(UInt32 value)
+    METHOD: get_Timestamp()
+    METHOD: set_Timestamp(UInt32 value)
+    METHOD: GetHashCode()
+    METHOD: GetType()
+    FIELD: Byte <Function>k__BackingField
+    FIELD: Byte <Page>k__BackingField
+    FIELD: UInt16 <Code>k__BackingField
+  TYPE: GG.Models.InputLib.DeviceEventFunction
+    METHOD: GetValue()
+    METHOD: GetHashCode()
+    METHOD: GetTypeCode()
+    METHOD: GetType()
+    FIELD: DeviceEventFunction KEY
+  TYPE: GG.Models.InputLib.DeviceEventRecording
+    METHOD: get_EqualityContract()
+    METHOD: get_EventNum()
+    METHOD: set_EventNum(Int32 value)
+    METHOD: GetHashCode()
+    METHOD: get_Function()
+    METHOD: set_Function(Byte value)
+    METHOD: get_Page()
+    METHOD: set_Page(Byte value)
+    METHOD: get_Code()
+    METHOD: set_Code(UInt16 value)
+    METHOD: get_Data()
+    METHOD: set_Data(UInt32 value)
+    METHOD: get_Timestamp()
+    METHOD: set_Timestamp(UInt32 value)
+    METHOD: GetType()
+  TYPE: GG.Models.InputLib.KeyboardShortcut
+    METHOD: get_Id()
+    METHOD: set_Id(Int32 value)
+    METHOD: get_DefaultTrigger()
+    METHOD: set_DefaultTrigger(String value)
+    METHOD: get_TriggerData()
+    METHOD: set_TriggerData(String value)
+    METHOD: GetType()
+    METHOD: GetHashCode()
+    FIELD: String <DefaultTrigger>k__BackingField
+  TYPE: GG.Models.InputLib.UniversalTrigger
+    METHOD: get_Id()
+    METHOD: set_Id(Int32 value)
+    METHOD: get_Kind()
+    METHOD: set_Kind(UniversalTriggerKind value)
+    METHOD: get_TargetRef()
+    METHOD: set_TargetRef(String value)
+    METHOD: get_ResolvedTargetRef()
+    METHOD: set_ResolvedTargetRef(Int32 value)
+    METHOD: get_TiedTo()
+    METHOD: set_TiedTo(UniversalTriggerTie value)
+    METHOD: get_TieRef()
+    METHOD: set_TieRef(String value)
+    METHOD: get_Params()
+    METHOD: set_Params(String value)
+    METHOD: get_TriggerData()
+    METHOD: set_TriggerData(String value)
+    METHOD: GetType()
+    METHOD: GetHashCode()
+  TYPE: GG.Models.InputLib.UniversalTriggerCombo
+    METHOD: get_EqualityContract()
+    METHOD: get_SupportsModifiers()
+    METHOD: set_SupportsModifiers(Byte value)
+    METHOD: GetHashCode()
+    METHOD: get_HIDCode()
+    METHOD: set_HIDCode(UInt16 value)
+    METHOD: get_Page()
+    METHOD: set_Page(Byte value)
+    METHOD: get_Type()
+    METHOD: set_Type(Byte value)
+    METHOD: get_Direction()
+    METHOD: set_Direction(SByte value)
+    METHOD: get_Modifier()
+    METHOD: set_Modifier(Byte value)
+    METHOD: GetType()
+    FIELD: Byte <SupportsModifiers>k__BackingField
+  TYPE: GG.Models.InputLib.UniversalTriggerKind
+    METHOD: GetValue()
+    METHOD: GetHashCode()
+    METHOD: GetTypeCode()
+    METHOD: GetType()
+    FIELD: UniversalTriggerKind UT_KIND_SSECMD
+  TYPE: GG.Models.InputLib.UniversalTriggerTie
+    METHOD: GetValue()
+    METHOD: GetHashCode()
+    METHOD: GetTypeCode()
+    METHOD: GetType()
+  TYPE: GG.Models.InputLib.UniversalTriggerTypeId
+    METHOD: GetValue()
+    METHOD: GetHashCode()
+    METHOD: GetTypeCode()
+    METHOD: GetType()
+  TYPE: GG.Models.InputLib.Serializable.SerializableKeyboardShortcut
+    METHOD: get_EqualityContract()
+    METHOD: get_Id()
+    METHOD: set_Id(Int32 value)
+    METHOD: get_TriggerData()
+    METHOD: set_TriggerData(String value)
+    METHOD: GetHashCode()
+    METHOD: GetType()
+    FIELD: String <TriggerData>k__BackingField
+  TYPE: GG.Models.InputLib.Serializable.SerializableUniversalTrigger
+    METHOD: get_EqualityContract()
+    METHOD: get_Command()
+    METHOD: set_Command(Int32 value)
+    METHOD: get_TriggerData()
+    METHOD: set_TriggerData(String value)
+    METHOD: get_TargetId()
+    METHOD: set_TargetId(Int32 value)
+    METHOD: get_Kind()
+    METHOD: set_Kind(UniversalTriggerKind value)
+    METHOD: get_Tie()
+    METHOD: set_Tie(UniversalTriggerTie value)
+    METHOD: GetHashCode()
+    METHOD: GetType()
+    FIELD: Int32 <Command>k__BackingField
+    FIELD: String <TriggerData>k__BackingField
+  TYPE: GG.Models.WebSocket.Events.KeyboardShortcutMessage+KeyboardShortcutData
+    METHOD: get_EqualityContract()
+    METHOD: get_ShortcutId()
+    METHOD: set_ShortcutId(Int32 value)
+    METHOD: GetHashCode()
+    METHOD: GetType()
+  TYPE: GG.Models.WebSocket.Events.PrismSyncTriggerMessage+PrismSyncTriggerData
+    METHOD: get_EqualityContract()
+    METHOD: get_Type()
+    METHOD: set_Type(Byte value)
+    METHOD: get_Code()
+    METHOD: set_Code(UInt16 value)
+    METHOD: GetHashCode()
+    METHOD: GetType()
+    FIELD: Byte <Type>k__BackingField
+    FIELD: UInt16 <Code>k__BackingField
+  TYPE: GG.Models.WebSocket.Events.SseCommandBindingMessage+SseCommandBindingData
+    METHOD: get_EqualityContract()
+    METHOD: get_CommandId()
+    METHOD: set_CommandId(Int32 value)
+    METHOD: GetHashCode()
+    METHOD: GetType()
+    FIELD: Int32 <CommandId>k__BackingField

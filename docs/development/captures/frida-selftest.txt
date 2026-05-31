@@ -1,0 +1,31 @@
+     ____
+    / _  |   Frida 17.9.11 - A world-class dynamic instrumentation toolkit
+   | (_| |
+    > _  |   Commands:
+   /_/ |_|       help      -> Displays the help system
+   . . . .       object?   -> Display information about 'object'
+   . . . .       exit/quit -> Exit
+   . . . .
+   . . . .   More info at https://frida.re/docs/home/
+   . . . .
+   . . . .   Connected to Local System (id=local)
+Spawning `C:\Users\Ven0m0\projects\steelseriesgg-rs\target\debug\discover_actuation.exe --pid 0x1628 --force`...
+Spawned `C:\Users\Ven0m0\projects\steelseriesgg-rs\target\debug\discover_actuation.exe --pid 0x1628 --force`. Resuming main thread!
+message:[Local::discover_actuation.exe ]->  {'type': 'send', 'payload': 'NtDeviceIoControlFile: 0x7ffafcd61d70'} data: None
+message: {'type': 'send', 'payload': 'NtDeviceIoControlFile hooked'} data: None
+message: {'type': 'send', 'payload': 'Ready'} data: None
+SteelSeries Actuation Discovery Tool
+========================================
+Opening device VID: 0x1038 PID: 0x1628 Interface: 1...
+message: {'type': 'send', 'payload': 'IOCTL=0xB01A4 len=4 40 00 00 00'}Device opened successfully.
+ 
+Starting Discovery Process...
+data:-----------------------------
+Phase 1: Setting baseline actuation to 20 (2.0mm)...
+ None
+Phase 2: Scanning command codes (0x00 - 0xFF)...
+
+No candidates found during scan.
+Process terminated
+
+Thank you for using Frida!

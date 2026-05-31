@@ -26,13 +26,13 @@ type RgbCallback = Box<dyn Fn(&str, u8, u8, u8) + Send + Sync>;
 /// Shared server state.
 struct ServerState {
     /// Registered games - pre-allocate capacity for typical usage
-    games: HashMap<String, GameMetadata>,
+    games: HashMap<Arc<String>, GameMetadata>,
 
     /// Event bindings per game - use nested HashMap with better initial capacity
-    bindings: HashMap<String, HashMap<String, EventBinding>>,
+    bindings: HashMap<Arc<String>, HashMap<Arc<String>, EventBinding>>,
 
     /// Last event values - optimize for frequent access
-    event_values: HashMap<String, HashMap<String, i32>>,
+    event_values: HashMap<Arc<String>, HashMap<Arc<String>, i32>>,
 
     /// Callback for RGB updates.
     rgb_callback: Option<RgbCallback>,
@@ -97,15 +97,7 @@ impl GameSenseServer {
                     .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
                     .allow_headers([header::CONTENT_TYPE])
                     .allow_origin(AllowOrigin::predicate(|origin: &HeaderValue, _parts: &_| {
-                        let origin_bytes = origin.as_bytes();
-                        origin_bytes == b"http://localhost"
-                            || origin_bytes.starts_with(b"http://localhost:")
-                            || origin_bytes == b"https://localhost"
-                            || origin_bytes.starts_with(b"https://localhost:")
-                            || origin_bytes == b"http://127.0.0.1"
-                            || origin_bytes.starts_with(b"http://127.0.0.1:")
-                            || origin_bytes == b"https://127.0.0.1"
-                            || origin_bytes.starts_with(b"https://127.0.0.1:")
+                        is_origin_allowed(origin)
                     })),
             )
             .with_state(state)
@@ -148,7 +140,7 @@ impl GameSenseServer {
         #[cfg(target_os = "macos")]
         let path = std::path::Path::new("/Library/Application Support/SteelSeries Engine 3/coreProps.json");
 
-        Self::write_secure_json(path, &props)
+        Self::write_secure_json(&path, &props)
     }
 
     /// Securely write JSON content to a file, ensuring correct permissions and ownership.
@@ -211,11 +203,8 @@ impl GameSenseServer {
 
             // Fallback for non-unix platforms
             let json = serde_json::to_string_pretty(content)?;
-            let mut options = std::fs::OpenOptions::new();
-            options.write(true).create(true).truncate(true);
+            crate::fs_utils::secure_write(path, json.as_bytes())?;
 
-            let mut file = options.open(path)?;
-            std::io::Write::write_all(&mut file, json.as_bytes())?;
             debug!("Wrote JSON to {:?}", path);
         }
 
@@ -229,6 +218,56 @@ impl GameSenseServer {
 }
 
 type AppState = Arc<RwLock<ServerState>>;
+
+/// Check if an origin is allowed for GameSense API.
+fn is_origin_allowed(origin: &HeaderValue) -> bool {
+    // Origin header must be valid UTF-8 and a valid URI
+    let Ok(origin_str) = origin.to_str() else {
+        return false;
+    };
+
+    // Parse as URI to safely extract host
+    let Ok(uri) = origin_str.parse::<axum::http::Uri>() else {
+        return false;
+    };
+
+    // Strictly validate host and ensure it doesn't contain a colon (port bypass)
+    // Note: URI parser might sometimes treat 'localhost:evil.com' as host='localhost'
+    // with a non-numeric port that it then ignores or misinterprets.
+    // We also check for any characters that shouldn't be in a clean hostname.
+    match uri.host() {
+        Some(host) => {
+            // Check for standard local hosts.
+            // Note: uri.host() typically strips brackets from IPv6 addresses, but we check both
+            // to be safe across different versions/implementations.
+            let is_allowed_host = host == "localhost" || host == "127.0.0.1" || host == "::1" || host == "[::1]";
+
+            // Additional check: ensure the full authority doesn't have suspicious characters
+            // and if a port is present, it must be numeric.
+            let is_clean = if let Some(auth) = uri.authority() {
+                let auth_str = auth.as_str();
+                // Find the port separator, taking into account IPv6 brackets
+                let port_start = if auth_str.starts_with('[') {
+                    auth_str.find("]:").map(|i| i + 1)
+                } else {
+                    auth_str.find(':')
+                };
+
+                if let Some(port_idx) = port_start {
+                    let port_part = &auth_str[port_idx + 1..];
+                    !port_part.is_empty() && port_part.chars().all(|c| c.is_ascii_digit())
+                } else {
+                    true
+                }
+            } else {
+                true
+            };
+
+            is_allowed_host && is_clean
+        }
+        None => false,
+    }
+}
 
 /// Server info endpoint.
 async fn server_info() -> Json<serde_json::Value> {
@@ -249,7 +288,7 @@ async fn register_game(
 
     info!("Registering game: {} ({})", metadata.game_display_name, metadata.game);
 
-    state.games.insert(metadata.game.clone(), metadata);
+    state.games.insert(Arc::new(metadata.game.clone()), metadata);
 
     (StatusCode::OK, Json(ApiResponse::success()))
 }
@@ -263,8 +302,22 @@ async fn bind_event(
 
     debug!("Binding event: {}:{}", binding.game, binding.event);
 
-    let game_bindings = state.bindings.entry(binding.game.clone()).or_default();
-    game_bindings.insert(binding.event.clone(), binding);
+    // Reuse existing Arc<String> keys to avoid allocations on hot paths
+    let game_key = state
+        .games
+        .get_key_value(&binding.game)
+        .map(|(k, _)| Arc::clone(k))
+        .or_else(|| state.bindings.get_key_value(&binding.game).map(|(k, _)| Arc::clone(k)))
+        .unwrap_or_else(|| Arc::new(binding.game.clone()));
+
+    let game_bindings = state.bindings.entry(game_key).or_default();
+
+    let event_key = game_bindings
+        .get_key_value(&binding.event)
+        .map(|(k, _)| Arc::clone(k))
+        .unwrap_or_else(|| Arc::new(binding.event.clone()));
+
+    game_bindings.insert(event_key, binding);
 
     (StatusCode::OK, Json(ApiResponse::success()))
 }
@@ -276,11 +329,22 @@ async fn game_event(State(state): State<AppState>, Json(event): Json<GameEvent>)
     // Store the event value with write lock (brief critical section)
     {
         let mut state_write = state.write();
-        state_write
-            .event_values
-            .entry(event.game.clone())
-            .or_default()
-            .insert(event.event.clone(), event.data.value);
+
+        let game_key = state_write
+            .bindings
+            .get_key_value(&event.game)
+            .map(|(k, _)| Arc::clone(k))
+            .or_else(|| state_write.games.get_key_value(&event.game).map(|(k, _)| Arc::clone(k)))
+            .unwrap_or_else(|| Arc::new(event.game.clone()));
+
+        let game_events = state_write.event_values.entry(game_key).or_default();
+
+        let event_key = game_events
+            .get_key_value(&event.event)
+            .map(|(k, _)| Arc::clone(k))
+            .unwrap_or_else(|| Arc::new(event.event.clone()));
+
+        game_events.insert(event_key, event.data.value);
     } // Write lock released here
 
     // Process handlers with read lock to allow concurrent event handling
@@ -392,6 +456,34 @@ mod tests {
     }
 
     #[test]
+    fn test_server_new() {
+        // Valid address
+        let server = GameSenseServer::new("127.0.0.1", 0);
+        assert!(server.is_ok());
+        assert_eq!(server.unwrap().address().ip().to_string(), "127.0.0.1");
+
+        // Valid IPv6 address
+        let server_v6 = GameSenseServer::new("[::1]", 0);
+        assert!(server_v6.is_ok());
+        assert_eq!(server_v6.unwrap().address().ip().to_string(), "::1");
+    }
+
+    #[test]
+    fn test_server_new_invalid_address() {
+        // Invalid host
+        let result = GameSenseServer::new("invalid_host", 8080);
+        assert!(matches!(result, Err(Error::GameSense(ref m)) if m.contains("Invalid bind address")));
+
+        // Empty host
+        let result = GameSenseServer::new("", 8080);
+        assert!(matches!(result, Err(Error::GameSense(ref m)) if m.contains("Invalid bind address")));
+
+        // Invalid IP format
+        let result = GameSenseServer::new("127.0.0.1.1", 8080);
+        assert!(matches!(result, Err(Error::GameSense(ref m)) if m.contains("Invalid bind address")));
+    }
+
+    #[test]
     fn test_compute_color_gradient() {
         let handler = ColorHandler::Gradient {
             gradient: GradientSpec {
@@ -481,6 +573,35 @@ mod tests {
 
         // Test value outside ranges
         assert!(compute_color(&handler, 150).is_none());
+    }
+
+    #[test]
+    fn test_cors_origin_predicate() {
+        use axum::http::HeaderValue;
+
+        // Allowed origins
+        assert!(is_origin_allowed(&HeaderValue::from_static("http://localhost")));
+        assert!(is_origin_allowed(&HeaderValue::from_static("https://localhost")));
+        assert!(is_origin_allowed(&HeaderValue::from_static("http://localhost:8080")));
+        assert!(is_origin_allowed(&HeaderValue::from_static("http://127.0.0.1")));
+        assert!(is_origin_allowed(&HeaderValue::from_static("http://127.0.0.1:3000")));
+        assert!(is_origin_allowed(&HeaderValue::from_static("http://[::1]")));
+        assert!(is_origin_allowed(&HeaderValue::from_static("http://[::1]:1234")));
+
+        // Malicious or invalid origins
+        assert!(!is_origin_allowed(&HeaderValue::from_static(
+            "http://localhost.evil.com"
+        )));
+        assert!(!is_origin_allowed(&HeaderValue::from_static(
+            "http://127.0.0.1.attacker.com"
+        )));
+        assert!(!is_origin_allowed(&HeaderValue::from_static(
+            "http://localhost:evil.com"
+        )));
+        assert!(!is_origin_allowed(&HeaderValue::from_static("http://not-localhost")));
+        assert!(!is_origin_allowed(&HeaderValue::from_static("http://192.168.1.1")));
+        assert!(!is_origin_allowed(&HeaderValue::from_static("null")));
+        assert!(!is_origin_allowed(&HeaderValue::from_static("")));
     }
 
     #[test]

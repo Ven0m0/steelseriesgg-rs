@@ -16,6 +16,7 @@ use tracing::{debug, warn};
 
 use crate::device_state::{DeviceId, DeviceState, DeviceStateStore};
 use crate::devices::{DeviceInfo, DeviceManager};
+use crate::fs_utils::secure_write_async;
 use crate::performance::RgbTimingMetrics;
 use crate::{Error, Result};
 use std::path::PathBuf;
@@ -188,7 +189,7 @@ async fn collect_device_states() -> Result<Vec<DeviceSnapshot>> {
     debug!("Collecting state for {} connected devices", devices.len());
 
     // Initialize device state store to query current states
-    let state_store = DeviceStateStore::new().map_err(|e| {
+    let state_store = DeviceStateStore::new_async().await.map_err(|e| {
         warn!("Failed to initialize device state store: {}", e);
         e
     });
@@ -347,8 +348,8 @@ pub async fn export_bug_report(report: &BugReport, path: &str) -> Result<()> {
     let json_content = serde_json::to_string_pretty(report)
         .map_err(|e| Error::SerializationMessage(format!("Failed to serialize report: {}", e)))?;
 
-    // Write to file using async I/O
-    tokio::fs::write(path, &json_content)
+    // Write to file using secure async I/O
+    secure_write_async(path.to_string(), json_content.clone())
         .await
         .map_err(|e| Error::FileSystemError(format!("Failed to write report: {}", e)))?;
 

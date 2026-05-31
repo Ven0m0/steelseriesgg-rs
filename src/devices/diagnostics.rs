@@ -268,9 +268,10 @@ impl HidDiagnostics {
         let mut valid = true;
         let mut issues = Vec::new();
 
-        // Check report length
-        if data.len() != 65 {
-            issues.push(format!("Invalid report length: {} (expected 65)", data.len()));
+        // Check report length — standard reports are 65 bytes; Apex 2023 per-key RGB is 645 bytes
+        let valid_lengths = [65usize, 645];
+        if !valid_lengths.contains(&data.len()) {
+            issues.push(format!("Invalid report length: {} (expected 65 or 645)", data.len()));
             valid = false;
         }
 
@@ -287,31 +288,12 @@ impl HidDiagnostics {
                 0x22 => { /* Brightness - valid */ }
                 0x25 => { /* Reactive mode - valid */ }
                 0x26 => { /* Color shift - valid */ }
+                0x40 => { /* Apex 2023 per-key RGB - valid */ }
+                0x2D => { /* Actuation control - valid */ }
                 _ => {
                     issues.push(format!("Unknown command byte: 0x{:02x}", data[1]));
                 }
             }
-        }
-
-        // Check RGB data structure for 0x21 commands
-        if data.len() >= 3 && data[1] == 0x21 && data[2] == 0xFF {
-            // RGB zone command - validate color data
-            let color_data_start = 3;
-            let max_zones = 9; // Apex Pro TKL 2023
-            let expected_color_bytes = max_zones * 3; // 3 bytes per zone (RGB)
-
-            if data.len() < color_data_start + expected_color_bytes {
-                issues.push(format!(
-                    "Insufficient RGB data: {} zones worth of data expected",
-                    max_zones
-                ));
-            }
-        }
-
-        // Checksum validation
-        if let Some(checksum_issue) = self.validate_checksum(data) {
-            // Just log as info/debug for now as we are unsure of the exact algorithm
-            debug!("Checksum analysis: {}", checksum_issue);
         }
 
         // Log validation results
@@ -331,51 +313,6 @@ impl HidDiagnostics {
         }
 
         valid
-    }
-
-    /// Calculate simple Sum (mod 256) checksum of data excluding the last byte.
-    fn calculate_checksum_sum(&self, data: &[u8]) -> u8 {
-        if data.len() < 2 {
-            return 0;
-        }
-        data.iter()
-            .take(data.len() - 1)
-            .fold(0u8, |acc, &x| acc.wrapping_add(x))
-    }
-
-    /// Calculate XOR checksum of data excluding the last byte.
-    fn calculate_checksum_xor(&self, data: &[u8]) -> u8 {
-        if data.len() < 2 {
-            return 0;
-        }
-        data.iter().take(data.len() - 1).fold(0u8, |acc, &x| acc ^ x)
-    }
-
-    /// Validate checksum against common algorithms.
-    /// Returns a message if a potential checksum match is found or if it looks like a checksum is missing.
-    fn validate_checksum(&self, data: &[u8]) -> Option<String> {
-        if data.len() < 2 {
-            return None;
-        }
-
-        let last_byte = *data.last()?;
-        let sum = self.calculate_checksum_sum(data);
-        let xor = self.calculate_checksum_xor(data);
-
-        // Heuristic: If last byte matches a calculated checksum, it's interesting.
-        if last_byte == sum {
-            return Some(format!("Last byte (0x{:02x}) matches SUM checksum", last_byte));
-        }
-        if last_byte == xor {
-            return Some(format!("Last byte (0x{:02x}) matches XOR checksum", last_byte));
-        }
-
-        // If data is long and last byte is 0, but sum/xor are non-zero, it might be padding instead of checksum
-        if last_byte == 0 && (sum != 0 || xor != 0) {
-            return Some("Last byte is 0x00 (likely padding), but non-zero checksums calculated".to_string());
-        }
-
-        None
     }
 
     /// Analyze timing patterns in recorded diagnostics.

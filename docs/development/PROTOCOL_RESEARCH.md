@@ -13,7 +13,8 @@ This document compiles reverse engineering resources and protocol discoveries fo
 - ✅ **Existing protocol implementations** — Multiple open-source projects with working Rust/Python code
 - ✅ **RGB protocol documentation** — Detailed packet structures from MSI keyboard research
 - ✅ **Systematic command testing** — Automated bulk testing system implemented (0x20–0x2F range)
-- ✅ **Confirmed RGB commands** — 0x21 (zone colors), 0x22 (brightness), 0x23 (per-key)
+- ✅ **Confirmed RGB commands** — 0x21 (zone colors), 0x22 (brightness)
+- ⚠️ **Placeholder** — 0x23 (per-key): HID key codes verified via RE; exact packet format still requires USB capture confirmation
 - ✅ **Reactive & color shift** — 0x25 (reactive mode), 0x26 (color shift effect)
 - ✅ **OSD navigation discovered** — 0x24 brings up actuation menu on keyboard OLED
 - ✅ **Actuation control** — 0x2D write works (experimental); read command unknown

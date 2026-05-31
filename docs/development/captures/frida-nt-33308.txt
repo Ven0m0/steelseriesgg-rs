@@ -1,0 +1,15 @@
+     ____
+    / _  |   Frida 17.9.11 - A world-class dynamic instrumentation toolkit
+   | (_| |
+    > _  |   Commands:
+   /_/ |_|       help      -> Displays the help system
+   . . . .       object?   -> Display information about 'object'
+   . . . .       exit/quit -> Exit
+   . . . .
+   . . . .   More info at https://frida.re/docs/home/
+   . . . .
+   . . . .   Connected to Local System (id=local)
+Attaching...
+message:[Local::PID::33308 ]->  {'type': 'send', 'payload': 'NtDeviceIoControlFile: 0x7ffafcd61d70'} data: None
+message: {'type': 'send', 'payload': 'NtDeviceIoControlFile hooked'} data: None
+message: {'type': 'send', 'payload': 'Ready'} data: None

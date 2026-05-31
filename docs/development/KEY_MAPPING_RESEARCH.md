@@ -270,58 +270,6 @@ The reverse engineering effort on `SteelSeriesGG107.0.0Setup.exe` successfully d
 **Last Updated**: 2026-03-27
 **Next Review**: After hardware testing confirms HID code approach
 
-## Current Implementation
-
-### Architecture
-
-The key mapping system is implemented in `src/devices/key_mapping.rs` with:
-
-- **`KeyId` enum**: 87 physical key identifiers covering function row, letter rows, bottom row, arrow cluster, navigation cluster, numpad, and SteelSeries-specific keys (`SteelSeriesKey`, `VolumeWheel`)
-- **`KeyAddress` struct**: USB HID usage ID addressing via `hid_code: u8`
-- **`KeyboardLayout` enum**: `FullSize`, `TenKeyLess`, `Compact`
-- **`KeyMapping` struct**: Complete mapping for a specific keyboard model, including a `key_map: HashMap<KeyId, KeyAddress>`, cached key lists for efficient iteration, and the supported HID-code set for that device
-- **`KeyMappingStats` struct**: Statistics about a mapping (total keys, supported HID codes, mapped keys, utilization)
-- **`KeyMappingDatabase`**: Database of supported keyboard mappings, populated at construction with HID-code mappings derived from official SteelSeries migration data
-
-### `KeyMapping` API
-
-```rust
-let mut mapping = KeyMapping::new(
-    product_id,
-    KeyboardLayout::TenKeyLess,
-    "Apex Pro TKL (2023)".to_string(),
-    supported_hid_codes,
-);
-
-mapping.add_key(KeyId::A, KeyAddress::new(4));
-mapping.get_key_address(KeyId::A);    // → Some(KeyAddress { hid_code: 4 })
-mapping.supports_key(KeyId::A);       // → true
-mapping.get_all_keys();               // → &[KeyId] (stable iteration order)
-mapping.get_stats();                  // → KeyMappingStats
-```
-
-### Supported Models
-
-| Model | Product ID | Layout | Mapped Keys | Addressing Source | Status |
-|-------|------------|--------|-------------|-------------------|--------|
-| Apex Pro TKL (2023) | `0x1628` | TenKeyLess | 87 | Official SteelSeries migration HID codes | HID mapping verified; protocol still pending |
-| Apex Pro | `0x1610` | Full-size | 104 | Official SteelSeries migration HID codes | HID mapping verified; protocol still pending |
-| Apex Pro TKL | `0x1614` | TenKeyLess | 87 | Official SteelSeries migration HID codes | HID mapping verified; protocol still pending |
-
-### Addressing model
-
-The current implementation does not model a guessed `(row, col)` matrix anymore. It stores the HID usage ID for each key and relies on protocol validation work to confirm how those HID codes must be encoded in the real per-key RGB packets.
-
-## Zone-Based Fallback (Working Alternative)
-
-While the per-key protocol remains unverified, the **zone fallback system** (`src/devices/zone_mapping.rs`) provides a working approximation:
-
-- **`ZoneMapping`** associates zones with `ZonePosition` identifiers (`MainKeys`, `FunctionRow`, `ArrowKeys`, etc.)
-- **`ZoneFallback`** maps individual `KeyId` values to their nearest zone
-- **`simulate_per_key_with_zones()`** on the `Keyboard` trait converts per-key color requests into zone-based updates
-
-This is the **recommended approach** until accurate per-key addresses are discovered.
-
 ## Research Requirements
 
 ### Phase 1: HID Descriptor Analysis
@@ -542,12 +490,12 @@ Command 0x2D: [0x00] [0x2D] [value] [padding]
 - [x] Integration with HID system
 - [x] Zone-based fallback system
 
-### Phase 2 Success (Research Tools) ⏸️ PENDING
+### Phase 2 Success (Research Tools) ✅ COMPLETED
 
-- [ ] HID traffic analysis tools
-- [ ] Systematic matrix testing
-- [ ] Protocol pattern recognition
-- [ ] Research documentation
+- [x] HID traffic analysis tools (`discover_actuation`, `verify_key_mapping`)
+- [x] Systematic testing utilities (fuzz, scan, manual modes)
+- [x] Protocol pattern recognition (HID code scheme confirmed via RE)
+- [x] Research documentation (this file)
 
 ### Phase 3 Success (Accurate Mappings) ⏸️ PENDING
 

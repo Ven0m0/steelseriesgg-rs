@@ -1,217 +1,328 @@
 ---
-goal: Turn the current backlog findings into a prioritized implementation plan.
+goal: Prioritized implementation plan combining open GitHub issues and TODO backlog.
 date_created: 2026-03-17
-last_updated: 2026-03-27
-last_reviewed: 2026-03-27
-status: In Progress — blocked on key matrix RE research
-source: TODO.md
+last_updated: 2026-05-28
+last_reviewed: 2026-05-28
+status: In Progress
+sources: GitHub issues #6, #165, #173, #211 · TODO.md · prior PLAN.md
 ---
 
-# PLAN: implementation priorities from the current findings
+# PLAN: implementation priorities
 
-This plan converts the current TODO backlog and recent repository findings into a focused implementation order.
+This plan converts all open GitHub issues (excluding the Dependency Dashboard) and the
+active TODO backlog into a single prioritized implementation order.
 
-The goal is to address the highest-value, lowest-ambiguity improvements first, while preserving the repo's current architectural and security constraints.
+---
 
-## 1. Constraints to preserve while implementing the backlog
+## 1. Constraints to preserve
 
-- Read `AGENTS.md` before making code changes.
-- Treat these files as the source of truth when prose docs drift:
-  - `Cargo.toml`
-  - `rust-toolchain.toml`
-  - `.github/workflows/ci.yml`
-  - `src/devices/hid_reports.rs`
-- Preserve the exact `hidapi = "=2.6.5"` dependency pin unless a task explicitly proves that a change is required.
+- Read `CLAUDE.md` (same content as `AGENTS.md`) before making code changes.
+- Treat these files as source of truth when prose docs drift:
+  - `Cargo.toml`, `rust-toolchain.toml`, `.github/workflows/ci.yml`, `src/devices/hid_reports.rs`
+- Keep `hidapi = "=2.6.6"` pinned unless a task explicitly requires changing it.
 - Do not loosen the localhost-only GameSense CORS policy.
 - Keep `audio` and `sonar` feature gating independent.
-- Do not replace typed HID helpers such as `HidReportBuilder` with manual byte arrays.
-- Do not present placeholder Apex Pro TKL 2023 protocol support as verified hardware behavior.
+- Do not replace typed HID helpers (`HidReportBuilder`) with manual byte arrays.
+- Do not present placeholder or unverified protocol support as confirmed hardware behavior.
+- No `.unwrap()` / `.expect()` in production paths.
 
-## 2. Current Status Summary
+---
 
-### Completed Work
+## 2. Status summary
 
-| Item | Status | Date | Notes |
-|------|--------|------|-------|
-| Partial fail-fast in audio | ✅ Done | 2026-03-26 | 2s timeouts on `set_volume`/`set_mute` |
-| CLI command expansion | ✅ Done | 2026-03-26 | Added HidLogs, TestDevice, VerifyPerformance, Fuzz |
-| experimental-apex-2023 feature | ✅ Done | 2026-03-26 | Feature flag exists in Cargo.toml |
+### Completed
 
-### In Progress
+| Item | Closed | Notes |
+|------|--------|-------|
+| Issue #120 — audio hang | 2026-03-27 | 5 s timeout added in `src/audio/pulse.rs` |
+| experimental-apex-2023 feature flag | 2026-03-26 | exists in `Cargo.toml` |
+| CLI command expansion (HidLogs, TestDevice, VerifyPerformance, Fuzz) | 2026-03-26 | subcommands present in `src/main.rs` |
+| Issue #211 — Arctis Nova Pro Omni PID `0x2290` | 2026-05-28 | const + match arms + tests in `src/devices/mod.rs` |
+| Issue #165 — Apex Pro TKL Wireless 2023 PID `0x1630` | 2026-05-28 | `APEX_PRO_TKL_2023_WIRELESS_2` registered in mod.rs + discovery.rs |
 
-| Item | Status | Blocker | Next Step |
-|------|--------|---------|-----------|
-| Issue #120 (audio hang) | 🔄 Partial | Initial PA connection unbounded | Add timeout to `PulseHandler::new()` |
-| Issue #6 (Arch compile) | ⏸️ Paused | ⚠️ **STALE** — No activity since Jan 2026. Release build passes on standard Linux. Needs reproduction attempt to confirm if issue still exists. | Requires Arch environment to verify |
+### Open — ranked by priority
 
-### Pending
+| # | Issue / Item | Priority | Phase |
+|---|--------------|----------|-------|
+| #211 | ~~Arctis Nova Pro Omni not recognised (PID `0x2290`)~~ | ~~High~~ | **Done** |
+| #165 | ~~Apex Pro TKL Wireless 2023 not recognised (PID `0x1630`)~~ | ~~High~~ | **Done** |
+| #173 | Apex 3 TKL — commands succeed but RGB does nothing | High | 1 |
+| #6   | Fails to compile on Arch | Medium | 4 |
+| TODO | Apex Pro TKL 2023 key matrix RE (placeholder data) | Medium | 5 |
+| TODO | Protocol docs reconciliation | Low | 6 |
+| TODO | Apex Pro capability accuracy cleanup | Low | 7 |
+| —    | `src/main.rs` refactor | Low | 8 |
 
-| Item | Priority | Dependencies |
-|------|----------|--------------|
-| Protocol docs reconciliation | Medium | None |
-| Apex Pro capability accuracy | Medium | None |
-| main.rs refactor | Low | Issues #120, #6 resolved |
+---
 
-### Known Gaps
+## 3. Phase 1 — Add Arctis Nova Pro Omni (Issue #211)
 
-- ~~`docs/development/*.md` still references missing `bulk_test.rs`~~ - RESOLVED: The actual helper binaries are: `discover_actuation`, `verify_key_mapping`, `benchmark_rgb_alloc`, `sonar_control`
-- `experimental-apex-2023` not documented in AGENTS.md feature flags table
-- New CLI commands (HidLogs, TestDevice, VerifyPerformance, Fuzz) not in AGENTS.md command table
+### Context
 
-## 3. Verified baseline before follow-up implementation
+User reports `ssgg devices` shows the headset as `Unknown SteelSeries Device [Unknown]` with
+VID `0x1038`, PID `0x2290`. The device is a USB Audio + HID composite (5 interfaces). The
+`lsusb -v` dump in the issue shows two HID interfaces (3 and 4); interface 3 carries a 64-byte
+interrupt endpoint, which matches the pattern used by other Arctis headsets.
 
-The repository already passed the default local validation path during the latest review cycle:
+### Root cause
+
+`0x2290` is absent from `src/devices/mod.rs` `product_ids` module, so
+`device_type_from_product_id` returns `Unknown` and `device_name_from_product_id` returns
+the fallback string.
+
+### Primary files
+
+- `src/devices/mod.rs` — `product_ids`, `device_type_from_product_id`, `device_name_from_product_id`, `zone_count_for_product_id`
+
+### Implementation tasks
+
+1. Add `pub const ARCTIS_NOVA_PRO_OMNI: u16 = 0x2290;` to the `product_ids` block.
+2. Add `ARCTIS_NOVA_PRO_OMNI` to the `DeviceType::Headset` arm of `device_type_from_product_id`.
+3. Add `ARCTIS_NOVA_PRO_OMNI => "Arctis Nova Pro Omni"` to `device_name_from_product_id`.
+4. No change needed to `zone_count_for_product_id` (keyboard-only); headset PIDs should rely on existing defaults until RGB support is implemented.
+5. Extend the existing unit test block to cover the new PID.
+
+### Notes
+
+The Arctis Nova Pro Omni uses USB Audio interfaces 1 and 2 for audio streaming. Control messages
+are expected on HID interface 3 (64-byte interrupt endpoint). Do not attempt to implement volume/
+chat-mix control until the HID report format is captured; just getting the device recognised and
+correctly typed is the goal for this phase.
+
+### Success criteria
+
+- `ssgg devices` names the headset correctly and classifies it as `Headset`.
+- `cargo test --locked` passes.
+- No existing headset or keyboard behaviour changes.
+
+### Validation
 
 ```bash
-cd /home/runner/work/steelseriesgg-rs/steelseriesgg-rs
 cargo fmt --all -- --check
 cargo clippy --all-targets --locked -- -D warnings
 cargo test --locked
 ```
 
-This means the next implementation step should stay narrow and should validate only the affected area unless a broader regression is suspected.
+### Complexity
 
-## 4. Findings that should drive the next implementation work
+⭐ Low — registry-only change, no protocol work required.
 
-### Finding A: the audio path needs fail-fast behavior
+---
 
-- The highest-impact reliability issue is the reported hang in issue `#120`.
-- The likely implementation surface is:
-  - `src/audio/pulse.rs`
-  - `src/audio/mod.rs`
-  - `src/main.rs`
-- The current plan should assume the fix will involve bounded waits, explicit timeout/error propagation, and preserving CLI responsiveness when PulseAudio is unavailable or partially configured.
+## 4. Phase 2 — Add Apex Pro TKL Wireless 2023 PID `0x1630` (Issue #165)
 
-### Finding B: protocol docs drift from the current tooling
+### Context
 
-- ~~The development docs reference `src/bin/bulk_test.rs`, but that binary is not present in the repository.~~ - RESOLVED: replaced with current helper binaries
-- The current helper binaries that do exist are:
-  - `src/bin/discover_actuation.rs`
-  - `src/bin/verify_key_mapping.rs`
-  - `src/bin/benchmark_rgb_alloc.rs`
-  - `src/bin/sonar_control.rs`
-- Before further protocol work, the docs should point contributors to real tooling and clearly label historical vs current workflows.
+User connects an Apex Pro TKL Wireless (2023) on Debian 13. `ssgg devices` shows
+`Unknown SteelSeries Device [Unknown]` with PID `0x1630`. The existing wireless constant is
+`APEX_PRO_TKL_2023_WIRELESS = 0x1632`. The `0x1630` PID is a different firmware or hardware SKU
+of the same product line.
 
-### Finding C: Apex Pro per-key support needs more accurate capability reporting
+### Root cause
 
-- The current code and docs indicate that parts of the Apex Pro TKL 2023 per-key RGB path are still placeholder or unverified.
-- The implementation plan should treat capability accuracy as a reliability and maintainability task, not as a new protocol expansion.
-- The likely implementation surface is:
-  - `src/devices/hid_reports.rs`
-  - `src/devices/key_mapping.rs`
-  - `src/devices/keyboards/mod.rs`
-  - `src/main.rs`
+`0x1630` is not registered. It likely requires the same interface-3 / raw-hidraw path already
+implemented for `0x1632` in `src/devices/discovery.rs`.
 
-### Finding D: Arch/audio validation needs a concrete reproduction path
+### Primary files
 
-- Issue `#6` remains important, but the right fix depends on whether the failure is still reproducible on current code.
-- The likely validation and packaging surface is:
-  - `PKGBUILD`
-  - `ssgg.install`
-  - `.github/workflows/ci.yml`
-  - `.github/workflows/release-arch.yml`
-- This work should stay evidence-driven and should not change code if the issue turns out to be packaging-only or already stale.
+- `src/devices/mod.rs` — `product_ids` block, match arms
+- `src/devices/discovery.rs` — wireless branch in `open_keyboard`
 
-### Finding E: `src/main.rs` is a refactor candidate, not the first fix
+### Implementation tasks
 
-- `src/main.rs` remains oversized and should eventually be split into smaller command-focused modules.
-- That refactor is lower priority than the current reliability and correctness fixes.
-- It should only start after the higher-priority backlog items above are under control.
+1. Add `pub const APEX_PRO_TKL_2023_WIRELESS_2: u16 = 0x1630;` (or fold into an alias — pick
+   the name that keeps the match arms readable).
+2. Mirror all match arms that handle `APEX_PRO_TKL_2023_WIRELESS` to also cover `0x1630`:
+   - `device_type_from_product_id` → `Keyboard`
+   - `device_name_from_product_id` → `"Apex Pro TKL (2023) Wireless"`
+   - `zone_count_for_product_id` → 9
+   - `open_keyboard` wireless branch (interface 3, raw hidraw path)
+3. Extend unit tests to cover the new PID.
 
-## 5. Recommended implementation order
+### Notes
 
-Work in this order unless new evidence requires a change:
+Without hardware confirmation, treat `0x1630` as behaving identically to `0x1632`. If the user
+can test and report back, the assumption can be verified or corrected cheaply.
 
-1. fix the audio hang path behind issue `#120`
-2. reconcile stale protocol docs and missing tooling references
-3. tighten Apex Pro capability reporting so placeholders are not presented as verified support
-4. reproduce and resolve issue `#6` using the smallest code, packaging, or CI change that matches the evidence
-5. refactor `src/main.rs` only after the higher-priority fixes above are stable
+### Success criteria
 
-## 6. Phase 1: Fix Issue #120 (Audio Hang) - HIGH PRIORITY
-
-### Objective
-
-Make `ssgg audio ...` fail fast with a clear error instead of hanging.
-
-### Root Cause Analysis
-
-**Current State:**
-- `set_volume()` and `set_mute()` have 2-second timeouts ✅
-- `PulseHandler::new()` has **unbounded wait** in connection loop
-- The `mainloop.wait()` call has no timeout
-
-**Likely Hang Point:**
-```rust
-// src/audio/pulse.rs - connection loop
-mainloop.lock();
-let result = loop {
-    match context.get_state() {
-        ContextState::Ready => break Ok(()),
-        ContextState::Failed | ContextState::Terminated => {
-            break Err(Error::Audio("Context connection failed".to_string()));
-        }
-        _ => {
-            mainloop.wait();  // <-- UNBOUNDED WAIT
-        }
-    }
-};
-```
-
-### Primary Files
-
-- `src/audio/pulse.rs` (connection logic)
-- `src/audio/mod.rs`
-- `src/main.rs`
-
-### Implementation Tasks
-
-- Reproduce the reported hang with the `audio` feature enabled.
-- Identify every unbounded wait in the PulseAudio setup and sink enumeration path.
-- Add bounded waiting or timeout-based exits where the current code can block indefinitely.
-- Propagate explicit errors back to the CLI so the user gets a failure instead of an apparent freeze.
-- Keep the change local to the audio path unless the investigation proves a different root cause.
-
-### Risk Assessment
-
-| Risk | Likelihood | Impact | Mitigation |
-|------|------------|--------|------------|
-| Timeout too short on slow systems | Medium | Medium | Make configurable, default 5s |
-| False positive failures | Low | Medium | Clear error message with troubleshooting |
-| Breaking existing audio users | Low | High | Feature-gated, no behavior change on success |
-
-### Success Criteria
-
-- `ssgg audio status` returns within 6 seconds even if PulseAudio unavailable.
-- `ssgg audio chat-mix 50` returns within 6 seconds.
-- Missing or unhealthy PulseAudio environments produce explicit errors (not hang).
-- The fix does not change unrelated feature behavior.
+- Device is recognised as `Apex Pro TKL (2023) Wireless` with correct zone count.
+- `cargo test --locked` passes.
 
 ### Validation
 
 ```bash
-cd /home/runner/work/steelseriesgg-rs/steelseriesgg-rs
-cargo build --locked --features audio
-cargo clippy --all-targets --locked --features audio -- -D warnings
-cargo test --locked --features audio
-RUST_LOG=debug cargo run --features audio -- audio status
-RUST_LOG=debug cargo run --features audio -- audio chat-mix 50
-
-# Failure mode test (stop PulseAudio first)
-systemctl --user stop pulseaudio  # or pipewire-pulse
-timeout 10 cargo run --features audio -- audio status
-# Should exit with error within 6s, not hang
+cargo fmt --all -- --check
+cargo clippy --all-targets --locked -- -D warnings
+cargo test --locked
 ```
 
-### Complexity Rating
+### Complexity
 
-⭐⭐ Medium (2-4 hours estimated)
+⭐ Low — mirrors an existing registration path.
 
-## 7. Phase 2: reconcile stale protocol docs
+---
+
+## 5. Phase 3 — Apex 3 TKL RGB not applied (Issue #173)
+
+### Context
+
+User reports `ssgg rgb solid #ff0000` on an Apex 3 TKL (PID `0x1622`) returns success but the
+keyboard does not change colour. The `Apex3Tkl` struct delegates `set_color` and `set_zone_colors`
+entirely to `GenericKeyboard`, which uses `HidReportBuilder` with the standard Apex Pro command
+layout. The Apex 3 TKL uses a **different HID report dialect**; the 0x23/0x25/0x26 command bytes
+in `Apex3Tkl` were written speculatively and have not been verified on hardware.
+
+### Root cause candidates (in order of likelihood)
+
+1. **Wrong command byte** — `GenericKeyboard::set_color` sends a command code that the Apex 3
+   TKL firmware ignores silently.
+2. **Missing commit / apply step** — firmware only latches colours after a specific commit report,
+   which may differ from the Apex Pro apply sequence.
+3. **Wrong interface** — the control HID interface for the Apex 3 TKL may not be interface 0
+   (the default for wired keyboards in `open_device`).
+
+### Investigation required before coding
+
+The fix depends on capturing real USB HID traffic from SteelSeries GG on Windows while the Apex
+3 TKL changes colour. Until that capture exists, do not guess at protocol bytes.
+
+**Preferred investigation path:**
+1. USB capture with Wireshark / USBPcap on a Windows machine with SteelSeries GG and an Apex 3 TKL.
+2. Decode the HID feature reports — specifically the report bytes sent when `Lighting → Solid`
+   is applied.
+3. Cross-reference with `src/devices/hid_reports.rs` to identify the correct `CommandCode`.
+
+**Community sources to check first:**
+- `https://github.com/AstroSnail/apexctl` (may cover Apex 3 protocol)
+- `https://github.com/FrankGrimm/apex7tkl_linux`
+
+### Primary files
+
+- `src/devices/keyboards/apex.rs` — `Apex3Tkl` implementation
+- `src/devices/keyboards/mod.rs` — `GenericKeyboard` command paths
+- `src/devices/hid_reports.rs` — command codes
+
+### Implementation tasks (post-investigation)
+
+1. Identify the correct command byte(s) for solid-color and zone-color on Apex 3 TKL.
+2. Override `set_color` and `set_zone_colors` in `Apex3Tkl` with the verified protocol instead
+   of delegating to `GenericKeyboard`'s Apex Pro path.
+3. Verify the apply/commit sequence (if any).
+4. Add a doc comment marking any remaining unverified commands as experimental.
+
+### Success criteria
+
+- `ssgg rgb solid #ff0000` visibly changes the keyboard colour on real hardware.
+- Existing GenericKeyboard behaviour for other keyboards is unchanged.
+- `cargo test --locked` passes.
+
+### Validation
+
+```bash
+cargo fmt --all -- --check
+cargo clippy --all-targets --locked -- -D warnings
+cargo test --locked
+# On hardware:
+ssgg rgb solid "#ff0000"   # red should appear
+ssgg rgb solid "#000000"   # off should work
+```
+
+### Complexity
+
+⭐⭐⭐ High — protocol investigation is a hard dependency; the code change itself will be small
+once the correct bytes are known.
+
+---
+
+## 6. Phase 4 — Arch compile failure (Issue #6)
+
+### Context
+
+Issue #6 reports `cargo build --release` fails on Arch. No activity since Jan 2026; it may be
+stale. The error log in the issue is the primary evidence. The PKGBUILD and release-arch workflow
+are the most likely fix surfaces if the root cause is packaging rather than code.
+
+### Primary files
+
+- `PKGBUILD`, `ssgg.install`
+- `Cargo.toml`, `rust-toolchain.toml`
+- `.github/workflows/ci.yml`, `.github/workflows/release-arch.yml`
+
+### Implementation tasks
+
+1. Read the attached error log from issue #6 to identify the failing crate or linker step.
+2. Compare the failure against current `Cargo.toml` — dependencies may already be updated.
+3. If still reproducible: fix in the smallest surface (packaging / CI / code) that matches
+   the evidence.
+4. If stale: close the issue with a comment citing the current passing CI state.
+
+### Success criteria
+
+- `cargo build --release --locked` passes on an Arch-like environment, **or**
+- Issue is confirmed stale with evidence and closed.
+
+### Validation
+
+```bash
+cargo build --release --locked
+cargo test --locked
+# If Arch env available:
+makepkg -sf --noconfirm
+```
+
+### Complexity
+
+⭐⭐ Medium if still live; ⭐ Low if stale.
+
+---
+
+## 7. Phase 5 — Apex Pro TKL 2023 key matrix RE (TODO backlog)
+
+### Context
+
+All 87 `KeyId → KeyAddress` mappings in `src/devices/key_mapping.rs` are placeholder data
+(estimated 6×17 matrix with guessed row/col values). The runtime falls back to
+`simulate_per_key_with_zones()`. Real addresses are needed for true per-key RGB.
+
+### Research methods (in order of preference)
+
+1. Binary RE of `SteelSeriesGG107.exe` for key address lookup tables.
+2. USB capture while SteelSeries GG sets per-key colours; decode byte positions.
+3. Community sources: `https://github.com/AstroSnail/apexctl` and
+   `https://github.com/FrankGrimm/apex7tkl_linux`.
+
+### Primary files
+
+- `src/devices/key_mapping.rs` — `KeyMappingDatabase::new()` for `ApexProTkl2023`
+- `docs/development/KEY_MAPPING_RESEARCH.md` — status per key
+
+### Implementation tasks
+
+1. Extract verified HID codes or physical matrix addresses for all 87 keys (or the TKL subset).
+2. Replace placeholder KeyAddress::new(hid_code) calls with verified values.
+3. Remove or update `⚠️ PLACEHOLDER` warnings in `KEY_MAPPING_RESEARCH.md`.
+4. Confirm `simulate_per_key_with_zones()` fallback is no longer triggered.
+
+### Success criteria
+
+- At least the alphanumeric block and modifier keys have verified addresses.
+- `cargo build --locked --features experimental-apex-2023` passes.
+- `cargo test --locked --features experimental-apex-2023` passes.
+- `KEY_MAPPING_RESEARCH.md` reflects verified vs. still-placeholder keys.
+
+### Complexity
+
+⭐⭐⭐ High — depends on RE outcome; code change is straightforward once addresses are known.
+
+---
+
+## 8. Phase 6 — Protocol docs reconciliation (TODO backlog)
 
 ### Objective
 
-Make the protocol and reverse-engineering docs safe to follow again.
+Make `docs/development/` safe to follow. Remove or explain stale references; clearly separate
+confirmed behavior, placeholder code, and speculative next steps.
 
 ### Primary files
 
@@ -221,112 +332,60 @@ Make the protocol and reverse-engineering docs safe to follow again.
 
 ### Implementation tasks
 
-- ~~Replace or explain all references to missing tooling such as `src/bin/bulk_test.rs`.~~ - RESOLVED: References updated to point to actual helper binaries
-- Point contributors to the helper binaries that actually exist today.
-- Clearly separate:
-  - confirmed behavior
-  - placeholder code
-  - speculative next steps
+1. Verify no doc references a nonexistent binary (historical `bulk_test.rs` was resolved; confirm
+   no others were missed).
+2. Confirm each reference to a helper binary (`discover_actuation`, `verify_key_mapping`,
+   `benchmark_rgb_alloc`, `sonar_control`) still points to a file that exists.
+3. Add clear `> ⚠️ UNVERIFIED` callouts wherever a command code or address is a placeholder.
 
 ### Success criteria
 
-- No development doc instructs contributors to use a nonexistent repository tool without explanation.
-- The current reverse-engineering workflow is understandable from the docs alone.
+- No development doc instructs contributors to use a nonexistent tool.
+- Confirmed vs. speculative protocol sections are clearly separated.
 
-### Validation
+### Complexity
 
-- Review the updated docs manually.
-- ~~Search for stale references such as `bulk_test` and confirm they are either removed or clearly marked historical.~~ - RESOLVED: All references updated
+⭐ Low — documentation only.
 
-## 8. Phase 3: tighten Apex Pro capability reporting
+---
+
+## 9. Phase 7 — Apex Pro capability accuracy cleanup (TODO backlog)
 
 ### Objective
 
-Reduce misleading support claims for Apex Pro TKL 2023 per-key features until the protocol is verified.
+Ensure placeholder per-key support is not presented as verified. This is a
+maintainability/accuracy task, not a protocol expansion.
 
 ### Primary files
 
 - `src/devices/hid_reports.rs`
 - `src/devices/key_mapping.rs`
-- `src/devices/keyboards/mod.rs`
-- `src/main.rs`
+- `src/devices/keyboards/mod.rs` and `apex_pro_tkl_2023.rs`
 
 ### Implementation tasks
 
-- Identify where placeholder mappings or placeholder command support currently appear as confirmed support.
-- Separate "mapping exists" from "behavior verified on hardware" where the current code conflates the two.
-- Keep the public behavior conservative: it is better to describe support as provisional than to imply fully verified functionality.
-- Update nearby docs or CLI help only if needed to keep the behavior consistent.
+1. Identify every location where placeholder command codes (`PerKeyRgb (0x23)`,
+   `Apex2023Direct (0x40)`) are described or logged without a `⚠️ experimental` qualifier.
+2. Add explicit qualifiers in doc comments, log messages, or CLI help text as needed.
+3. Do not change runtime behavior — accuracy only.
 
 ### Success criteria
 
-- Placeholder per-key support is no longer described as fully verified support.
-- Existing verified RGB and actuation behavior remains unchanged.
+- Placeholder support is consistently labelled as provisional or experimental.
+- `cargo test --locked` passes.
+- `cargo test --locked --features experimental-apex-2023` passes.
 
-### Validation
+### Complexity
 
-```bash
-cd /home/runner/work/steelseriesgg-rs/steelseriesgg-rs
-cargo build --locked
-cargo test --locked
-```
+⭐ Low — comments and strings only.
 
-If hardware is available:
+---
 
-- verify zone RGB still works
-- verify actuation writes still work
-- verify any per-key status output now reflects the intended support level
-
-## 9. Phase 4: reproduce and resolve issue `#6`
+## 10. Phase 8 — `src/main.rs` refactor (deferred)
 
 ### Objective
 
-Determine whether issue `#6` still represents a live failure and fix the smallest affected surface.
-
-### Primary files
-
-- `PKGBUILD`
-- `ssgg.install`
-- `Cargo.toml`
-- `rust-toolchain.toml`
-- `.github/workflows/ci.yml`
-- `.github/workflows/release-arch.yml`
-
-### Implementation tasks
-
-- Retrieve the original failure details and compare them against the current repository state.
-- Reproduce the failure in the smallest realistic environment.
-- Decide whether the fix belongs in:
-  - Rust code
-  - packaging metadata
-  - installation documentation
-  - CI or release configuration
-- Avoid code changes if the problem is already fixed or only affects packaging/docs.
-
-### Success criteria
-
-- The issue is either reproduced and fixed, or shown to be stale with current evidence.
-- Any fix remains aligned with the current CI feature matrix.
-
-### Validation
-
-```bash
-cd /home/runner/work/steelseriesgg-rs/steelseriesgg-rs
-cargo build --release --locked
-cargo test --locked
-```
-
-If an Arch-like environment is available:
-
-```bash
-makepkg -sf --noconfirm
-```
-
-## 10. Phase 5: refactor `src/main.rs` only after the blockers above
-
-### Objective
-
-Improve long-term maintainability without increasing risk to the backlog fixes above.
+Improve long-term maintainability of the CLI dispatch layer.
 
 ### Primary file
 
@@ -334,168 +393,94 @@ Improve long-term maintainability without increasing risk to the backlog fixes a
 
 ### Implementation tasks
 
-- Identify command families that can be extracted with low churn.
-- Move handlers into focused modules only after correctness-sensitive work is complete.
-- Preserve clap behavior, output, and feature gating exactly.
+1. Identify command families that can be extracted into focused modules with low churn.
+2. Move handlers only after all higher-priority fixes are stable.
+3. Preserve clap behavior, output, and feature gating exactly.
 
 ### Success criteria
 
-- The command dispatch surface is easier to navigate and test.
-- No CLI behavior changes unintentionally.
+- Command dispatch is easier to navigate and test.
+- No CLI behavior changes.
 
 ### Validation
 
 ```bash
-cd /home/runner/work/steelseriesgg-rs/steelseriesgg-rs
 cargo fmt --all -- --check
 cargo clippy --all-targets --locked -- -D warnings
 cargo test --locked
 ```
 
-## 11. Phase 6: Key Matrix Reverse Engineering (NEW — 2026-03-27)
+### Complexity
 
-### Context
-
-A reverse-engineering session was run on `SteelSeriesGG107.exe` (at `C:\Users\Ven0m0\Downloads\`) to extract real HID key matrix addresses for the Apex Pro TKL 2023 (PID `0x1628`). The session ended before results were produced. This is now a blocking dependency for Phase 3.
-
-### Current state
-
-All 87 `KeyId` → `KeyAddress` mappings in `src/devices/key_mapping.rs` are **placeholder data**. The `KeyMappingDatabase` for `ApexProTkl2023` uses an estimated 6×17 matrix with guessed row/col values. The code falls back to `simulate_per_key_with_zones()` at runtime.
-
-See `docs/development/KEY_MAPPING_RESEARCH.md` for the full status per key.
-
-### Objective
-
-Populate `KeyMappingDatabase` with verified `KeyAddress(row, col)` values for the Apex Pro TKL 2023, enabling real per-key RGB instead of the zone-based fallback.
-
-### Research methods (in order of preference)
-
-1. **Binary RE** — inspect `SteelSeriesGG107.exe` for key address lookup tables or HID report builders
-2. **USB capture** — capture live HID traffic while SteelSeries GG sets per-key colors; decode byte positions
-3. **Community sources** — `https://github.com/AstroSnail/apexctl` and `https://github.com/FrankGrimm/apex7tkl_linux` may contain partial mappings
-
-### Primary files
-
-- `src/devices/key_mapping.rs` — update `KeyMappingDatabase::new()` with verified addresses
-- `docs/development/KEY_MAPPING_RESEARCH.md` — update status per key as verified
-
-### Implementation tasks
-
-- Verify `C:\Users\Ven0m0\Downloads\SteelSeriesGG107.exe` is still available
-- Extract row/col addresses for all 87 keys (or the subset present on TKL layout)
-- Replace placeholder `KeyAddress::new(row, col)` calls with verified values
-- Remove or update the `⚠️ PLACEHOLDER` warnings in `KEY_MAPPING_RESEARCH.md`
-- Confirm `simulate_per_key_with_zones()` fallback is no longer triggered
-
-### Success criteria
-
-- At least the alpha-numeric block and modifier keys have verified addresses
-- `cargo build --locked --features experimental-apex-2023` passes
-- `cargo test --locked --features experimental-apex-2023` passes
-- `KEY_MAPPING_RESEARCH.md` status is updated to reflect verified vs. still-placeholder keys
-
-### Complexity rating
-
-⭐⭐⭐ High — depends on RE outcome; implementation itself is straightforward once addresses are known
+⭐⭐⭐ High — large surface; must not start until Phases 1–7 are stable.
 
 ---
 
-## 12. Deferred research tracks
+## 11. Phase dependencies
 
-These remain useful, but they should not outrank the implementation priorities above:
+```
+Phase 1 (Nova Pro Omni PID)   ──────────────────────────────┐
+Phase 2 (Wireless 0x1630 PID) ──────────────────────────────┤
+Phase 4 (Arch compile)        ──────────────────────────────┤──► Phase 8 (main.rs refactor)
+Phase 6 (Docs reconcile)      ──────────────────────────────┤
+Phase 7 (Capability accuracy) ──────────────────────────────┘
 
-- compare `https://github.com/Sharper-Flow/Open-G-Hub` against the current architecture only when a concrete blocker suggests reusable ideas
-- review the remaining external research list from `TODO.md` and classify each project as:
-  - directly relevant
-  - research-only
-  - documentation-only
-  - out of scope
+Phase 3 (Apex 3 TKL RGB)     ──► requires USB capture first ──► Phase 8
+Phase 5 (Key matrix RE)      ──► requires RE session first  ──► Phase 8
+```
 
-This research should support the active backlog items rather than expand the scope on its own.
+| Phase | Blocked by | Reason |
+|-------|------------|--------|
+| 1, 2  | Nothing    | Registry-only; self-contained |
+| 3     | USB capture | Protocol bytes unknown without trace |
+| 4     | Nothing    | Independent investigation |
+| 5     | RE session  | Key addresses unknown |
+| 6, 7  | Nothing    | Documentation only |
+| 8     | 1–7 stable  | Refactor risk |
 
-## 13. Completion criteria
+---
 
-The backlog should be considered meaningfully advanced when:
+## 12. Deferred research
 
-- issue `#120` has a verified non-hanging behavior and a clear validation story
-- stale protocol tooling references are resolved
-- Apex Pro capability reporting distinguishes placeholders from verified support
-- issue `#6` has either a verified fix or current evidence that it is stale
-- any refactor work begins only after the correctness and reliability fixes above are stable
+- **Open-G-Hub** (`https://github.com/Sharper-Flow/Open-G-Hub`) — defer unless a concrete
+  blocker suggests reusable logic.
+- Sonar / audio research links (from TODO.md) — relevant when Sonar protocol work resumes:
+  - https://github.com/PrzemekkkYT/GGSonarRev
+  - https://github.com/wex/sonar-rev
+  - https://github.com/Mark7888/steelseries-sonar-py
+  - https://codeberg.org/Birbwell/linuxmix
+  - https://github.com/Dymstro/nova-chatmix-linux
+- Apex protocol research:
+  - https://github.com/AstroSnail/apexctl
+  - https://github.com/FrankGrimm/apex7tkl_linux
+  - https://github.com/not-jan/apex-tux
+- Research-only:
+  - https://github.com/flozz/rivalcfg
+  - https://github.com/llMBQll/OmniLED
+
+---
+
+## 13. Effort estimates
+
+| Phase | Complexity | Estimate | Confidence |
+|-------|------------|----------|------------|
+| 1 | Low    | 30–60 min  | High |
+| 2 | Low    | 30–60 min  | High |
+| 3 | High   | 4–16 h     | Low (gated on capture) |
+| 4 | Medium | 2–8 h      | Low (may be stale) |
+| 5 | High   | 4–16 h     | Low (gated on RE) |
+| 6 | Low    | 1–2 h      | High |
+| 7 | Low    | 1–2 h      | High |
+| 8 | High   | 8–16 h     | Medium |
+
+**Total estimated:** 21–61 h (if all phases completed)
+
+---
 
 ## 14. Suggested next move
 
-If only one follow-up task is taken next, start with issue `#120`.
+Phases 1 and 2 are complete. The next unblocked work is:
 
-It has the clearest user impact, the smallest likely implementation surface, and the strongest evidence that a local fail-fast fix in the audio path will improve the current codebase immediately.
-
-## 15. Phase Dependencies
-
-```
-Phase 1 (Audio Hang) ─────────────────────────────────┐
-                                                       │
-Phase 2 (Docs Reconciliation) ────────────────────────┤──► Phase 5 (main.rs Refactor)
-                                                       │
-Phase 3 (Apex Capability) ─────────────────────────────┤
-                                                       │
-Phase 4 (Issue #6 Arch) ───────────────────────────────┘
-```
-
-**Dependency Rules:**
-- Phase 5 MUST wait for Phases 1-4 to be stable
-- Phases 2, 3, 4 can run in parallel
-- Phase 1 is highest priority (user-facing hang)
-
-**Blocking Relationships:**
-
-| Phase | Blocked By | Reason |
-|-------|------------|--------|
-| 5 | 1, 2, 3, 4 | Refactor risks breaking in-progress fixes |
-| 4 | None | Independent investigation |
-| 3 | None | Independent cleanup |
-| 2 | None | Independent documentation |
-| 1 | None | Highest priority, start immediately |
-
-## 16. Quick Wins (< 30 minutes each)
-
-These can be done immediately without blocking other work:
-
-### QW-1: Update AGENTS.md CLI Command Table
-
-**File:** `AGENTS.md`
-**Task:** Add missing commands to CLI subcommands table:
-- `hid-logs` - View HID communication logs
-- `test-device` - Run automated device tests
-- `verify-performance` - Monitor RGB performance metrics
-- `fuzz` - Protocol fuzzer (hidden)
-
-### QW-2: Add experimental-apex-2023 to Feature Flags Table
-
-**File:** `AGENTS.md`
-**Task:** Add row to feature flags table:
-```
-| `experimental-apex-2023` | Direct RGB command path for Apex Pro TKL 2023 | — |
-```
-
-### QW-3: Remove bulk_test.rs References
-
-**Files:** `docs/development/*.md`
-**Task:** Search and replace/remove references to non-existent `src/bin/bulk_test.rs`
-
-### QW-4: Add Issue #6 Staleness Note
-
-**File:** `PLAN.md`
-**Task:** Add note that Issue #6 may be stale, needs reproduction attempt
-
-## 17. Effort Estimates
-
-| Phase | Complexity | Estimated Time | Confidence |
-|-------|------------|----------------|------------|
-| 1 | Medium | 2-4 hours | High (root cause identified) |
-| 2 | Low | 1-2 hours | High (docs-only) |
-| 3 | Medium | 3-5 hours | Medium (needs hardware testing) |
-| 4 | Unknown | 2-8 hours | Low (may be stale) |
-| 5 | High | 8-16 hours | Medium (large refactor) |
-| 6 | High | 4-16 hours | Low (depends on RE outcome) |
-
-**Total Estimated:** 20-51 hours (if all phases completed)
+- **Phase 3** (Apex 3 TKL RGB) — requires a USB HID capture from SteelSeries GG on Windows first; do not guess protocol bytes.
+- **Phase 4** (Arch compile) — independent investigation; check if issue #6 is still reproducible.
+- **Phases 6 & 7** (docs reconciliation + capability accuracy) — low-effort, unblocked, good for a quick sitting.

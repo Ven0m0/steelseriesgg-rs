@@ -19,6 +19,8 @@ This document details the HID communication protocol for SteelSeries Apex Pro ke
 | Apex Pro | `0x1610` | 1 (single zone) | Basic support |
 | Apex Pro TKL | `0x1614` | 1 (single zone) | Basic support |
 | **Apex Pro TKL (2023)** | **`0x1628`** | **9 zones** | **Primary target — enhanced support** |
+| Apex Pro TKL (2023) Wireless | `0x1632` | 9 zones | Supported (interface 3 / hidraw path) |
+| Apex Pro TKL (2023) Wireless 2 | `0x1630` | 9 zones | Supported (mirrors 0x1632) |
 | Apex 3 | `0x161A` | 10 zones | Basic support |
 | Apex 3 TKL | `0x1622` | 9 zones | Enhanced support (dedicated struct) |
 | Apex 5 | `0x161C` | 1 (single zone) | Basic support |
@@ -40,6 +42,7 @@ This document details the HID communication protocol for SteelSeries Apex Pro ke
 | Arctis Pro Wireless | `0x1290` |
 | Arctis Nova Pro | `0x12E0` |
 | Arctis Nova Pro Wireless | `0x12E4` |
+| Arctis Nova Pro Omni | `0x2290` |
 | Arctis Nova 5 | `0x12EA` |
 | Arctis Nova 3 | `0x12EC` |
 | Arctis Nova 1 | `0x12EE` |
@@ -159,7 +162,9 @@ The `write_padded_report()` function in `src/devices/mod.rs` includes a deduplic
 [0x00] [0x23] [hid_code] [R] [G] [B] [padding]
 ```
 
-> **✅ BREAKTHROUGH (2026-03-27):** Reverse engineering of SteelSeriesGG107.0.0Setup.exe revealed that SteelSeries uses **USB HID keycodes** (not row/col matrix addresses) for per-key addressing. The `hidCode` values are standard USB HID Usage IDs (0x04-0x64 for standard keys).
+> ⚠️ **UNVERIFIED** — the packet format above is speculative. The command byte `0x23` and the field layout have **not been confirmed via USB capture**. The device may silently ignore this report or require a different structure.
+
+> **Key-addressing breakthrough (2026-03-27):** Reverse engineering of SteelSeriesGG107.0.0Setup.exe confirmed that SteelSeries uses **USB HID keycodes** (not row/col matrix addresses) for per-key identification. The `hidCode` values are standard USB HID Usage IDs (0x04-0x64 for standard keys). The addressing *scheme* is verified; the *packet format* is not.
 
 **Key Findings:**
 - **Key Addressing:** Uses USB HID Usage IDs (e.g., 0x04 = A, 0x05 = B, 0x28 = Enter)

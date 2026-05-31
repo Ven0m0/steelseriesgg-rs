@@ -4,6 +4,10 @@
 
 - Issue #120 (`'ssgg audio' becomes unresponsive`) was closed as completed on 2026-03-27.
   The PulseAudio connection path in `src/audio/pulse.rs` now has a 5s timeout.
+- Issue #211 (Arctis Nova Pro Omni not recognised) — resolved 2026-05-28.
+  `ARCTIS_NOVA_PRO_OMNI = 0x2290` registered in `src/devices/mod.rs`.
+- Issue #165 (Apex Pro TKL Wireless 2023 not recognised) — resolved 2026-05-28.
+  `APEX_PRO_TKL_2023_WIRELESS_2 = 0x1630` registered in `src/devices/mod.rs` and `discovery.rs`.
 
 ## Active backlog
 

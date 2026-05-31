@@ -50,7 +50,12 @@ pub trait Keyboard: Device {
 
     // === Per-Key RGB Control ===
 
-    /// Check if per-key RGB control is supported by this keyboard.
+    /// Check if per-key RGB key-mapping is available for this keyboard.
+    ///
+    /// ⚠️ **Experimental**: returning `true` means a HID key mapping exists, but the
+    /// per-key protocol (`CommandCode::PerKeyRgb`, `0x23`) has not been confirmed on
+    /// hardware. Calls to `set_key_color` / `set_key_colors` may be silently ignored by
+    /// the device until the packet format is verified via USB capture.
     fn supports_per_key_rgb(&self) -> bool {
         false
     }
@@ -61,33 +66,21 @@ pub trait Keyboard: Device {
     }
 
     /// Set RGB color for a specific key by logical key ID.
-    ///
-    /// Uses the keyboard's key mapping to convert logical key IDs to matrix addresses.
-    /// Returns an error if the key is not found in the mapping or per-key RGB is not supported.
     async fn set_key_color(&mut self, _key_id: KeyId, _color: Color) -> Result<()> {
         Err(Error::DeviceCommunication("Per-key RGB not supported".to_string()))
     }
 
     /// Set RGB colors for multiple keys by logical key IDs.
-    ///
-    /// Uses the keyboard's key mapping to convert logical key IDs to matrix addresses.
-    /// Keys not found in the mapping are ignored with a warning.
     async fn set_key_colors(&mut self, _key_colors: &[(KeyId, Color)]) -> Result<()> {
         Ok(())
     }
 
-    /// Set RGB color for a specific key by direct matrix address.
-    ///
-    /// Bypasses key mapping and directly addresses the key matrix.
-    /// Use with caution - invalid addresses may cause device issues.
+    /// Set RGB color for a specific key by direct HID code address.
     async fn set_key_color_direct(&mut self, _address: KeyAddress, _color: Color) -> Result<()> {
         Ok(())
     }
 
-    /// Set RGB colors for multiple keys by direct matrix addresses.
-    ///
-    /// Bypasses key mapping and directly addresses the key matrix.
-    /// Use with caution - invalid addresses may cause device issues.
+    /// Set RGB colors for multiple keys by direct HID code addresses.
     async fn set_key_colors_direct(&mut self, _key_colors: &[(KeyAddress, Color)]) -> Result<()> {
         Ok(())
     }
@@ -345,6 +338,13 @@ impl GenericKeyboard {
     ///
     /// Offloads the blocking hidapi write to `spawn_blocking` so the tokio
     /// worker thread is not stalled during HID I/O.
+    /// Build and send a HID command report to the keyboard asynchronously.
+    async fn send_command_async<C: crate::devices::HidCommand>(&self, command: C) -> Result<()> {
+        let mut buffer = [0u8; crate::devices::KEYBOARD_REPORT_SIZE];
+        let size = self.report_builder.build_report(command, &mut buffer)?;
+        self.send_report_async(&buffer[..size]).await
+    }
+
     async fn send_report_async(&self, data: &[u8]) -> Result<()> {
         use tracing::debug;
 
@@ -404,43 +404,37 @@ impl GenericKeyboard {
         super::send_feature_report_raw(&path, data, report_len)
     }
 
-    /// Send a HID feature report of arbitrary size (for Apex 2023 new protocol).
-    ///
-    /// On non-Unix platforms, raw hidraw feature reports are not supported and this
-    /// method will always return a platform-not-supported error.
     #[cfg(not(unix))]
-    pub fn send_feature(&self, _data: &[u8], _report_len: usize) -> Result<()> {
-        Err(Error::PlatformNotSupported(
-            "Raw HID feature reports are only supported on Unix-like platforms",
-        ))
-    }
-    #[cfg(not(unix))]
-    pub fn send_feature(&self, _data: &[u8], _report_len: usize) -> Result<()> {
-        Err(Error::DeviceCommunication(
-            "Raw HID feature reports are only supported on Unix platforms".to_string(),
-        ))
+    pub fn send_feature(&self, data: &[u8], _report_len: usize) -> Result<()> {
+        let device = self
+            .device
+            .as_ref()
+            .ok_or(Error::DeviceCommunication("Device not connected".to_string()))?;
+        let device = device.lock();
+
+        device
+            .send_feature_report(data)
+            .map_err(|e| Error::DeviceCommunication(e.to_string()))
     }
 
     async fn send_zone_buffer_async(&mut self) -> Result<()> {
         // Wireless keyboards (e.g. Apex Pro TKL 2023 Wireless, PID 0x1632) don't
         // support the 0xFF "all zones" selector. Send per-zone commands instead,
         // with zone indices starting at 1.
-        if self.info.product_id == super::product_ids::APEX_PRO_TKL_2023_WIRELESS {
+        if self.info.product_id == super::product_ids::APEX_PRO_TKL_2023_WIRELESS
+            || self.info.product_id == super::product_ids::APEX_PRO_TKL_2023_WIRELESS_2
+        {
             for i in 0..self.zone_color_buffer.len() {
                 let color = self.zone_color_buffer[i];
                 let zone_index = (i + 1) as u8; // zones start at 1, not 0
-                let rgb_command = RgbZoneCommand::new_specific_zone(zone_index, color);
-                let mut buffer = [0u8; super::KEYBOARD_REPORT_SIZE];
-                let size = self.report_builder.build_report(rgb_command, &mut buffer)?;
-                self.send_report_async(&buffer[..size]).await?;
+                self.send_command_async(RgbZoneCommand::new_specific_zone(zone_index, color))
+                    .await?;
             }
             return Ok(());
         }
 
-        let rgb_command = RgbZoneCommand::new_all_zones(&self.zone_color_buffer);
-        let mut buffer = [0u8; super::KEYBOARD_REPORT_SIZE];
-        let size = self.report_builder.build_report(rgb_command, &mut buffer)?;
-        self.send_report_async(&buffer[..size]).await
+        self.send_command_async(RgbZoneCommand::new_all_zones(&self.zone_color_buffer))
+            .await
     }
 
     /// Update the cached actuation point value.
@@ -509,15 +503,9 @@ impl GenericKeyboard {
             return Color::BLACK;
         }
 
-        let mut total_r = 0u32;
-        let mut total_g = 0u32;
-        let mut total_b = 0u32;
-
-        for (_, color) in key_colors {
-            total_r += color.r as u32;
-            total_g += color.g as u32;
-            total_b += color.b as u32;
-        }
+        let (total_r, total_g, total_b) = key_colors.iter().fold((0u32, 0u32, 0u32), |(r, g, b), (_, color)| {
+            (r + color.r as u32, g + color.g as u32, b + color.b as u32)
+        });
 
         let count = key_colors.len() as u32;
         Color::new(
@@ -553,10 +541,7 @@ impl Keyboard for GenericKeyboard {
     }
 
     async fn set_brightness(&mut self, brightness: u8) -> Result<()> {
-        let brightness_command = BrightnessCommand::new(brightness);
-        let mut buffer = [0u8; 65];
-        let size = self.report_builder.build_report(brightness_command, &mut buffer)?;
-        self.send_report_async(&buffer[..size]).await
+        self.send_command_async(BrightnessCommand::new(brightness)).await
     }
 
     async fn apply(&mut self) -> Result<()> {
@@ -610,16 +595,15 @@ impl Keyboard for GenericKeyboard {
         }
 
         let command = builder.build();
-        let mut buffer = [0u8; 65];
-        let size = self.report_builder.build_report(command, &mut buffer)?;
-        self.send_report_async(&buffer[..size]).await
+        for fragment in command.fragment_into_reports() {
+            self.send_command_async(fragment).await?;
+        }
+        Ok(())
     }
 
     async fn set_key_color_direct(&mut self, address: KeyAddress, color: Color) -> Result<()> {
-        let command = PerKeyRgbCommand::single_key(address, color);
-        let mut buffer = [0u8; 65];
-        let size = self.report_builder.build_report(command, &mut buffer)?;
-        self.send_report_async(&buffer[..size]).await
+        self.send_command_async(PerKeyRgbCommand::single_key(address, color))
+            .await
     }
 
     async fn set_key_colors_direct(&mut self, key_colors: &[(KeyAddress, Color)]) -> Result<()> {
@@ -633,10 +617,7 @@ impl Keyboard for GenericKeyboard {
             builder.add_key_matrix(*address, *color);
         }
 
-        let command = builder.build();
-        let mut buffer = [0u8; 65];
-        let size = self.report_builder.build_report(command, &mut buffer)?;
-        self.send_report_async(&buffer[..size]).await
+        self.send_command_async(builder.build()).await
     }
 
     async fn clear_per_key_rgb(&mut self) -> Result<()> {
@@ -676,10 +657,7 @@ impl Keyboard for GenericKeyboard {
             ));
         }
 
-        let command = builder.build();
-        let mut buffer = [0u8; 65];
-        let size = self.report_builder.build_report(command, &mut buffer)?;
-        self.send_report_async(&buffer[..size]).await
+        self.send_command_async(builder.build()).await
     }
 
     // === Zone-based RGB Fallback Implementation ===
@@ -841,16 +819,7 @@ impl Keyboard for GenericKeyboard {
             },
 
             PerKeyEffect::Spectrum { speed: _ } => ZoneEffect::Wave {
-                colors: vec![
-                    Color::RED,
-                    Color::ORANGE,
-                    Color::YELLOW,
-                    Color::GREEN,
-                    Color::CYAN,
-                    Color::BLUE,
-                    Color::PURPLE,
-                    Color::MAGENTA,
-                ],
+                colors: Color::RAINBOW_COLORS.to_vec(),
                 offset: 0.0,
             },
 
@@ -888,16 +857,11 @@ impl Keyboard for GenericKeyboard {
                 if key_colors.is_empty() {
                     ZoneEffect::Solid(Color::BLACK)
                 } else {
-                    let mut total_r = 0u32;
-                    let mut total_g = 0u32;
-                    let mut total_b = 0u32;
+                    let (total_r, total_g, total_b) =
+                        key_colors.values().fold((0u32, 0u32, 0u32), |(r, g, b), color| {
+                            (r + color.r as u32, g + color.g as u32, b + color.b as u32)
+                        });
                     let count = key_colors.len() as u32;
-
-                    for color in key_colors.values() {
-                        total_r += color.r as u32;
-                        total_g += color.g as u32;
-                        total_b += color.b as u32;
-                    }
 
                     let avg_color = Color::new(
                         (total_r / count) as u8,
@@ -968,7 +932,7 @@ macro_rules! impl_keyboard_with_delegation {
             fn get_key_mapping(&self) -> Option<&KeyMapping> { self.inner.get_key_mapping() }
             async fn set_key_color_direct(&mut self, address: KeyAddress, color: Color) -> Result<()> { self.inner.set_key_color_direct(address, color).await }
             async fn set_key_colors_direct(&mut self, key_colors: &[(KeyAddress, Color)]) -> Result<()> { self.inner.set_key_colors_direct(key_colors).await }
-            async fn clear_per_key_rgb(&mut self) -> Result<()> { self.inner.clear_per_key_rgb().await }
+            async fn clear_per_key_rgb(&mut self) -> Result<()> { self.set_color(Color::BLACK).await }
             async fn set_key_region(&mut self, start_hid: u8, count: u8, color: Color) -> Result<()> { self.inner.set_key_region(start_hid, count, color).await }
             fn get_zone_mapping(&self) -> Option<&ZoneMapping> { self.inner.get_zone_mapping() }
             async fn set_zone_effect(&mut self, effect: ZoneEffect) -> Result<()> { self.inner.set_zone_effect(effect).await }
