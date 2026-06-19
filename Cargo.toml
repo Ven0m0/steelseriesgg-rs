@@ -1,6 +1,6 @@
 [package]
 name = "steelseries-gg-linux"
-version = "0.1.0"
+version = "0.1.1"
 description = "A complete open-source SteelSeries GG replacement for Linux - RGB lighting, audio mixer, and GameSense support"
 repository = "https://github.com/Ven0m0/steelseriesgg-rs"
 readme = "README.md"
