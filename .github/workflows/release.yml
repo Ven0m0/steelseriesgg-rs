@@ -1,8 +1,8 @@
 name: Release
 
-# Builds release binaries for Linux, Windows, and Arch Linux and uploads them
-# as assets on the GitHub Release that release-please creates for a v* tag.
-# Versioning and CHANGELOG.md are managed by release-please
+# Builds release binaries for Linux (generic + Arch package) and Windows, then
+# uploads them as assets on the GitHub Release that release-please creates for
+# a v* tag.  Versioning and CHANGELOG.md are managed by release-please
 # (.github/workflows/release-please.yml); this workflow only produces and
 # uploads artifacts.
 
@@ -20,30 +20,51 @@ env:
 
 jobs:
   # ---------------------------------------------------------------------------
-  # Linux x86_64 (GNU)
+  # Linux x86_64 (generic binary + Arch package via PKGBUILD)
   # ---------------------------------------------------------------------------
   build-linux:
-    name: Build Linux x86_64
+    name: Build Linux / Arch x86_64
     runs-on: ubuntu-latest
+    container:
+      image: archlinux:base-devel
 
     steps:
+      - name: Install dependencies
+        run: |
+          pacman -Syu --noconfirm
+          pacman -S --needed --noconfirm git rust systemd
+
       - uses: actions/checkout@v7
-
-      - uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.94.1
-          targets: x86_64-unknown-linux-gnu
+          fetch-depth: 0
 
-      - uses: Swatinem/rust-cache@v2
+      - name: Create unprivileged build user
+        run: |
+          useradd -m builder
+          echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+          chown -R builder:builder .
 
-      - name: Build release binary
-        run: cargo build --release --locked --target x86_64-unknown-linux-gnu
+      - name: Build via PKGBUILD
+        run: |
+          PKGVER=$(sed -n 's/^pkgver=\([^ ]*\).*/\1/p' PKGBUILD | head -n1)
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git archive \
+            --format=tar \
+            --prefix="steelseriesgg-rs-${PKGVER}/" \
+            --output="ssgg-${PKGVER}.tar" \
+            HEAD
+          gzip -n "ssgg-${PKGVER}.tar"
+          su - builder -c "cd \"$GITHUB_WORKSPACE\" && SRCDEST=\"$GITHUB_WORKSPACE\" makepkg -sCf --noconfirm"
 
-      - name: Package binary
-        run: tar -C target/x86_64-unknown-linux-gnu/release -czf ssgg-linux-x86_64.tar.gz ssgg
+      - name: Package generic Linux binary
+        run: tar -C src/target/release -czf ssgg-linux-x86_64.tar.gz ssgg
 
       - name: Compute SHA-256
-        run: sha256sum ssgg-linux-x86_64.tar.gz > sha256sums-linux.txt
+        run: |
+          sha256sum ssgg-linux-x86_64.tar.gz > sha256sums-linux.txt
+          sha256sum *.pkg.tar.zst > sha256sums-arch.txt
+          cat sha256sums-linux.txt
+          cat sha256sums-arch.txt
 
       - name: Upload to release
         if: startsWith(github.ref, 'refs/tags/')
@@ -52,6 +73,8 @@ jobs:
           files: |
             ssgg-linux-x86_64.tar.gz
             sha256sums-linux.txt
+            *.pkg.tar.zst
+            sha256sums-arch.txt
 
   # ---------------------------------------------------------------------------
   # Windows x86_64 (MSVC)
@@ -88,53 +111,3 @@ jobs:
           files: |
             ssgg-windows-x86_64.exe
             sha256sums-windows.txt
-
-  # ---------------------------------------------------------------------------
-  # Arch Linux .pkg.tar.zst
-  # ---------------------------------------------------------------------------
-  build-arch:
-    name: Build Arch Linux Package
-    runs-on: ubuntu-latest
-    container:
-      image: archlinux:base-devel
-
-    steps:
-      - name: Install dependencies
-        run: |
-          pacman -Syu --noconfirm
-          pacman -S --needed --noconfirm git rust systemd
-
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-
-      - name: Create unprivileged build user
-        run: |
-          useradd -m builder
-          echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
-          chown -R builder:builder .
-
-      - name: Build Arch package
-        run: |
-          PKGVER=$(sed -n 's/^pkgver=\([^ ]*\).*/\1/p' PKGBUILD | head -n1)
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          git archive \
-            --format=tar \
-            --prefix="steelseriesgg-rs-${PKGVER}/" \
-            --output="ssgg-${PKGVER}.tar" \
-            HEAD
-          gzip -n "ssgg-${PKGVER}.tar"
-          su - builder -c "cd \"$GITHUB_WORKSPACE\" && SRCDEST=\"$GITHUB_WORKSPACE\" makepkg -sCf --noconfirm"
-
-      - name: Compute checksums
-        run: |
-          sha256sum *.pkg.tar.zst > sha256sums-arch.txt
-          cat sha256sums-arch.txt
-
-      - name: Upload to release
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v3
-        with:
-          files: |
-            *.pkg.tar.zst
-            sha256sums-arch.txt

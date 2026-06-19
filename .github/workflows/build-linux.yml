@@ -1,4 +1,4 @@
-name: Build Arch Linux
+name: Build Linux / Arch
 
 on:
   workflow_dispatch:
@@ -12,8 +12,8 @@ permissions:
   contents: read
 
 jobs:
-  build-arch:
-    name: Build Arch Linux Package
+  build-linux:
+    name: Build Linux / Arch x86_64
     runs-on: ubuntu-latest
     container:
       image: archlinux:base-devel
@@ -34,7 +34,7 @@ jobs:
           echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
           chown -R builder:builder .
 
-      - name: Build Arch package
+      - name: Build via PKGBUILD
         env:
           EXTRA_FEATURES: ${{ github.event.inputs.features }}
         run: |
@@ -51,16 +51,23 @@ jobs:
           gzip -n "ssgg-${PKGVER}.tar"
           su - builder -c "cd \"$GITHUB_WORKSPACE\" && SRCDEST=\"$GITHUB_WORKSPACE\" makepkg -sCf --noconfirm"
 
+      - name: Package generic Linux binary
+        run: tar -C src/target/release -czf ssgg-linux-x86_64.tar.gz ssgg
+
       - name: Compute checksums
         run: |
-          sha256sum *.pkg.tar.zst > sha256sums.txt
-          cat sha256sums.txt
+          sha256sum ssgg-linux-x86_64.tar.gz > sha256sums-linux.txt
+          sha256sum *.pkg.tar.zst > sha256sums-arch.txt
+          cat sha256sums-linux.txt
+          cat sha256sums-arch.txt
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
-          name: ssgg-arch-x86_64
+          name: ssgg-linux-x86_64
           path: |
+            ssgg-linux-x86_64.tar.gz
+            sha256sums-linux.txt
             *.pkg.tar.zst
-            sha256sums.txt
+            sha256sums-arch.txt
           retention-days: 30
