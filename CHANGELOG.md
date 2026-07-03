@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Releases and this changelog are generated automatically from
 [Conventional Commits](https://www.conventionalcommits.org/) by release-please.
 
+## [0.1.2](https://github.com/Ven0m0/steelseriesgg-rs/compare/v0.1.1...v0.1.2) (2026-07-03)
+
+
+### Changed
+
+* fix synchronous file open blocking async diagnostics ([3cc60ef](https://github.com/Ven0m0/steelseriesgg-rs/commit/3cc60ef78c1655689ab28c536a4fcab82663e23a))
+
 ## [0.1.1](https://github.com/Ven0m0/steelseriesgg-rs/compare/v0.1.0...v0.1.1) (2026-06-19)
 
 

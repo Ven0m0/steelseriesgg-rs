@@ -3,7 +3,7 @@
 # shell: bash
 # shellcheck disable=SC2034,SC2154
 pkgname=ssgg
-pkgver=0.1.1 # x-release-please-version
+pkgver=0.1.2 # x-release-please-version
 pkgrel=1
 pkgdesc="A complete open-source SteelSeries GG replacement for Linux - RGB lighting, audio mixer, and GameSense support"
 arch=('x86_64')
