@@ -18,7 +18,7 @@ jobs:
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.96.1
+          toolchain: 1.97.1
       - name: Cache
         uses: actions/cache@v6
         with:
