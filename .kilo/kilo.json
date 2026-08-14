@@ -1,6 +1,10 @@
 {
   "$schema": "https://app.kilo.ai/config.json",
-  "instructions": [".kilo/rules/*.md", "AGENTS.md", ".github/instructions/*.md"],
+  "instructions": [
+    ".kilo/rules/*.md", "./AGENTS.md",
+    "https://raw.githubusercontent.com/DietrichGebert/ponytail/main/PONYTAIL.md",
+    "https://raw.githubusercontent.com/JuliusBrussee/caveman/main/CAVEMAN.md"
+  ],
   "skills": { "paths": [".kilo/skills", ".opencode/skills", ".claude/skills"] },
   "permission": {
     "*": "allow",
@@ -15,16 +19,9 @@
     "doom_loop": "deny"
   },
   "agent": {
-    "compaction": { "model": "kilo-auto/free" }
+    "compaction": { "model": "kilo/kilo-auto/free" }
   },
-  "provider": {
-    "openai": {
-      "options": { "apiKey": "{env:OPENAI_API_KEY}" }
-    },
-    "anthropic": {
-      "options": { "apiKey": "{env:ANTHROPIC_API_KEY}" }
-    }
-  },
+  "small_model": "kilo/kilo-auto/free",
   "disabled_providers": ["openai", "google", "anthropic"],
   "plugin": [
     "opencode-ignore@1.1.0",
@@ -32,27 +29,25 @@
     "@gotgenes/opencode-agent-identity@3.0.1",
     "opencode-agent-skills@0.6.5",
     "@openspoon/subtask2@0.3.9",
+    "opencode-pty@0.3.2",
     "@tarquinen/opencode-dcp@3.1.9",
-    "@morphllm/opencode-morph-plugin@2.0.9",
-    "opencode-agent-memory@0.2.0",
+    "opencode-session-handoff@1.1.6",
+	  "opencode-agent-memory@0.2.0",
+    "@dietrichgebert/ponytail",
     "superpowers@git+https://github.com/obra/superpowers.git",
-    "./plugins/context-shield",
-    "./plugins/gitingest",
-    "./plugins/trim-tool-name",
-    "./plugins/custom-tools",
-    "./plugins/json-healer"
+    "kilo-tools@git+https://github.com/Ven0m0/claude-config.git"
   ],
   "formatter": {
     "biome": {
       "command": ["npx", "-y", "@biomejs/biome", "check", "--write", "--format-with-errors=true", "$FILE"],
-      "extensions": [".json", ".js"]
+      "extensions": [".json", ".jsonc", ".js", ".ts"]
     },
     "ruff": {
       "command": ["uvx", "ruff", "format", "$FILE"],
-      "extensions": [".py", ".pyi"]
+      "extensions": [".py", ".pyi", ".pyc"]
     }
   },
-  "watcher": { "ignore": ["node_modules/**", "dist/**", ".git/**", ".venv/**", "__pycache__/**", ".ruff_cache/**"] },
+  "watcher": { "ignore": ["node_modules/**", "dist/**", ".git/**", ".venv/**", "__pycache__/**", ".ruff_cache/**", "target/**"] },
   "mcp": {
     "ref-tools": {
       "type": "remote",
@@ -62,8 +57,7 @@
     "context7": {
       "type": "remote",
       "url": "https://mcp.context7.com/mcp",
-      "headers": { "Authorization": "Bearer {env:CONTEXT7_API_KEY}" },
-      "enabled": false
+      "enabled": true
     },
     "github": {
       "type": "remote",
@@ -73,8 +67,7 @@
     "exa": {
       "type": "remote",
       "url": "https://mcp.exa.ai/mcp?tools=web_search_exa,web_search_advanced_exa,get_code_context_exa,crawling_exa",
-      "enabled": true,
-      "headers": { "x-api-key": "{env:EXA_API_KEY}" }
+      "enabled": true
     },
     "serena": {
       "type": "local",
@@ -103,16 +96,41 @@
     },
     "bash": {
       "command": ["bash-language-server", "start"],
-      "extensions": [".sh", ".bash", ".zsh"]
+      "extensions": [".sh", ".bash", ".zsh", ".ksh"]
     },
     "vtsls": {
       "command": ["vtsls", "--stdio"],
-      "extensions": [".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".mts", ".cts"],
-      "initialization": { "preferences": { "importModuleSpecifierPreference": "relative" } }
+      "extensions": [
+        ".js",
+        ".jsx",
+        ".ts",
+        ".tsx",
+        ".mjs",
+        ".cjs",
+        ".mts",
+        ".cts"
+      ],
+      "initialization": {
+        "preferences": { "importModuleSpecifierPreference": "relative" }
+      }
     },
     "rust": {
       "command": ["rust-analyzer"],
       "extensions": [".rs"]
+    },
+    "eslint": {
+      "command": ["vscode-eslint-language-server", "--stdio"],
+      "extensions": [
+        ".js",
+        ".jsx",
+        ".mjs",
+        ".cjs",
+        ".ts",
+        ".tsx",
+        ".vue",
+        ".svelte",
+        ".astro"
+      ]
     },
     "yaml-ls": {
       "command": ["yaml-language-server", "--stdio"],
@@ -144,18 +162,25 @@
         "-NoLogo",
         "-NoProfile",
         "-Command",
-        "$module = Get-Module -ListAvailable PowerShellEditorServices | Sort-Object Version -Descending | Select-Object -First 1; if (-not $module) { throw 'PowerShellEditorServices is not installed. Run: Install-Module -Name PowerShellEditorServices -Scope CurrentUser' }; Import-Module $module.Path; Start-EditorServices -HostName 'Claude Code' -HostProfileId 'ClaudeCode' -HostVersion '1.0.0' -Stdio -BundledModulesPath (Split-Path $module.Path) -LogPath 'NUL' -LogLevel 'None' -EnableConsoleRepl"
+        "$module = Get-Module -ListAvailable PowerShellEditorServices | Sort-Object Version -Descending | Select-Object -First 1; if (-not $module) { throw 'PowerShellEditorServices is not installed. Run: Install-Module -Name PowerShellEditorServices -Scope CurrentUser' }; Import-Module $module.Path; Start-EditorServices -HostName 'Claude Code' -HostProfileId 'ClaudeCode' -HostVersion '1.0.0' -Stdio -BundledModulesPath (Split-Path $module.Path) -LogPath '/dev/null' -LogLevel 'None' -EnableConsoleRepl"
       ],
       "extensions": [".ps1", ".psm1", ".psd1"]
     }
+  },
+  "indexing": {
+    "provider": "kilo",
+    "model": "mistralai/mistral-embed-2312",
+    "enabled": true
   },
   "compaction": { "auto": true, "prune": true },
   "experimental": {
     "continue_loop_on_deny": false,
     "codebase_search": true,
     "semantic_indexing": true,
-    "mcp_timeout": 30000,
+    "mcp_timeout": 60000,
     "openTelemetry": false,
-    "batch_tool": true
+    "batch_tool": true,
+    "swe_pruner": true,
+    "swe_pruner_model": "kilo/kilo-auto/free"
   }
 }
