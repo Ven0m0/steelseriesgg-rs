@@ -5,7 +5,7 @@
 
 ## Active backlog
 
-1. **Analyze if [signal rgb](https://signalrgb.com) can be reverse engineered.** It can change the keyboards lighting on windows 11
+1. **Analyze if [signal rgb](https://signalrgb.com) can be reverse engineered.** It can change the keyboards lighting on windows 11. Read "https://docs.signalrgb.com"
 2. **Apex 3 TKL RGB (issue #173)** — commands report success but lighting never changes.
    Concrete lead: OpenRGB's 8-zone protocol (`0x21` = set zone colors, `0x23` = brightness);
    the current code uses `0x23` for color. See PLAN.md Phase 1.
