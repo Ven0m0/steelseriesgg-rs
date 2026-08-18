@@ -67,7 +67,7 @@ serde_json = "1.0.151"
 smallvec = { version = "1.15.2", features = ["serde"] }
 
 # System information for diagnostics
-sysinfo = "0.39.2"
+sysinfo = "0.39.6"
 tabled = "0.21.0"
 
 # Error handling
