@@ -12,7 +12,7 @@ Open-source [SteelSeries GG](https://steelseries.com/gg/engine) replacement for 
 ```bash
 git clone https://github.com/Ven0m0/steelseriesgg-rs.git
 cd steelseriesgg-rs
-cargo build --release
+cargo build -r
 ./target/release/ssgg devices
 ```
 
