@@ -1351,10 +1351,10 @@ pub mod recovery {
             }
 
             // Rate limit recovery attempts
-            if let Some(last) = self.last_recovery {
-                if last.elapsed() < Duration::from_millis(BASE_BACKOFF_MS) {
-                    return false;
-                }
+            if let Some(last) = self.last_recovery
+                && last.elapsed() < Duration::from_millis(BASE_BACKOFF_MS)
+            {
+                return false;
             }
 
             true

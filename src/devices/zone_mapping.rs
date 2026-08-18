@@ -369,18 +369,18 @@ impl ZoneFallback {
         for (key_id, color) in per_key_colors {
             // Map key to approximate zone
             let zone_index = self.map_key_to_zone(*key_id, mapping);
-            if let Some(zone_idx) = zone_index {
-                if zone_idx < mapping.zone_count {
-                    // Blend colors if multiple keys affect the same zone
-                    if zone_led_counts[zone_idx] == 0 {
-                        zone_colors[zone_idx] = *color;
-                    } else {
-                        // Average the colors
-                        let existing = zone_colors[zone_idx];
-                        zone_colors[zone_idx] = Color::blend(existing, *color, 0.5);
-                    }
-                    zone_led_counts[zone_idx] += 1;
+            if let Some(zone_idx) = zone_index
+                && zone_idx < mapping.zone_count
+            {
+                // Blend colors if multiple keys affect the same zone
+                if zone_led_counts[zone_idx] == 0 {
+                    zone_colors[zone_idx] = *color;
+                } else {
+                    // Average the colors
+                    let existing = zone_colors[zone_idx];
+                    zone_colors[zone_idx] = Color::blend(existing, *color, 0.5);
                 }
+                zone_led_counts[zone_idx] += 1;
             }
         }
 

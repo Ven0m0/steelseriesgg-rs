@@ -248,12 +248,12 @@ async fn collect_hid_logs() -> Result<Option<Vec<String>>> {
         Ok(mut entries) => {
             while let Ok(Some(entry)) = entries.next_entry().await {
                 let path = entry.path();
-                if let Some(filename) = path.file_name() {
-                    if let Some(name) = filename.to_str() {
-                        if name.starts_with("ssgg_hid_diagnostics_") && name.ends_with(".log") {
-                            log_files.push(path);
-                        }
-                    }
+                if let Some(filename) = path.file_name()
+                    && let Some(name) = filename.to_str()
+                    && name.starts_with("ssgg_hid_diagnostics_")
+                    && name.ends_with(".log")
+                {
+                    log_files.push(path);
                 }
             }
         }

@@ -525,10 +525,10 @@ fn parse_color(s: &str) -> Option<Color> {
 
     // Try hex
     let hex = s.trim_start_matches('#');
-    if hex.len() == 6 {
-        if let Ok(val) = u32::from_str_radix(hex, 16) {
-            return Some(Color::from_hex(val));
-        }
+    if hex.len() == 6
+        && let Ok(val) = u32::from_str_radix(hex, 16)
+    {
+        return Some(Color::from_hex(val));
     }
 
     None
@@ -1377,14 +1377,14 @@ async fn cmd_profile(action: ProfileAction) -> Result<()> {
             // Capture keyboard settings from state store
             if let Some(keyboard_info) = device_manager.first_device_of_type(DeviceType::Keyboard) {
                 let device_id = DeviceId::from(keyboard_info);
-                if let Some(device_state) = state_store.get(&device_id) {
-                    if let Some(ref keyboard_state) = device_state.keyboard {
-                        profile.keyboard = Some(KeyboardProfile {
-                            effect: keyboard_state.effect.clone(),
-                            brightness: keyboard_state.brightness,
-                        });
-                        println!("Captured keyboard settings");
-                    }
+                if let Some(device_state) = state_store.get(&device_id)
+                    && let Some(ref keyboard_state) = device_state.keyboard
+                {
+                    profile.keyboard = Some(KeyboardProfile {
+                        effect: keyboard_state.effect.clone(),
+                        brightness: keyboard_state.brightness,
+                    });
+                    println!("Captured keyboard settings");
                 }
             }
 
@@ -1998,10 +1998,10 @@ impl<'a> serde::Serialize for StatsMapSerializer<'a> {
         use serde::ser::SerializeMap;
         let mut map = serializer.serialize_map(None)?;
         for device_info in self.keyboards {
-            if let Ok(keyboard) = self.manager.open_keyboard(device_info) {
-                if let Some(stats) = keyboard.get_rgb_performance_stats() {
-                    map.serialize_entry(&device_info.name, stats)?;
-                }
+            if let Ok(keyboard) = self.manager.open_keyboard(device_info)
+                && let Some(stats) = keyboard.get_rgb_performance_stats()
+            {
+                map.serialize_entry(&device_info.name, stats)?;
             }
         }
         map.end()
@@ -2411,10 +2411,10 @@ async fn cmd_status(_initial_manager: &DeviceManager, device_filter: &str, refre
         let mut progress_bars: Vec<(DeviceInfo, ProgressBar)> = Vec::new();
 
         for device_info in deduped_devices(&manager) {
-            if let Some(filter) = filter_type {
-                if device_info.device_type != filter {
-                    continue;
-                }
+            if let Some(filter) = filter_type
+                && device_info.device_type != filter
+            {
+                continue;
             }
 
             let pb = multi_progress.add(ProgressBar::new_spinner());
@@ -2490,10 +2490,10 @@ async fn cmd_status(_initial_manager: &DeviceManager, device_filter: &str, refre
         let mut rows: Vec<DeviceRow> = Vec::new();
 
         for device_info in deduped_devices(&manager) {
-            if let Some(filter) = filter_type {
-                if device_info.device_type != filter {
-                    continue;
-                }
+            if let Some(filter) = filter_type
+                && device_info.device_type != filter
+            {
+                continue;
             }
 
             let device_type_str = match device_info.device_type {
@@ -3019,41 +3019,40 @@ fn start_gamesense_server(config: &Config, daemon_state: Arc<RwLock<DaemonState>
 }
 
 async fn load_default_profile(config: &Config, daemon_state: Arc<RwLock<DaemonState>>) {
-    if let Some(ref profile_name) = config.default_profile {
-        if let Ok(profile_manager) = ProfileManager::new().await {
-            if let Some(profile) = profile_manager.get(profile_name) {
-                info!("Loading default profile: {}", profile.name);
+    if let Some(ref profile_name) = config.default_profile
+        && let Ok(profile_manager) = ProfileManager::new().await
+        && let Some(profile) = profile_manager.get(profile_name)
+    {
+        info!("Loading default profile: {}", profile.name);
 
-                // Apply keyboard settings if present
-                if let Some(ref keyboard_profile) = profile.keyboard {
-                    let keyboard_state = KeyboardState {
-                        effect: keyboard_profile.effect.clone(),
-                        brightness: keyboard_profile.brightness,
-                    };
+        // Apply keyboard settings if present
+        if let Some(ref keyboard_profile) = profile.keyboard {
+            let keyboard_state = KeyboardState {
+                effect: keyboard_profile.effect.clone(),
+                brightness: keyboard_profile.brightness,
+            };
 
-                    // Collect device info first to avoid borrow conflicts
-                    let device_infos: Vec<DeviceInfo> = {
-                        let mut state = daemon_state.write().await;
-                        let mut infos = Vec::new();
+            // Collect device info first to avoid borrow conflicts
+            let device_infos: Vec<DeviceInfo> = {
+                let mut state = daemon_state.write().await;
+                let mut infos = Vec::new();
 
-                        for (_keyboard, controller, info) in state.keyboards.values_mut() {
-                            controller.set_effect(keyboard_profile.effect.clone());
-                            controller.set_brightness(keyboard_profile.brightness as f32 / 100.0);
-                            infos.push(info.clone());
-                            info!("Applied profile to keyboard: {}", info.name);
-                        }
+                for (_keyboard, controller, info) in state.keyboards.values_mut() {
+                    controller.set_effect(keyboard_profile.effect.clone());
+                    controller.set_brightness(keyboard_profile.brightness as f32 / 100.0);
+                    infos.push(info.clone());
+                    info!("Applied profile to keyboard: {}", info.name);
+                }
 
-                        infos
-                    };
+                infos
+            };
 
-                    // Update state store separately
-                    {
-                        let state = daemon_state.read().await;
-                        for info in device_infos {
-                            let device_id = DeviceId::from(&info);
-                            let _ = state.state_store.update_keyboard(device_id, keyboard_state.clone());
-                        }
-                    }
+            // Update state store separately
+            {
+                let state = daemon_state.read().await;
+                for info in device_infos {
+                    let device_id = DeviceId::from(&info);
+                    let _ = state.state_store.update_keyboard(device_id, keyboard_state.clone());
                 }
             }
         }

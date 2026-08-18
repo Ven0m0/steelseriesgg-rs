@@ -437,10 +437,10 @@ impl DeviceStateStore {
         };
 
         // If we found a legacy key, migrate it to the new key
-        if let Some(key) = legacy_key {
-            if let Some(existing_state) = states.remove(&key) {
-                states.insert(id.clone(), existing_state);
-            }
+        if let Some(key) = legacy_key
+            && let Some(existing_state) = states.remove(&key)
+        {
+            states.insert(id.clone(), existing_state);
         }
 
         // Now safely get or create the state
@@ -703,11 +703,11 @@ mod tests {
 
         // 3. Update existing
         store.update_states_with(|states| {
-            if let Some(state) = states.get_mut(&device_id) {
-                if let Some(ref mut k) = state.keyboard {
-                    k.brightness = 50;
-                    return true;
-                }
+            if let Some(state) = states.get_mut(&device_id)
+                && let Some(ref mut k) = state.keyboard
+            {
+                k.brightness = 50;
+                return true;
             }
             false
         })?;

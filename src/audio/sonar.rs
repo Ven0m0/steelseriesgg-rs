@@ -161,11 +161,11 @@ impl SonarClient {
     /// 4. Port scanning common Sonar ports
     async fn discover_port() -> Result<u16> {
         // Priority 1: Environment variable override
-        if let Ok(port_str) = std::env::var("STEELSERIES_SONAR_PORT") {
-            if let Ok(port) = port_str.parse::<u16>() {
-                tracing::debug!("Using Sonar port from STEELSERIES_SONAR_PORT: {}", port);
-                return Ok(port);
-            }
+        if let Ok(port_str) = std::env::var("STEELSERIES_SONAR_PORT")
+            && let Ok(port) = port_str.parse::<u16>()
+        {
+            tracing::debug!("Using Sonar port from STEELSERIES_SONAR_PORT: {}", port);
+            return Ok(port);
         }
 
         // Priority 2: Try coreProps.json file discovery
@@ -227,12 +227,10 @@ impl SonarClient {
                 .get("ggEncryptedAddress")
                 .or_else(|| json.get("address"))
                 .and_then(|v| v.as_str())
+                && let Some(port_str) = address.split(':').next_back()
+                && let Ok(port) = port_str.parse::<u16>()
             {
-                if let Some(port_str) = address.split(':').next_back() {
-                    if let Ok(port) = port_str.parse::<u16>() {
-                        return Ok(port);
-                    }
-                }
+                return Ok(port);
             }
         }
 
@@ -254,10 +252,10 @@ impl SonarClient {
         }
 
         // Windows paths
-        if cfg!(target_os = "windows") {
-            if let Some(programdata) = std::env::var_os("PROGRAMDATA") {
-                paths.push(PathBuf::from(programdata).join("SteelSeries/GG/coreProps.json"));
-            }
+        if cfg!(target_os = "windows")
+            && let Some(programdata) = std::env::var_os("PROGRAMDATA")
+        {
+            paths.push(PathBuf::from(programdata).join("SteelSeries/GG/coreProps.json"));
         }
 
         paths
@@ -292,12 +290,11 @@ impl SonarClient {
         // Look for the Sonar port in the response
         if let Some(apps) = json.as_array() {
             for app in apps {
-                if let Some(name) = app.get("name").and_then(|n| n.as_str()) {
-                    if name.to_lowercase().contains("sonar") {
-                        if let Some(port) = app.get("port").and_then(|p| p.as_u64()) {
-                            return Ok(port as u16);
-                        }
-                    }
+                if let Some(name) = app.get("name").and_then(|n| n.as_str())
+                    && name.to_lowercase().contains("sonar")
+                    && let Some(port) = app.get("port").and_then(|p| p.as_u64())
+                {
+                    return Ok(port as u16);
                 }
             }
         }

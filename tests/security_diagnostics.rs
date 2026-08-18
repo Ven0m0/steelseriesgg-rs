@@ -25,11 +25,12 @@ fn test_diagnostic_log_permissions() {
     for entry in entries {
         let entry = entry.expect("Failed to get entry");
         let path = entry.path();
-        if let Some(filename) = path.file_name().and_then(|s| s.to_str()) {
-            if filename.starts_with("ssgg_hid_diagnostics_") && filename.ends_with(".log") {
-                log_file = Some(path);
-                // We could break here, but we might want the most recent one if multiple exist
-            }
+        if let Some(filename) = path.file_name().and_then(|s| s.to_str())
+            && filename.starts_with("ssgg_hid_diagnostics_")
+            && filename.ends_with(".log")
+        {
+            log_file = Some(path);
+            // We could break here, but we might want the most recent one if multiple exist
         }
     }
 

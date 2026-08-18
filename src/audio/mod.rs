@@ -316,10 +316,10 @@ impl AudioMixer {
     /// Determine which channel a sink input belongs to.
     fn determine_channel(&self, sink_input: &pulse::SinkInput) -> Channel {
         // Check router first
-        if let Some(app_name) = &sink_input.app_name {
-            if let Some(route) = self.router.get_route(app_name) {
-                return route.channel;
-            }
+        if let Some(app_name) = &sink_input.app_name
+            && let Some(route) = self.router.get_route(app_name)
+        {
+            return route.channel;
         }
 
         // Heuristic based on media role. This is best-effort only; explicit
@@ -364,10 +364,10 @@ impl AudioMixer {
                 let channel = self.determine_channel(&input);
 
                 // If filtering by channel, skip if not matching
-                if let Some(target) = target_channel {
-                    if channel != target {
-                        continue;
-                    }
+                if let Some(target) = target_channel
+                    && channel != target
+                {
+                    continue;
                 }
 
                 // Calculate target volume

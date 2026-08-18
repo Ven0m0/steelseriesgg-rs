@@ -187,10 +187,10 @@ impl HidOptimizer {
     /// Check cached device connectivity status.
     pub fn is_device_connected(&self, device_path: &str) -> Option<bool> {
         let cache = self.connectivity_cache.lock();
-        if let Some((connected, timestamp)) = cache.get(device_path) {
-            if timestamp.elapsed() < Duration::from_secs(5) {
-                return Some(*connected);
-            }
+        if let Some((connected, timestamp)) = cache.get(device_path)
+            && timestamp.elapsed() < Duration::from_secs(5)
+        {
+            return Some(*connected);
         }
         None
     }
