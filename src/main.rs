@@ -657,17 +657,17 @@ async fn main() -> Result<()> {
 
     match cli.command {
         Commands::Devices => {
-            let manager = DeviceManager::new()?;
+            let manager = new_device_manager()?;
             cmd_devices(&manager)?;
         }
 
         Commands::Rgb { action } => {
-            let manager = DeviceManager::new()?;
+            let manager = new_device_manager()?;
             cmd_rgb(&manager, action).await?;
         }
 
         Commands::Actuation { action } => {
-            let manager = DeviceManager::new()?;
+            let manager = new_device_manager()?;
             cmd_actuation(&manager, action).await?;
         }
 
@@ -699,12 +699,12 @@ async fn main() -> Result<()> {
             output,
             json,
         } => {
-            let manager = DeviceManager::new()?;
+            let manager = new_device_manager()?;
             cmd_validate(&manager, benchmark, timeout, output, json).await?;
         }
 
         Commands::Performance { action } => {
-            let manager = DeviceManager::new()?;
+            let manager = new_device_manager()?;
             cmd_performance(&manager, action).await?;
         }
 
@@ -717,7 +717,7 @@ async fn main() -> Result<()> {
         }
 
         Commands::Status { device, refresh } => {
-            let manager = DeviceManager::new()?;
+            let manager = new_device_manager()?;
             cmd_status(&manager, &device, refresh).await?;
         }
 
@@ -726,7 +726,7 @@ async fn main() -> Result<()> {
         }
 
         Commands::Daemon => {
-            let manager = DeviceManager::new()?;
+            let manager = new_device_manager()?;
             cmd_daemon(manager).await?;
         }
 
@@ -735,7 +735,7 @@ async fn main() -> Result<()> {
             benchmark,
             verbose,
         } => {
-            let manager = DeviceManager::new()?;
+            let manager = new_device_manager()?;
             cmd_test_device(&manager, &device, benchmark, verbose).await?;
         }
 
@@ -744,14 +744,14 @@ async fn main() -> Result<()> {
             effect,
             output,
         } => {
-            let manager = DeviceManager::new()?;
+            let manager = new_device_manager()?;
             cmd_verify_performance(&manager, duration, &effect, output).await?;
         }
 
         Commands::Fuzz { start, end, delay } => {
             use steelseries_gg::devices::fuzz::{FuzzParams, PayloadPattern, fuzz_keyboard_protocol};
 
-            let manager = DeviceManager::new()?;
+            let manager = new_device_manager()?;
             let params = FuzzParams {
                 start_cmd: start,
                 end_cmd: end,
@@ -769,6 +769,31 @@ async fn main() -> Result<()> {
     }
 
     Ok(())
+}
+
+/// Create a `DeviceManager`, applying the `[device]` control-endpoint override from
+/// `config.toml` if one is set. A missing or unparseable config file falls back to
+/// auto-detection rather than failing the command, matching prior behavior where device
+/// commands never depended on config.toml at all.
+fn new_device_manager() -> Result<DeviceManager> {
+    let mut manager = DeviceManager::new()?;
+    if let Ok(config) = Config::load() {
+        manager.set_device_override(config.device);
+    }
+    Ok(manager)
+}
+
+/// All connected devices, deduplicated to one representative per physical device.
+///
+/// `DeviceManager::devices()` returns every raw HID collection hidapi enumerates — on Windows
+/// that is several entries per physical keyboard/headset (see `DeviceManager::devices_by_type`).
+/// CLI listings should show one row per physical device, so this unions the deduped lists
+/// instead of using `manager.devices()` directly.
+fn deduped_devices(manager: &DeviceManager) -> Vec<&DeviceInfo> {
+    let mut all = manager.devices_by_type(DeviceType::Keyboard);
+    all.extend(manager.devices_by_type(DeviceType::Headset));
+    all.extend(manager.devices_by_type(DeviceType::Unknown));
+    all
 }
 
 fn cmd_devices(manager: &DeviceManager) -> Result<()> {
@@ -1298,7 +1323,7 @@ async fn cmd_profile(action: ProfileAction) -> Result<()> {
             if let Some(profile) = profile_manager.get(&name) {
                 println!("Loading profile: {}", profile.name);
 
-                let device_manager = DeviceManager::new()?;
+                let device_manager = new_device_manager()?;
                 let state_store = DeviceStateStore::new_async().await?;
 
                 // Apply keyboard settings if present
@@ -1347,7 +1372,7 @@ async fn cmd_profile(action: ProfileAction) -> Result<()> {
         ProfileAction::Save { name } => {
             let mut profile = Profile::new(name.clone());
             let state_store = DeviceStateStore::new_async().await?;
-            let device_manager = DeviceManager::new()?;
+            let device_manager = new_device_manager()?;
 
             // Capture keyboard settings from state store
             if let Some(keyboard_info) = device_manager.first_device_of_type(DeviceType::Keyboard) {
@@ -2357,7 +2382,7 @@ async fn cmd_status(_initial_manager: &DeviceManager, device_filter: &str, refre
     let is_tty = std::io::stdout().is_terminal();
 
     // Get initial device list (create new manager for mutations)
-    let mut manager = DeviceManager::new()?;
+    let mut manager = new_device_manager()?;
     manager.refresh()?;
 
     // Filter devices by type
@@ -2382,7 +2407,7 @@ async fn cmd_status(_initial_manager: &DeviceManager, device_filter: &str, refre
         // Create progress bars for each device
         let mut progress_bars: Vec<(DeviceInfo, ProgressBar)> = Vec::new();
 
-        for device_info in manager.devices() {
+        for device_info in deduped_devices(&manager) {
             if let Some(filter) = filter_type {
                 if device_info.device_type != filter {
                     continue;
@@ -2461,7 +2486,7 @@ async fn cmd_status(_initial_manager: &DeviceManager, device_filter: &str, refre
         // Non-TTY mode: Single table output
         let mut rows: Vec<DeviceRow> = Vec::new();
 
-        for device_info in manager.devices() {
+        for device_info in deduped_devices(&manager) {
             if let Some(filter) = filter_type {
                 if device_info.device_type != filter {
                     continue;
@@ -2588,8 +2613,7 @@ async fn cmd_test_device(manager: &DeviceManager, device: &str, benchmark: bool,
 
     // Try to find and open the device by name or path
     let device_lower = device.to_lowercase();
-    let device_info = manager
-        .devices()
+    let device_info = deduped_devices(manager)
         .into_iter()
         .find(|d| d.path.contains(device) || d.name.to_lowercase().contains(&device_lower))
         .ok_or_else(|| {
@@ -2916,7 +2940,10 @@ async fn setup_hotplug_monitoring(
 }
 
 async fn initialize_devices(manager: &DeviceManager, daemon_state: Arc<RwLock<DaemonState>>) {
-    let devices_info = manager.devices();
+    // Deduplicated, not manager.devices(): the raw list has one entry per HID collection (up to
+    // 10 for a single Apex Pro TKL 2023 on Windows), which would open the same physical control
+    // endpoint multiple times and register that many independent RgbController/DeviceId entries.
+    let devices_info = deduped_devices(manager);
     if devices_info.is_empty() {
         info!("No SteelSeries devices found initially");
     } else {

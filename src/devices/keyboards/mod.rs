@@ -966,6 +966,8 @@ mod tests {
             vendor_id: crate::STEELSERIES_VENDOR_ID,
             product_id: product_ids::APEX_PRO_TKL_2023,
             interface_number: 1,
+            usage_page: 0xFFC0,
+            usage: 0x01,
             serial_number: Some("TEST123".to_string()),
             manufacturer: Some("SteelSeries".to_string()),
             path: "/test/device/path".to_string(),

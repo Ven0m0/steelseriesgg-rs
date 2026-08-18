@@ -84,6 +84,8 @@ pub struct DeviceInfoSummary {
     pub product_id: u16,
     /// Interface number
     pub interface_number: i32,
+    /// HID usage page of the collection this snapshot was taken from
+    pub usage_page: u16,
     /// Serial number (if available)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub serial_number: Option<String>,
@@ -96,6 +98,7 @@ impl From<&DeviceInfo> for DeviceInfoSummary {
             vendor_id: info.vendor_id,
             product_id: info.product_id,
             interface_number: info.interface_number,
+            usage_page: info.usage_page,
             serial_number: info.serial_number.clone(),
         }
     }

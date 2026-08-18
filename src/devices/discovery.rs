@@ -11,8 +11,75 @@ use super::keyboards::apex::Apex3Tkl;
 use super::keyboards::apex_pro_tkl_2023::ApexProTkl2023;
 use super::keyboards::{GenericKeyboard, Keyboard};
 use super::product_ids::{APEX_3_TKL, APEX_PRO_TKL_2023, APEX_PRO_TKL_2023_WIRELESS, APEX_PRO_TKL_2023_WIRELESS_2};
-use super::{DeviceInfo, DeviceType, device_name_from_product_id, device_type_from_product_id};
+use super::{
+    DeviceInfo, DeviceType, STEELSERIES_CONTROL_USAGE_PAGE, device_name_from_product_id, device_type_from_product_id,
+};
 use crate::{Error, Result, STEELSERIES_VENDOR_ID};
+
+/// Score a HID collection as a candidate control (RGB/actuation) endpoint. Higher scores win;
+/// `None` means this collection is never a control endpoint.
+///
+/// Windows splits one USB HID interface into several device nodes (one per top-level
+/// collection) that share the same interface number, so `interface_number` alone cannot
+/// identify the control collection. Ranking is by usage page instead:
+///
+/// 1. `STEELSERIES_CONTROL_USAGE_PAGE` (`0xFFC0`) — the confirmed SteelSeries control page.
+/// 2. Any other vendor-defined page (`>= 0xFF00`) — unconfirmed but plausible, tie-broken by
+///    the lowest interface number so a deterministic choice is made when multiple exist.
+/// 3. The legacy per-PID interface table, for hardware where no vendor-defined page was seen
+///    (kept as a fallback since the wireless PIDs are unverified against this ranking).
+/// 4. Standard OS-facing pages (Generic Desktop `0x0001`, Consumer `0x000C`) never qualify.
+fn control_score(usage_page: u16, interface_number: i32, product_id: u16, device_type: DeviceType) -> Option<u32> {
+    if usage_page == STEELSERIES_CONTROL_USAGE_PAGE {
+        return Some(3_000_000 - interface_number.max(0) as u32);
+    }
+    if usage_page >= 0xFF00 {
+        return Some(2_000_000 - interface_number.max(0) as u32);
+    }
+
+    let fallback_interface = match device_type {
+        DeviceType::Keyboard
+            if product_id == APEX_PRO_TKL_2023_WIRELESS || product_id == APEX_PRO_TKL_2023_WIRELESS_2 =>
+        {
+            3
+        }
+        DeviceType::Keyboard => 1,
+        DeviceType::Headset => 3,
+        DeviceType::Unknown => return None,
+    };
+    if interface_number == fallback_interface {
+        Some(1_000_000)
+    } else {
+        None
+    }
+}
+
+/// Pick one representative `DeviceInfo` per physical device of `device_type` from `devices`,
+/// preferring the control-endpoint candidate recorded in `control_cache` for that
+/// (vendor_id, product_id) when one exists.
+///
+/// Pure and side-effect free (no `HidApi` dependency) so it is directly testable, and so its
+/// result does not depend on `devices`' `HashMap` iteration order — the source of the D1 bug
+/// where the representative HID collection changed on every process restart.
+fn pick_representatives<'a>(
+    devices: &'a HashMap<String, DeviceInfo>,
+    control_cache: &'a HashMap<(u16, u16), DeviceInfo>,
+    device_type: DeviceType,
+) -> Vec<&'a DeviceInfo> {
+    let mut seen: std::collections::HashSet<(u16, Option<&str>)> = std::collections::HashSet::new();
+    let mut result: Vec<&DeviceInfo> = devices
+        .values()
+        .filter(|d| d.device_type == device_type)
+        .filter(|d| seen.insert((d.product_id, d.serial_number.as_deref())))
+        .map(|d| control_cache.get(&(d.vendor_id, d.product_id)).unwrap_or(d))
+        .collect();
+    result.sort_unstable_by(|a, b| {
+        a.product_id
+            .cmp(&b.product_id)
+            .then_with(|| a.serial_number.cmp(&b.serial_number))
+    });
+    result
+}
 
 /// Device fingerprint for tracking devices across disconnections
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -134,8 +201,12 @@ impl Default for HotPlugConfig {
 pub struct DeviceManager {
     api: HidApi,
     devices: HashMap<String, DeviceInfo>,
-    /// Cache of device paths indexed by (vendor_id, product_id, interface_number) for O(1) lookup
-    device_cache: HashMap<(u16, u16, i32), String>,
+    /// Best-scoring control-endpoint path per (vendor_id, product_id), chosen via `control_score`.
+    /// This is the single source of truth for "which HID collection is the control endpoint" —
+    /// `open_device` and `devices_by_type` both read from it so they agree on the same device.
+    control_cache: HashMap<(u16, u16), DeviceInfo>,
+    /// Manual control-endpoint override, set via `set_device_override`. Empty by default.
+    device_override: crate::config::DeviceConfig,
     /// Device registry for tracking device lifecycle across reconnections
     device_registry: Arc<RwLock<HashMap<String, DeviceRegistryEntry>>>,
     /// Hot-plug monitoring configuration
@@ -158,7 +229,8 @@ impl DeviceManager {
         let mut manager = Self {
             api,
             devices: HashMap::new(),
-            device_cache: HashMap::new(),
+            control_cache: HashMap::new(),
+            device_override: crate::config::DeviceConfig::default(),
             device_registry: Arc::new(RwLock::new(HashMap::new())),
             hotplug_config: config,
             hotplug_callback: None,
@@ -174,10 +246,12 @@ impl DeviceManager {
         let prev_capacity = self.devices.capacity().max(8); // Minimum reasonable capacity
         self.devices.clear();
         self.devices.reserve(prev_capacity);
-        self.device_cache.clear();
-        self.device_cache.reserve(prev_capacity);
+        self.control_cache.clear();
 
         self.api.refresh_devices()?;
+
+        // Track the best-scoring candidate seen so far per (vendor_id, product_id).
+        let mut best_scores: HashMap<(u16, u16), u32> = HashMap::new();
 
         for device in self.api.device_list() {
             if device.vendor_id() != STEELSERIES_VENDOR_ID {
@@ -199,19 +273,31 @@ impl DeviceManager {
                 vendor_id: device.vendor_id(),
                 product_id,
                 interface_number: device.interface_number(),
+                usage_page: device.usage_page(),
+                usage: device.usage(),
                 serial_number: device.serial_number().map(|s: &str| s.to_string()),
                 manufacturer: device.manufacturer_string().map(|s: &str| s.to_string()),
                 path: path.clone(),
             };
 
             debug!(
-                "Found device: {} (PID: {:#06x}, Interface: {})",
-                info.name, info.product_id, info.interface_number
+                "Found device: {} (PID: {:#06x}, Interface: {}, UsagePage: {:#06x}, Usage: {:#04x})",
+                info.name, info.product_id, info.interface_number, info.usage_page, info.usage
             );
 
-            // Cache the device path for fast lookup
-            let cache_key = (device.vendor_id(), device.product_id(), device.interface_number());
-            self.device_cache.insert(cache_key, path.clone());
+            let cache_key = (info.vendor_id, info.product_id);
+            if let Some(score) = control_score(
+                info.usage_page,
+                info.interface_number,
+                info.product_id,
+                info.device_type,
+            ) {
+                let is_better = best_scores.get(&cache_key).is_none_or(|&best| score > best);
+                if is_better {
+                    best_scores.insert(cache_key, score);
+                    self.control_cache.insert(cache_key, info.clone());
+                }
+            }
 
             self.devices.insert(path, info);
         }
@@ -233,15 +319,12 @@ impl DeviceManager {
     /// returns one representative `DeviceInfo` per physical device so callers don't
     /// accidentally open or list the same device multiple times.
     ///
-    /// `open_device` ignores the interface number stored in `DeviceInfo` and always
-    /// opens the correct control interface, so any representative is safe to pass.
+    /// The representative is always the control-endpoint candidate chosen by `control_score`
+    /// during `refresh` (falling back to whichever collection was seen first if none scored),
+    /// so the result is deterministic across runs — unlike picking an arbitrary entry out of a
+    /// `HashMap`, whose iteration order is randomized per process.
     pub fn devices_by_type(&self, device_type: DeviceType) -> Vec<&DeviceInfo> {
-        let mut seen: std::collections::HashSet<(u16, Option<&str>)> = std::collections::HashSet::new();
-        self.devices
-            .values()
-            .filter(|d| d.device_type == device_type)
-            .filter(|d| seen.insert((d.product_id, d.serial_number.as_deref())))
-            .collect()
+        pick_representatives(&self.devices, &self.control_cache, device_type)
     }
 
     /// Get all keyboards.
@@ -264,52 +347,70 @@ impl DeviceManager {
         self.devices_by_type(device_type).into_iter().next()
     }
 
+    /// Resolve the control-endpoint `DeviceInfo` for a (vendor_id, product_id) pair.
+    ///
+    /// Checks `device_override` first (from `config.toml`'s `[device]` section), then falls
+    /// back to the `control_score`-ranked candidate computed during `refresh`.
+    fn resolve_control(&self, vendor_id: u16, product_id: u16) -> Option<&DeviceInfo> {
+        if let Some(path) = &self.device_override.control_path
+            && let Some(d) = self.devices.get(path)
+            && d.vendor_id == vendor_id
+            && d.product_id == product_id
+        {
+            return Some(d);
+        }
+        if let Some(usage_page) = self.device_override.control_usage_page
+            && let Some(d) = self
+                .devices
+                .values()
+                .find(|d| d.vendor_id == vendor_id && d.product_id == product_id && d.usage_page == usage_page)
+        {
+            return Some(d);
+        }
+        self.control_cache.get(&(vendor_id, product_id))
+    }
+
+    /// Set a manual control-endpoint override (typically loaded from `config.toml`'s `[device]`
+    /// section). Takes priority over `control_score`'s ranking when a match is found; falls back
+    /// to automatic ranking otherwise.
+    pub fn set_device_override(&mut self, device_config: crate::config::DeviceConfig) {
+        self.device_override = device_config;
+    }
+
+    /// Path of the resolved control-endpoint collection for a (vendor_id, product_id) pair, if
+    /// any was found. Used by `print_device_summary` to mark which of several HID collections
+    /// is actually used for communication.
+    pub fn control_path(&self, vendor_id: u16, product_id: u16) -> Option<&str> {
+        self.resolve_control(vendor_id, product_id).map(|d| d.path.as_str())
+    }
+
     /// Open a device for communication.
     pub fn open_device(&self, info: &DeviceInfo) -> Result<hidapi::HidDevice> {
-        // Find the device with the matching interface for control
-        // Most SteelSeries devices use interface 1 for control
-        // Wireless keyboards (e.g. Apex Pro TKL 2023 Wireless PID 0x1632) use interface 3
-        let control_interface = match info.device_type {
-            DeviceType::Keyboard
-                if info.product_id == APEX_PRO_TKL_2023_WIRELESS || info.product_id == APEX_PRO_TKL_2023_WIRELESS_2 =>
-            {
-                3
+        let control = self.resolve_control(info.vendor_id, info.product_id);
+
+        let path = match control {
+            Some(c) => &c.path,
+            None => {
+                return Err(Error::DeviceNotFound(format!(
+                    "{} (no control-endpoint collection found for VID:{:#06x} PID:{:#06x})",
+                    info.name, info.vendor_id, info.product_id
+                )));
             }
-            DeviceType::Keyboard => 1,
-            DeviceType::Headset => 3,
-            DeviceType::Unknown => info.interface_number,
         };
 
         debug!(
-            "Opening device: {} (VID:{:#06x}, PID:{:#06x}, Interface:{})",
-            info.name, info.vendor_id, info.product_id, control_interface
+            "Opening device: {} (VID:{:#06x}, PID:{:#06x}, Interface:{}, UsagePage:{:#06x})",
+            info.name,
+            info.vendor_id,
+            info.product_id,
+            control.map(|c| c.interface_number).unwrap_or(-1),
+            control.map(|c| c.usage_page).unwrap_or(0),
         );
 
-        // Use cache for O(1) lookup instead of O(n) iteration
-        let cache_key = (info.vendor_id, info.product_id, control_interface);
-        if let Some(path) = self.device_cache.get(&cache_key) {
-            debug!("Using cached device path: {}", path);
-            // Try to open by path directly - convert String to CStr
-            use std::ffi::CString;
-            let c_path = CString::new(path.as_str())
-                .map_err(|e| Error::DeviceCommunication(format!("Invalid device path: {}", e)))?;
-            return self.api.open_path(&c_path).map_err(Error::from);
-        }
-
-        // Fallback to iteration if not in cache (shouldn't happen after refresh)
-        for device in self.api.device_list() {
-            if device.vendor_id() == info.vendor_id
-                && device.product_id() == info.product_id
-                && device.interface_number() == control_interface
-            {
-                return device.open_device(&self.api).map_err(Error::from);
-            }
-        }
-
-        Err(Error::DeviceNotFound(format!(
-            "{} (interface {})",
-            info.name, control_interface
-        )))
+        use std::ffi::CString;
+        let c_path = CString::new(path.as_str())
+            .map_err(|e| Error::DeviceCommunication(format!("Invalid device path: {}", e)))?;
+        self.api.open_path(&c_path).map_err(Error::from)
     }
 
     /// Get a reference to the HID API.
@@ -470,6 +571,17 @@ impl DeviceManager {
 
                 let product_id = device.product_id();
                 let device_type = crate::devices::device_type_from_product_id(product_id);
+                let interface_number = device.interface_number();
+                let usage_page = device.usage_page();
+
+                // Skip HID collections that are not a control endpoint (e.g. the OS-facing
+                // Generic Desktop / Consumer collections Windows exposes alongside the vendor
+                // control page), so hot-plug fires one event per physical device, not per
+                // collection.
+                if control_score(usage_page, interface_number, product_id, device_type).is_none() {
+                    continue;
+                }
+
                 let name = std::borrow::Cow::Owned(crate::devices::device_name_from_product_id(product_id).to_string());
                 let path = device.path().to_string_lossy().into_owned();
 
@@ -478,7 +590,9 @@ impl DeviceManager {
                     device_type,
                     vendor_id: device.vendor_id(),
                     product_id,
-                    interface_number: device.interface_number(),
+                    interface_number,
+                    usage_page,
+                    usage: device.usage(),
                     serial_number: device.serial_number().map(|s: &str| s.to_string()),
                     manufacturer: device.manufacturer_string().map(|s: &str| s.to_string()),
                     path,
@@ -726,20 +840,20 @@ pub fn print_device_summary(manager: &DeviceManager) {
         let device = &interfaces[0]; // Representative device
 
         println!("  {}. {} [{}]", i + 1, device.name, device.device_type);
+        println!("     VID: {:#06x}, PID: {:#06x}", device.vendor_id, device.product_id);
 
-        // More efficient interface list building with pre-allocated capacity and direct formatting
-        let mut interface_list = String::with_capacity(interfaces.len() * 4); // Estimate capacity
-        for (idx, interface) in interfaces.iter().enumerate() {
-            if idx > 0 {
-                interface_list.push_str(", ");
-            }
-            interface_list.push_str(&interface.interface_number.to_string());
+        let control_path = manager.control_path(device.vendor_id, device.product_id);
+        for interface in &interfaces {
+            let marker = if control_path == Some(interface.path.as_str()) {
+                " <- control endpoint"
+            } else {
+                ""
+            };
+            println!(
+                "       Interface {}: usage_page={:#06x}, usage={:#04x}{}",
+                interface.interface_number, interface.usage_page, interface.usage, marker
+            );
         }
-
-        println!(
-            "     VID: {:#06x}, PID: {:#06x}, Interfaces: {}",
-            device.vendor_id, device.product_id, interface_list
-        );
 
         if let Some(ref serial) = device.serial_number {
             println!("     Serial: {}", serial);
@@ -760,10 +874,192 @@ mod tests {
             vendor_id: 0x1038,
             product_id: 0x1612,
             interface_number: 1,
+            usage_page: STEELSERIES_CONTROL_USAGE_PAGE,
+            usage: 0x01,
             serial_number: serial,
             manufacturer: Some("SteelSeries".to_string()),
             path: "path/to/device".to_string(),
         }
+    }
+
+    /// Apex Pro TKL 2023 (PID 0x1628) HID collection, as measured via `SetupDiEnumDeviceInterfaces`
+    /// + `HidP_GetCaps` on Windows, 2026-08-18. Ten collections share one physical device.
+    fn apex_pro_tkl_2023_collection(interface_number: i32, usage_page: u16, usage: u16, path: &str) -> DeviceInfo {
+        DeviceInfo {
+            name: std::borrow::Cow::Borrowed("Apex Pro TKL (2023)"),
+            device_type: DeviceType::Keyboard,
+            vendor_id: crate::STEELSERIES_VENDOR_ID,
+            product_id: APEX_PRO_TKL_2023,
+            interface_number,
+            usage_page,
+            usage,
+            serial_number: None,
+            manufacturer: Some("SteelSeries".to_string()),
+            path: path.to_string(),
+        }
+    }
+
+    /// The exact 10 collections measured for PID 0x1628, as `(interface, usage_page, usage, path)`.
+    fn apex_pro_tkl_2023_table() -> Vec<(i32, u16, u16, &'static str)> {
+        vec![
+            (0, 0x0001, 0x02, "mi_00&col01"), // mouse
+            (0, 0x0001, 0x06, "mi_00&col02"), // OS keyboard
+            (0, 0x000C, 0x01, "mi_00&col03"), // consumer
+            (1, 0xFFC0, 0x01, "mi_01"),       // control endpoint: out=65, feature=645
+            (2, 0x0001, 0x02, "mi_02&col01"),
+            (2, 0x0001, 0x06, "mi_02&col02"),
+            (2, 0x000C, 0x01, "mi_02&col03"),
+            (3, 0x000C, 0x01, "mi_03&col01"),
+            (3, 0x0001, 0x02, "mi_03&col02"),
+            (4, 0xFFC1, 0x01, "mi_04"), // vendor-defined but input-only (out=0, feature=0)
+        ]
+    }
+
+    #[test]
+    fn test_control_score_prefers_confirmed_vendor_page_over_other_vendor_pages() {
+        let confirmed = control_score(0xFFC0, 1, APEX_PRO_TKL_2023, DeviceType::Keyboard).unwrap();
+        let other_vendor = control_score(0xFFC1, 4, APEX_PRO_TKL_2023, DeviceType::Keyboard).unwrap();
+        assert!(confirmed > other_vendor, "0xFFC0 must outrank 0xFFC1");
+    }
+
+    #[test]
+    fn test_control_score_rejects_os_facing_pages_off_the_fallback_interface() {
+        // Generic Desktop (mouse and OS keyboard) and Consumer pages never rank via the vendor-
+        // page tiers; on any interface other than the legacy per-PID fallback (1, for a
+        // non-wireless keyboard) they score None entirely. On the Apex Pro TKL 2023 this covers
+        // mi_00, mi_02, and mi_03's collections (interfaces 0, 2, 3).
+        assert_eq!(control_score(0x0001, 0, APEX_PRO_TKL_2023, DeviceType::Keyboard), None);
+        assert_eq!(control_score(0x0001, 2, APEX_PRO_TKL_2023, DeviceType::Keyboard), None);
+        assert_eq!(control_score(0x000C, 3, APEX_PRO_TKL_2023, DeviceType::Keyboard), None);
+    }
+
+    #[test]
+    fn test_control_score_fallback_tier_is_usage_page_agnostic_on_the_fallback_interface() {
+        // Tier 3 (the legacy per-PID interface table) matches by interface number alone, same as
+        // the code it replaces — it does not know the difference between a vendor page and an
+        // OS-facing page on that interface. This is only safe because, on every PID this crate
+        // has verified, nothing OS-facing sits on the fallback interface (confirmed for the Apex
+        // Pro TKL 2023: interface 1 carries only the 0xFFC0 control collection). A future PID
+        // where that assumption doesn't hold would need a page check added to this tier.
+        assert_eq!(
+            control_score(0x0001, 1, APEX_PRO_TKL_2023, DeviceType::Keyboard),
+            Some(1_000_000)
+        );
+    }
+
+    #[test]
+    fn test_control_score_falls_back_to_per_pid_interface_when_no_vendor_page() {
+        // A hypothetical keyboard with no vendor-defined page at all still resolves via the
+        // legacy per-PID interface table (interface 1 for a non-wireless keyboard).
+        let other_pid = 0x9999;
+        assert_eq!(
+            control_score(0x0001, 1, other_pid, DeviceType::Keyboard),
+            Some(1_000_000)
+        );
+        assert_eq!(control_score(0x0001, 0, other_pid, DeviceType::Keyboard), None);
+    }
+
+    #[test]
+    fn test_control_score_wireless_fallback_uses_interface_3() {
+        assert_eq!(
+            control_score(0x0001, 3, APEX_PRO_TKL_2023_WIRELESS, DeviceType::Keyboard),
+            Some(1_000_000)
+        );
+        assert_eq!(
+            control_score(0x0001, 1, APEX_PRO_TKL_2023_WIRELESS, DeviceType::Keyboard),
+            None
+        );
+    }
+
+    #[test]
+    fn test_control_score_picks_mi_01_from_full_apex_pro_tkl_2023_table() {
+        let scores: Vec<(&str, Option<u32>)> = apex_pro_tkl_2023_table()
+            .into_iter()
+            .map(|(iface, usage_page, _usage, path)| {
+                (
+                    path,
+                    control_score(usage_page, iface, APEX_PRO_TKL_2023, DeviceType::Keyboard),
+                )
+            })
+            .collect();
+
+        let best = scores.iter().max_by_key(|(_, score)| score.unwrap_or(0)).unwrap();
+        assert_eq!(best.0, "mi_01", "mi_01 (0xFFC0) must outscore every other collection");
+
+        // The eight Generic Desktop / Consumer collections never qualify (none of them sit on
+        // interface 1, the per-PID fallback for a non-wireless keyboard); only mi_01 (0xFFC0)
+        // and mi_04 (0xFFC1) score.
+        let none_count = scores.iter().filter(|(_, s)| s.is_none()).count();
+        assert_eq!(none_count, 8);
+    }
+
+    #[test]
+    fn test_devices_by_type_returns_one_representative_for_ten_collections() {
+        let mut devices: HashMap<String, DeviceInfo> = HashMap::new();
+        for (iface, usage_page, usage, path) in apex_pro_tkl_2023_table() {
+            devices.insert(
+                path.to_string(),
+                apex_pro_tkl_2023_collection(iface, usage_page, usage, path),
+            );
+        }
+
+        let mut control_cache: HashMap<(u16, u16), DeviceInfo> = HashMap::new();
+        control_cache.insert(
+            (crate::STEELSERIES_VENDOR_ID, APEX_PRO_TKL_2023),
+            apex_pro_tkl_2023_collection(1, 0xFFC0, 0x01, "mi_01"),
+        );
+
+        let result = pick_representatives(&devices, &control_cache, DeviceType::Keyboard);
+        assert_eq!(
+            result.len(),
+            1,
+            "ten collections of one physical device must dedupe to one entry"
+        );
+        assert_eq!(result[0].path, "mi_01");
+        assert_eq!(result[0].usage_page, 0xFFC0);
+    }
+
+    #[test]
+    fn test_devices_by_type_representative_is_stable_regardless_of_map_insertion_order() {
+        // D1: representative selection must not depend on `HashMap` iteration order, which is
+        // randomized per instance. Build the same 10 collections in forward and reverse
+        // insertion order and confirm both pick the identical representative.
+        let mut control_cache: HashMap<(u16, u16), DeviceInfo> = HashMap::new();
+        control_cache.insert(
+            (crate::STEELSERIES_VENDOR_ID, APEX_PRO_TKL_2023),
+            apex_pro_tkl_2023_collection(1, 0xFFC0, 0x01, "mi_01"),
+        );
+
+        let table = apex_pro_tkl_2023_table();
+
+        let mut forward: HashMap<String, DeviceInfo> = HashMap::new();
+        for &(iface, usage_page, usage, path) in &table {
+            forward.insert(
+                path.to_string(),
+                apex_pro_tkl_2023_collection(iface, usage_page, usage, path),
+            );
+        }
+
+        let mut reversed: HashMap<String, DeviceInfo> = HashMap::new();
+        for &(iface, usage_page, usage, path) in table.iter().rev() {
+            reversed.insert(
+                path.to_string(),
+                apex_pro_tkl_2023_collection(iface, usage_page, usage, path),
+            );
+        }
+
+        let rep_forward = pick_representatives(&forward, &control_cache, DeviceType::Keyboard);
+        let rep_reversed = pick_representatives(&reversed, &control_cache, DeviceType::Keyboard);
+
+        assert_eq!(rep_forward.len(), 1);
+        assert_eq!(rep_reversed.len(), 1);
+        assert_eq!(rep_forward[0].path, rep_reversed[0].path);
+
+        // The regression this guards against: a stable representative means a stable DeviceId
+        // key, so persisted RGB state/profiles are found again on the next launch.
+        let key_forward = crate::device_state::DeviceId::from(rep_forward[0]).to_key();
+        let key_reversed = crate::device_state::DeviceId::from(rep_reversed[0]).to_key();
+        assert_eq!(key_forward, key_reversed, "DeviceId key must be stable across runs");
     }
 
     #[test]

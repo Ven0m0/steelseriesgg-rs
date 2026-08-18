@@ -62,6 +62,12 @@ pub struct DeviceInfo {
     /// Interface number
     pub interface_number: i32,
 
+    /// HID top-level collection usage page. Vendor-defined pages are `>= 0xFF00`.
+    pub usage_page: u16,
+
+    /// HID top-level collection usage.
+    pub usage: u16,
+
     /// Serial number (if available)
     pub serial_number: Option<String>,
 
@@ -329,21 +335,44 @@ pub fn find_hidraw_for_interface(vendor_id: u16, product_id: u16, interface: usi
 
 #[cfg(not(unix))]
 /// Find a HID device path for a specific USB interface of a device.
-/// On non-Linux platforms, enumerates via hidapi and matches by vendor/product ID
-/// and, for interface 3 (wireless control), by vendor-specific usage page (0xFF00).
-pub fn find_hidraw_for_interface(vendor_id: u16, product_id: u16, interface: usize) -> Option<String> {
+///
+/// Windows splits one USB HID interface into several device nodes, one per top-level
+/// collection, all sharing the same VID/PID/interface number. The `interface` parameter alone
+/// cannot disambiguate them, so this matches on usage page instead: prefer the confirmed
+/// SteelSeries control page (`STEELSERIES_CONTROL_USAGE_PAGE`), then any other vendor-defined
+/// page (`>= 0xFF00`), tie-broken by lowest interface number.
+pub fn find_hidraw_for_interface(vendor_id: u16, product_id: u16, _interface: usize) -> Option<String> {
     let api = hidapi::HidApi::new().ok()?;
-    // First pass: try to match on usage page for the target interface.
-    // Interface 3 (wireless control) uses usage page 0xFF00 (vendor-specific).
+
+    let mut best: Option<(u32, &hidapi::DeviceInfo)> = None;
     for dev_info in api.device_list() {
-        if dev_info.vendor_id() == vendor_id && dev_info.product_id() == product_id {
-            let matches_interface = interface == 3 && dev_info.usage_page() == 0xFF00;
-            if matches_interface {
-                return dev_info.path().to_str().ok().map(str::to_owned);
-            }
+        if dev_info.vendor_id() != vendor_id || dev_info.product_id() != product_id {
+            continue;
+        }
+        let usage_page = dev_info.usage_page();
+        let score = if usage_page == STEELSERIES_CONTROL_USAGE_PAGE {
+            2
+        } else if usage_page >= 0xFF00 {
+            1
+        } else {
+            continue;
+        };
+        if best.is_none_or(|(best_score, best_dev)| {
+            score > best_score || (score == best_score && dev_info.interface_number() < best_dev.interface_number())
+        }) {
+            best = Some((score, dev_info));
         }
     }
-    // Second pass: return any interface with matching VID/PID as a fallback.
+    if let Some((_, dev_info)) = best {
+        return dev_info.path().to_str().ok().map(str::to_owned);
+    }
+
+    // Fallback: return any interface with matching VID/PID. Reaching here means no vendor-defined
+    // collection was found, which usually means the wrong device or an unhandled model.
+    tracing::warn!(
+        "No vendor-defined HID collection found for VID:{vendor_id:#06x} PID:{product_id:#06x}; \
+         falling back to first matching interface, which may not be the control endpoint"
+    );
     for dev_info in api.device_list() {
         if dev_info.vendor_id() == vendor_id && dev_info.product_id() == product_id {
             return dev_info.path().to_str().ok().map(str::to_owned);
@@ -382,6 +411,17 @@ pub fn send_feature_report_raw(device_path: &str, data: &[u8], report_len: usize
         .map_err(|e| Error::DeviceCommunication(format!("Feature report failed on {device_path}: {e}")))?;
     Ok(())
 }
+
+/// HID vendor-defined usage page used by the SteelSeries control (RGB/actuation) collection.
+///
+/// Confirmed on Apex Pro TKL (2023), PID `0x1628`, 2026-08-18: of the 10 HID collections the
+/// device exposes on Windows, only this page's collection has a non-zero output report length
+/// (65 bytes) and feature report length (645 bytes) — matching `KEYBOARD_REPORT_SIZE`. Every
+/// other collection on this PID is either a vendor-defined telemetry-only page (`0xFFC1`, input
+/// only) or a standard OS-facing Generic Desktop / Consumer page.
+///
+/// [EXPERIMENTAL] for every other PID: not verified on any other keyboard model.
+pub const STEELSERIES_CONTROL_USAGE_PAGE: u16 = 0xFFC0;
 
 pub mod product_ids {
     // Keyboards - Apex Series

@@ -16,6 +16,22 @@ pub struct PollRateConfig {
     pub keyboard_hz: Option<u32>,
 }
 
+/// Manual override for HID control-endpoint selection.
+///
+/// Auto-detection ranks HID collections by usage page (see
+/// `devices::STEELSERIES_CONTROL_USAGE_PAGE`); this lets a user pin the exact collection when
+/// auto-detection picks the wrong one on hardware the ranking hasn't been verified against.
+/// Both fields default to `None`, in which case auto-detection runs unchanged.
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+pub struct DeviceConfig {
+    /// Pin the control endpoint to an exact HID path (as reported by `ssgg devices`).
+    /// Takes priority over `control_usage_page` when both are set.
+    pub control_path: Option<String>,
+
+    /// Pin the control endpoint to a usage page, e.g. `0xFFC0`.
+    pub control_usage_page: Option<u16>,
+}
+
 /// Application configuration.
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct Config {
@@ -34,6 +50,9 @@ pub struct Config {
 
     /// USB polling rate settings
     pub poll_rate: PollRateConfig,
+
+    /// Manual HID device selection override
+    pub device: DeviceConfig,
 }
 
 /// GameSense server configuration.

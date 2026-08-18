@@ -1264,6 +1264,8 @@ pub mod test_helpers {
             vendor_id: 0x1038,
             product_id: 0x1628,
             interface_number: 1,
+            usage_page: 0xFFC0,
+            usage: 0x01,
             serial_number: Some("MOCK123".to_string()),
             manufacturer: Some("SteelSeries".to_string()),
             path: "/mock/device".to_string(),
