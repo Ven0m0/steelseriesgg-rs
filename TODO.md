@@ -5,6 +5,8 @@
 
 ## Active backlog
 
+Fix the errors in `cargo clippy-ci`
+
 1. **Apex 3 TKL RGB (issue #173)** — commands report success but lighting never changes.
    Concrete lead: OpenRGB's 8-zone protocol (`0x21` = set zone colors, `0x23` = brightness);
    the current code uses `0x21` already (fixed since this note was written). See PLAN.md Phase 1 —
