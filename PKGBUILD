@@ -53,7 +53,7 @@ build() {
   cd "$(_resolve_archive_dir)" || return 1
   export CARGO_HOME="$srcdir/cargo-home"
   export CARGO_TARGET_DIR="$srcdir/target"
-  cargo build --release --frozen --bin ssgg
+  cargo build -r --frozen --bin ssgg
 }
 
 check() {
