@@ -4,7 +4,7 @@
 
 Open-source SteelSeries GG replacement for Linux. Controls SteelSeries keyboards and headsets via USB HID: RGB lighting effects, a GameSense-compatible HTTP server (port 27301), device profiles, and optional PulseAudio/PipeWire mixer and Sonar integration.
 
-- **Language**: Rust 2021 edition, MSRV 1.94.1
+- **Language**: Rust 2024 edition, MSRV 1.97.1
 - **Primary binary**: `ssgg` (`src/main.rs`, clap CLI)
 - **Library crate**: `steelseries_gg` (`src/lib.rs`)
 - **Platform**: Linux-first; Windows build supported but not primary
@@ -90,7 +90,7 @@ When prose docs and code disagree, always trust these files:
 
 ## Toolchain and CI
 
-**Toolchain**: `rust-toolchain.toml` pins `channel = "stable"`. CI jobs explicitly pin **1.94.1** (via the `dtolnay` rust-toolchain action). MSRV declared in `Cargo.toml`: **1.94.1**.
+**Toolchain**: `rust-toolchain.toml` pins `channel = "stable"`. CI jobs explicitly pin **1.97.1** (via the `dtolnay` rust-toolchain action). MSRV declared in `Cargo.toml`: **1.97.1**.
 
 > Verify the toolchain by reading `rust-toolchain.toml` and `.github/workflows/ci.yml` before quoting any version — memory is unreliable here.
 

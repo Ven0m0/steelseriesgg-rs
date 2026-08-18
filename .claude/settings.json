@@ -9,6 +9,16 @@
   "hooks": {
     "PreToolUse": [
       {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "if": "Bash(git push*)",
+            "command": "echo 'REMINDER: run the ci-matrix skill (fmt, clippy across features, tests, build) before pushing.'"
+          }
+        ]
+      },
+      {
         "matcher": "Edit|Write",
         "hooks": [
           {
@@ -71,6 +81,16 @@
             "if": "Write(*src/devices*.rs)",
             "command": "cargo clippy --all-targets --locked -- -D warnings 2>&1 | tail -40 && exit 0 || exit 2",
             "async": true
+          },
+          {
+            "type": "command",
+            "if": "Edit(*src*.rs)",
+            "command": "rg -n '\\.unwrap\\(\\)|\\.expect\\(' src --glob '!src/bin/**' 2>/dev/null && echo 'WARNING: unwrap()/expect() found in src/ outside src/bin — CLAUDE.md hard constraint 4 forbids these in production paths unless inside #[cfg(test)].' || exit 0"
+          },
+          {
+            "type": "command",
+            "if": "Write(*src*.rs)",
+            "command": "rg -n '\\.unwrap\\(\\)|\\.expect\\(' src --glob '!src/bin/**' 2>/dev/null && echo 'WARNING: unwrap()/expect() found in src/ outside src/bin — CLAUDE.md hard constraint 4 forbids these in production paths unless inside #[cfg(test)].' || exit 0"
           }
         ]
       }

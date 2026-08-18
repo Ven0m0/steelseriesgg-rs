@@ -22,14 +22,17 @@ rustflags = ["-Ctarget-cpu=x86-64-v3"]
 # Linux x86_64
 # ---------------------------------------------------------------------------
 [target.x86_64-unknown-linux-gnu]
+# NOTE: a target.<triple>.rustflags key REPLACES [build] rustflags, it does not merge —
+# so -Ctarget-cpu=x86-64-v3 must be repeated here or it silently drops for this target.
+
 # mold (fastest): uncomment if installed
-# rustflags = ["-Clink-arg=-fuse-ld=mold"]
+# rustflags = ["-Ctarget-cpu=x86-64-v3", "-Clink-arg=-fuse-ld=mold"]
 
 # lld (fast): uncomment if installed, comment out mold line above
-rustflags = ["-Clink-arg=-fuse-ld=lld"]
+rustflags = ["-Ctarget-cpu=x86-64-v3", "-Clink-arg=-fuse-ld=lld"]
 
 # native CPU tuning — faster binary, but NOT portable across machines
-# rustflags = ["-Ctarget-cpu=native"]
+# rustflags = ["-Ctarget-cpu=native", "-Clink-arg=-fuse-ld=lld"]
 
 # ---------------------------------------------------------------------------
 # Linux aarch64 (cross-compile from x86_64)
@@ -40,13 +43,24 @@ linker = "aarch64-linux-gnu-gcc"
 # rustflags = ["-Clink-arg=-fuse-ld=lld"]
 
 # ---------------------------------------------------------------------------
-# Windows x86_64 (cross-compile from Linux via MinGW)
+# Windows x86_64, cross-compile FROM LINUX via MinGW.
 # Requires: sudo apt install gcc-mingw-w64-x86-64
+# Not used when building natively on Windows — see x86_64-pc-windows-msvc below.
 # ---------------------------------------------------------------------------
 [target.x86_64-pc-windows-gnu]
 linker = "x86_64-w64-mingw32-clang.exe"
 # linker = "x86_64-w64-mingw32-gcc"
 # ar = "x86_64-w64-mingw32-ar"
+
+# ---------------------------------------------------------------------------
+# Windows x86_64, native build on Windows (MSVC toolchain, rustup default host).
+# Uses link.exe from Visual Studio Build Tools — no extra install needed.
+# rust-lld is bundled with rustc but opting in needs `-C linker-features=+lld`,
+# which is still -Z-gated (checked against rustc 1.97.1: "unstable, requires
+# -Z unstable-options" even with RUSTC_BOOTSTRAP=1) — not enabled until stable.
+# ---------------------------------------------------------------------------
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-Ctarget-cpu=x86-64-v3"]
 
 # ---------------------------------------------------------------------------
 # Alias shortcuts

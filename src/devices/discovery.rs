@@ -576,7 +576,7 @@ impl DeviceManager {
         *current_devices = new_devices;
 
         // Fire events
-        if let Some(ref callback_arc) = callback {
+        if let Some(callback_arc) = callback {
             for event in events_to_fire {
                 callback_arc(event);
                 *last_event_time = now;
