@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Releases and this changelog are generated automatically from
 [Conventional Commits](https://www.conventionalcommits.org/) by release-please.
 
+## [0.1.4](https://github.com/Ven0m0/steelseriesgg-rs/compare/v0.1.3...v0.1.4) (2026-08-18)
+
+
+### Fixed
+
+* **build:** disable global sccache wrapper, unavailable in CI ([6d51f38](https://github.com/Ven0m0/steelseriesgg-rs/commit/6d51f38aa00aa85fd1dbfb5b7efad2a7cf443b73))
+
 ## [0.1.3](https://github.com/Ven0m0/steelseriesgg-rs/compare/v0.1.2...v0.1.3) (2026-08-18)
 
 
