@@ -1448,18 +1448,21 @@ async fn cmd_pollrate(action: PollrateAction) -> Result<()> {
         }
 
         PollrateAction::Status => {
+            fn print_pollrate_result(label: &str, result: steelseries_gg::error::Result<PollRate>) {
+                match result {
+                    Ok(rate) => println!("  {label}: {} Hz", rate.to_hz()),
+                    Err(e) if e.to_string().contains("not supported by this device's HID driver") => {
+                        println!("  {label}: unsupported on this driver — {e}");
+                    }
+                    Err(e) => println!("  {label}: Error: {e}"),
+                }
+            }
+
             println!("Current USB Polling Rates:");
             println!();
 
-            match get_poll_rate(DeviceType::Mouse).await {
-                Ok(rate) => println!("  Mouse:    {} Hz", rate.to_hz()),
-                Err(e) => println!("  Mouse:    Error: {}", e),
-            }
-
-            match get_poll_rate(DeviceType::Keyboard).await {
-                Ok(rate) => println!("  Keyboard: {} Hz", rate.to_hz()),
-                Err(e) => println!("  Keyboard: Error: {}", e),
-            }
+            print_pollrate_result("Mouse   ", get_poll_rate(DeviceType::Mouse).await);
+            print_pollrate_result("Keyboard", get_poll_rate(DeviceType::Keyboard).await);
 
             println!();
             println!("Note: Changes require root privileges (sudo)");

@@ -5,25 +5,31 @@
 
 ## Active backlog
 
-1. **Analyze if [signal rgb](https://signalrgb.com) can be reverse engineered.** It can change the keyboards lighting on windows 11. Read "https://docs.signalrgb.com"
-2. **Apex 3 TKL RGB (issue #173)** — commands report success but lighting never changes.
+1. **Apex 3 TKL RGB (issue #173)** — commands report success but lighting never changes.
    Concrete lead: OpenRGB's 8-zone protocol (`0x21` = set zone colors, `0x23` = brightness);
-   the current code uses `0x23` for color. See PLAN.md Phase 1.
-3. **Apex Pro TKL 2023 protocol + RGB work** — see PLAN.md Phase 2.
+   the current code uses `0x21` already (fixed since this note was written). See PLAN.md Phase 1 —
+   blocker is now hardware confirmation, not code.
+2. **Apex Pro TKL 2023 protocol + RGB work** — see PLAN.md Phase 2.
    - Verify the real per-key RGB protocol on hardware and replace the placeholder `0x23` path.
    - Discover an actuation read-back command if the firmware exposes one.
    - Validate unsupported-key handling plus ANSI/ISO layout differences on hardware.
-4. **ssgg.exe pollrate status error**.
-  "  Mouse:    Error: Device communication error: Poll rate query is not supported by this device's HID driver. USB HID devices (including SteelSeries keyboards) do not expose poll rate via the Windows HID class IOCTL interface.
-  Keyboard: Error: Device communication error: Poll rate query is not supported by this device's HID driver. USB HID devices (including SteelSeries keyboards) do not expose poll rate via the Windows HID class IOCTL interface."
-5. **Read bug report**
-  "ssgg_bug_report.json"
+3. **Read bug report**
+  "ssgg_bug_report.json" — not present in the repo yet; blocked until obtained (PLAN.md Phase 7).
 
 
 ## Deferred research
 
 - Open-G-Hub (`https://github.com/Sharper-Flow/Open-G-Hub`)
   - Defer unless a concrete blocker suggests reusable logic for active backlog items.
+- SignalRGB (`https://signalrgb.com`, docs at `https://docs.signalrgb.com`) — checked 2026-08-18.
+  SignalRGB does **not** delegate to SteelSeries GG/Engine; it talks to devices directly via its own
+  JavaScript USB/HID plugin framework (per-device plugins, `docs.signalrgb.com/developer/plugins/`),
+  and its own troubleshooting docs tell users to disable GG's Prism engine to stop it fighting for
+  control of the same device. No SteelSeries-specific protocol bytes were found in the public docs
+  (would require reading an actual SteelSeries plugin's source, not just the docs site). The
+  plugin-dev tutorial (`developer/plugins/tutorial/`) documents a USB-capture-to-plugin workflow —
+  capture, isolate RGB data, find init packets, map LED positions — that mirrors the USB-capture
+  approach already planned for PLAN.md Phase 2; no new protocol lead, but confirms the methodology.
 
 ## Reference projects by relevance
 
