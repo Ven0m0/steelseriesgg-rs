@@ -32,7 +32,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Build release binary
-        run: cargo build --release --locked ${{ github.event.inputs.features }}
+        run: cargo build -r --locked ${{ github.event.inputs.features }}
 
       - name: Verify binary exists
         run: Test-Path target\release\ssgg.exe
