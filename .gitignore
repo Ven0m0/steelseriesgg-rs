@@ -44,6 +44,7 @@ logs/security/
 .cachebro/
 .omc/
 .codegraph/
+.remember/
 
 # Mock udev library for CI builds
 mock_udev/lib/
