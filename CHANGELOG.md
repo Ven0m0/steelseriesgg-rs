@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Releases and this changelog are generated automatically from
 [Conventional Commits](https://www.conventionalcommits.org/) by release-please.
 
+## [0.1.3](https://github.com/Ven0m0/steelseriesgg-rs/compare/v0.1.2...v0.1.3) (2026-08-18)
+
+
+### Fixed
+
+* **ci:** create tag and release on manual dispatch when tag is missing ([434a9cd](https://github.com/Ven0m0/steelseriesgg-rs/commit/434a9cd39b640029653e81cc5fcadeb6b54abf44))
+
 ## [0.1.2](https://github.com/Ven0m0/steelseriesgg-rs/compare/v0.1.1...v0.1.2) (2026-07-03)
 
 
