@@ -13,6 +13,12 @@
    - Verify the real per-key RGB protocol on hardware and replace the placeholder `0x23` path.
    - Discover an actuation read-back command if the firmware exposes one.
    - Validate unsupported-key handling plus ANSI/ISO layout differences on hardware.
+4. **ssgg.exe pollrate status error**.
+  "  Mouse:    Error: Device communication error: Poll rate query is not supported by this device's HID driver. USB HID devices (including SteelSeries keyboards) do not expose poll rate via the Windows HID class IOCTL interface.
+  Keyboard: Error: Device communication error: Poll rate query is not supported by this device's HID driver. USB HID devices (including SteelSeries keyboards) do not expose poll rate via the Windows HID class IOCTL interface."
+5. **Read bug report**
+  "ssgg_bug_report.json"
+
 
 ## Deferred research
 

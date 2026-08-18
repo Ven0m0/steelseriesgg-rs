@@ -1,0 +1,185 @@
+{
+  "timestamp": "2026-08-18T05:42:21.152013900Z",
+  "system_info": {
+    "os_name": "Windows",
+    "kernel_version": "26200",
+    "cpu_count": 16,
+    "cpu_brand": "Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz",
+    "total_memory_kb": 34268876800,
+    "used_memory_kb": 12245233664,
+    "uptime_seconds": 70692
+  },
+  "device_states": [
+    {
+      "device_id": {
+        "vendor_id": 4152,
+        "product_id": 5672,
+        "interface_number": 3,
+        "serial_number": "",
+        "path": "\\\\?\\HID#VID_1038&PID_1628&MI_03&Col02#7&37d40d88&0&0001#{4d1e55b2-f16f-11cf-88cb-001111000030}"
+      },
+      "device_info": {
+        "name": "Apex Pro TKL (2023)",
+        "vendor_id": 4152,
+        "product_id": 5672,
+        "interface_number": 3,
+        "serial_number": ""
+      },
+      "connected": true
+    },
+    {
+      "device_id": {
+        "vendor_id": 4152,
+        "product_id": 5672,
+        "interface_number": 0,
+        "serial_number": "",
+        "path": "\\\\?\\HID#VID_1038&PID_1628&MI_00&Col02#7&33b1abbe&0&0001#{4d1e55b2-f16f-11cf-88cb-001111000030}\\KBD"
+      },
+      "device_info": {
+        "name": "Apex Pro TKL (2023)",
+        "vendor_id": 4152,
+        "product_id": 5672,
+        "interface_number": 0,
+        "serial_number": ""
+      },
+      "connected": true
+    },
+    {
+      "device_id": {
+        "vendor_id": 4152,
+        "product_id": 5672,
+        "interface_number": 2,
+        "serial_number": "",
+        "path": "\\\\?\\HID#VID_1038&PID_1628&MI_02&Col01#7&13fccfc6&0&0000#{4d1e55b2-f16f-11cf-88cb-001111000030}"
+      },
+      "device_info": {
+        "name": "Apex Pro TKL (2023)",
+        "vendor_id": 4152,
+        "product_id": 5672,
+        "interface_number": 2,
+        "serial_number": ""
+      },
+      "connected": true
+    },
+    {
+      "device_id": {
+        "vendor_id": 4152,
+        "product_id": 5672,
+        "interface_number": 4,
+        "serial_number": "",
+        "path": "\\\\?\\HID#VID_1038&PID_1628&MI_04#7&20108143&0&0000#{4d1e55b2-f16f-11cf-88cb-001111000030}"
+      },
+      "device_info": {
+        "name": "Apex Pro TKL (2023)",
+        "vendor_id": 4152,
+        "product_id": 5672,
+        "interface_number": 4,
+        "serial_number": ""
+      },
+      "connected": true
+    },
+    {
+      "device_id": {
+        "vendor_id": 4152,
+        "product_id": 5672,
+        "interface_number": 0,
+        "serial_number": "",
+        "path": "\\\\?\\HID#VID_1038&PID_1628&MI_00&Col01#7&33b1abbe&0&0000#{4d1e55b2-f16f-11cf-88cb-001111000030}"
+      },
+      "device_info": {
+        "name": "Apex Pro TKL (2023)",
+        "vendor_id": 4152,
+        "product_id": 5672,
+        "interface_number": 0,
+        "serial_number": ""
+      },
+      "connected": true
+    },
+    {
+      "device_id": {
+        "vendor_id": 4152,
+        "product_id": 5672,
+        "interface_number": 0,
+        "serial_number": "",
+        "path": "\\\\?\\HID#VID_1038&PID_1628&MI_00&Col03#7&33b1abbe&0&0002#{4d1e55b2-f16f-11cf-88cb-001111000030}"
+      },
+      "device_info": {
+        "name": "Apex Pro TKL (2023)",
+        "vendor_id": 4152,
+        "product_id": 5672,
+        "interface_number": 0,
+        "serial_number": ""
+      },
+      "connected": true
+    },
+    {
+      "device_id": {
+        "vendor_id": 4152,
+        "product_id": 5672,
+        "interface_number": 2,
+        "serial_number": "",
+        "path": "\\\\?\\HID#VID_1038&PID_1628&MI_02&Col03#7&13fccfc6&0&0002#{4d1e55b2-f16f-11cf-88cb-001111000030}"
+      },
+      "device_info": {
+        "name": "Apex Pro TKL (2023)",
+        "vendor_id": 4152,
+        "product_id": 5672,
+        "interface_number": 2,
+        "serial_number": ""
+      },
+      "connected": true
+    },
+    {
+      "device_id": {
+        "vendor_id": 4152,
+        "product_id": 5672,
+        "interface_number": 2,
+        "serial_number": "",
+        "path": "\\\\?\\HID#VID_1038&PID_1628&MI_02&Col02#7&13fccfc6&0&0001#{4d1e55b2-f16f-11cf-88cb-001111000030}\\KBD"
+      },
+      "device_info": {
+        "name": "Apex Pro TKL (2023)",
+        "vendor_id": 4152,
+        "product_id": 5672,
+        "interface_number": 2,
+        "serial_number": ""
+      },
+      "connected": true
+    },
+    {
+      "device_id": {
+        "vendor_id": 4152,
+        "product_id": 5672,
+        "interface_number": 1,
+        "serial_number": "",
+        "path": "\\\\?\\HID#VID_1038&PID_1628&MI_01#7&fda6dfc&0&0000#{4d1e55b2-f16f-11cf-88cb-001111000030}"
+      },
+      "device_info": {
+        "name": "Apex Pro TKL (2023)",
+        "vendor_id": 4152,
+        "product_id": 5672,
+        "interface_number": 1,
+        "serial_number": ""
+      },
+      "connected": true
+    },
+    {
+      "device_id": {
+        "vendor_id": 4152,
+        "product_id": 5672,
+        "interface_number": 3,
+        "serial_number": "",
+        "path": "\\\\?\\HID#VID_1038&PID_1628&MI_03&Col01#7&37d40d88&0&0000#{4d1e55b2-f16f-11cf-88cb-001111000030}"
+      },
+      "device_info": {
+        "name": "Apex Pro TKL (2023)",
+        "vendor_id": 4152,
+        "product_id": 5672,
+        "interface_number": 3,
+        "serial_number": ""
+      },
+      "connected": true
+    }
+  ],
+  "recent_errors": []
+}
