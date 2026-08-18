@@ -5,8 +5,8 @@ description = "A complete open-source SteelSeries GG replacement for Linux - RGB
 repository = "https://github.com/Ven0m0/steelseriesgg-rs"
 readme = "README.md"
 license = "MIT"
-edition = "2021"
-rust-version = "1.94.1"
+edition = "2024"
+rust-version = "1.97.1"
 keywords = ["steelseries", "rgb", "gaming", "linux", "audio"]
 categories = ["hardware-support", "games"]
 
@@ -110,7 +110,13 @@ overflow-checks = false # Disable integer overflow checks in release
 [profile.dev]
 debug = 0
 split-debuginfo = "packed"
+opt-level = 0
+codegen-units = 256
+incremental = true
 
-# Optimize dependencies in dev builds for faster iteration
-[profile.dev.package."*"]
-opt-level = 2
+[profile.release.build-override]
+inherits = "release"
+opt-level = 0
+codegen-units = 256
+incremental = true
+debug = 0

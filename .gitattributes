@@ -1,0 +1,5 @@
+* text=auto eol=lf
+*.md diff=markdown linguist-detectable linguist-documentation
+*.yaml diff=yaml
+*.yml diff=yaml
+*.toml diff=toml linguist-language=TOML

@@ -10,12 +10,13 @@
 # Uncomment the rustc-wrapper line below to enable it globally.
 
 [build]
-# rustc-wrapper = "sccache"
+rustc-wrapper = "sccache"
 
 # Explicit RUSTFLAGS for all targets. Split-debuginfo=packed keeps debug info
 # in the binary for profiling without bloating release builds further.
 # Remove -Csplit-debuginfo if you are not doing performance profiling.
 # rustflags = ["-Csplit-debuginfo=packed"]
+rustflags = ["-Ctarget-cpu=x86-64-v3"]
 
 # ---------------------------------------------------------------------------
 # Linux x86_64
@@ -25,7 +26,7 @@
 # rustflags = ["-Clink-arg=-fuse-ld=mold"]
 
 # lld (fast): uncomment if installed, comment out mold line above
-# rustflags = ["-Clink-arg=-fuse-ld=lld"]
+rustflags = ["-Clink-arg=-fuse-ld=lld"]
 
 # native CPU tuning — faster binary, but NOT portable across machines
 # rustflags = ["-Ctarget-cpu=native"]
@@ -43,8 +44,9 @@ linker = "aarch64-linux-gnu-gcc"
 # Requires: sudo apt install gcc-mingw-w64-x86-64
 # ---------------------------------------------------------------------------
 [target.x86_64-pc-windows-gnu]
-linker = "x86_64-w64-mingw32-gcc"
-ar = "x86_64-w64-mingw32-ar"
+linker = "x86_64-w64-mingw32-clang.exe"
+# linker = "x86_64-w64-mingw32-gcc"
+# ar = "x86_64-w64-mingw32-ar"
 
 # ---------------------------------------------------------------------------
 # Alias shortcuts
@@ -55,6 +57,7 @@ build-ci     = "build --release --locked"
 clippy-ci    = "clippy --all-targets --locked -- -D warnings"
 fmt-ci       = "fmt --all -- --check"
 test-ci      = "test --locked"
+fix-ci       = "fix --workspace --allow-no-vcs"
 
 # Build with Sonar integration
 build-sonar  = "build --release --locked --features sonar"
@@ -64,3 +67,6 @@ build-audio  = "build --release --locked --features audio"
 
 # Build experimental Apex Pro TKL 2023 per-key RGB support
 build-apex23 = "build --release --locked --features experimental-apex-2023"
+
+[env]
+RUSTC_BOOTSTRAP = "1"
