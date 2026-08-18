@@ -10,7 +10,7 @@
 # Uncomment the rustc-wrapper line below to enable it globally.
 
 [build]
-rustc-wrapper = "sccache"
+# rustc-wrapper = "sccache"
 
 # Explicit RUSTFLAGS for all targets. Split-debuginfo=packed keeps debug info
 # in the binary for profiling without bloating release builds further.
