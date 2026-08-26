@@ -10,7 +10,10 @@ use super::hid_reports::ConnectionHealth;
 use super::keyboards::apex::Apex3Tkl;
 use super::keyboards::apex_pro_tkl_2023::ApexProTkl2023;
 use super::keyboards::{GenericKeyboard, Keyboard};
-use super::product_ids::{APEX_3_TKL, APEX_PRO_TKL_2023, APEX_PRO_TKL_2023_WIRELESS, APEX_PRO_TKL_2023_WIRELESS_2};
+use super::product_ids::{
+    APEX_3_TKL, APEX_PRO_TKL_2023, APEX_PRO_TKL_2023_WIRELESS, APEX_PRO_TKL_2023_WIRELESS_2, APEX_PRO_TKL_2024,
+    APEX_PRO_TKL_WIRELESS_2024, APEX_PRO_TKL_WIRELESS_2024_DONGLE,
+};
 use super::{
     DeviceInfo, DeviceType, STEELSERIES_CONTROL_USAGE_PAGE, device_name_from_product_id, device_type_from_product_id,
 };
@@ -435,7 +438,13 @@ impl DeviceManager {
         let hid_device = match self.open_device(info) {
             Ok(dev) => dev,
             Err(e)
-                if info.product_id == APEX_PRO_TKL_2023_WIRELESS || info.product_id == APEX_PRO_TKL_2023_WIRELESS_2 =>
+                if matches!(
+                    info.product_id,
+                    APEX_PRO_TKL_2023_WIRELESS
+                        | APEX_PRO_TKL_2023_WIRELESS_2
+                        | APEX_PRO_TKL_WIRELESS_2024_DONGLE
+                        | APEX_PRO_TKL_WIRELESS_2024
+                ) =>
             {
                 tracing::warn!("hidapi open failed for wireless keyboard (expected): {e}. Using raw hidraw path.");
                 return Ok(Box::new(ApexProTkl2023::new_wireless_raw(info.clone())));
@@ -447,9 +456,12 @@ impl DeviceManager {
         // Wrap in specific implementation if available
         match info.product_id {
             APEX_3_TKL => Ok(Box::new(Apex3Tkl::new(generic_keyboard))),
-            APEX_PRO_TKL_2023 | APEX_PRO_TKL_2023_WIRELESS | APEX_PRO_TKL_2023_WIRELESS_2 => {
-                Ok(Box::new(ApexProTkl2023::new(generic_keyboard)))
-            }
+            APEX_PRO_TKL_2023
+            | APEX_PRO_TKL_2023_WIRELESS
+            | APEX_PRO_TKL_2023_WIRELESS_2
+            | APEX_PRO_TKL_2024
+            | APEX_PRO_TKL_WIRELESS_2024_DONGLE
+            | APEX_PRO_TKL_WIRELESS_2024 => Ok(Box::new(ApexProTkl2023::new(generic_keyboard))),
             _ => Ok(Box::new(generic_keyboard)),
         }
     }

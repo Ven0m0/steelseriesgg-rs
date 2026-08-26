@@ -116,6 +116,10 @@ impl Device for Apex3Tkl {
 
 // Delegate Keyboard trait
 crate::impl_keyboard_with_delegation!(Apex3Tkl, {
+    async fn apply(&mut self) -> Result<()> {
+        self.inner.apply().await
+    }
+
     async fn set_color(&mut self, color: Color) -> Result<()> {
         self.inner.set_color(color).await
     }
