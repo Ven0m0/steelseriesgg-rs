@@ -919,6 +919,9 @@ impl Keyboard for GenericKeyboard {
 
 /// Macro to delegate common `Keyboard` trait methods to `self.inner`.
 /// This avoids duplicating dozens of identical trait method implementations.
+///
+/// `apply` is deliberately not generated here: devices that stream colours in
+/// direct mode must suppress it, so each implementation states its own policy.
 #[macro_export]
 macro_rules! impl_keyboard_with_delegation {
     ($type:ty, { $($custom:item)* }) => {
@@ -927,7 +930,6 @@ macro_rules! impl_keyboard_with_delegation {
             $($custom)*
             fn zone_count(&self) -> usize { self.inner.zone_count() }
             async fn set_brightness(&mut self, brightness: u8) -> Result<()> { self.inner.set_brightness(brightness).await }
-            async fn apply(&mut self) -> Result<()> { self.inner.apply().await }
             fn supports_per_key_rgb(&self) -> bool { self.inner.supports_per_key_rgb() }
             fn get_key_mapping(&self) -> Option<&KeyMapping> { self.inner.get_key_mapping() }
             async fn set_key_color_direct(&mut self, address: KeyAddress, color: Color) -> Result<()> { self.inner.set_key_color_direct(address, color).await }

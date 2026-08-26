@@ -29,6 +29,9 @@ const TKL_KEYS: &[u8] = &[
     0x3E, 0x3F, 0x40, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48, 0x49, 0x4A, 0x4B, 0x4C, 0x4D, 0x4E, 0x4F, 0x50,
     0x51, 0x52, 0x64, 0xE0, 0xE1, 0xE2, 0xE3, 0xE4, 0xE5, 0xE6, 0xE7, 0xF0, 0x31, 0x87, 0x88, 0x89, 0x8A, 0x8B, 0x53,
     0x54, 0x55, 0x56, 0x57, 0x58, 0x59, 0x5A, 0x5B, 0x5C, 0x5D, 0x5E, 0x5F, 0x60, 0x61, 0x62, 0x63,
+    // The SteelSeries logo LED. Omitting it leaves the logo lit in the previous
+    // profile colour while the rest of the board follows direct mode.
+    0xFB,
 ];
 
 /// Apex Pro TKL 2023 implementation.
@@ -59,18 +62,38 @@ impl ApexProTkl2023 {
     }
 
     /// Whether this device uses the new 2023 per-key direct protocol.
-    /// Only the wireless variant uses this unconditionally; the wired model
-    /// has its own path behind the `experimental-apex-2023` feature flag.
+    /// The 2023 wired model (`0x1628`) is excluded: it keeps its own path behind
+    /// the `experimental-apex-2023` feature flag.
     fn uses_new_protocol(&self) -> bool {
-        self.is_wireless()
+        self.direct_packet_id().is_some()
     }
 
-    /// Whether this is the wireless variant.
+    /// Whether this is a wireless variant.
     fn is_wireless(&self) -> bool {
         matches!(
             self.inner.info().product_id,
-            product_ids::APEX_PRO_TKL_2023_WIRELESS | product_ids::APEX_PRO_TKL_2023_WIRELESS_2
+            product_ids::APEX_PRO_TKL_2023_WIRELESS
+                | product_ids::APEX_PRO_TKL_2023_WIRELESS_2
+                | product_ids::APEX_PRO_TKL_WIRELESS_2024_DONGLE
+                | product_ids::APEX_PRO_TKL_WIRELESS_2024
         )
+    }
+
+    /// Direct-mode packet ID, or `None` if the model does not speak the 643-byte
+    /// feature-report protocol.
+    ///
+    /// Verified on Apex Pro TKL Wireless Gen 3 hardware: the dongle (`0x1644`) and
+    /// the same keyboard on USB cable (`0x1646`) both answer to the wireless packet
+    /// ID `0x61`, while the wired-only Gen 3 model (`0x1642`) uses `0x40`.
+    fn direct_packet_id(&self) -> Option<u8> {
+        Some(match self.inner.info().product_id {
+            product_ids::APEX_PRO_TKL_2023_WIRELESS
+            | product_ids::APEX_PRO_TKL_2023_WIRELESS_2
+            | product_ids::APEX_PRO_TKL_WIRELESS_2024_DONGLE
+            | product_ids::APEX_PRO_TKL_WIRELESS_2024 => APEX_2023_PACKET_ID_DIRECT_WIRELESS,
+            product_ids::APEX_PRO_TKL_2024 => APEX_2023_PACKET_ID_DIRECT_WIRED,
+            _ => return None,
+        })
     }
 
     /// Send the 0x4B initialization feature report required by new protocol.
@@ -82,6 +105,8 @@ impl ApexProTkl2023 {
         buf[0] = 0x00; // Report ID
         buf[1] = APEX_2023_PACKET_ID_INIT;
         self.inner.send_feature(&buf, APEX_2023_PACKET_LENGTH)?;
+        // The controller needs a moment before it will honour direct-mode packets.
+        std::thread::sleep(std::time::Duration::from_millis(50));
         self.initialized_new_protocol = true;
         tracing::info!("Sent Apex 2023 new protocol init (0x4B)");
         Ok(())
@@ -91,11 +116,7 @@ impl ApexProTkl2023 {
     fn send_direct_rgb_new_protocol(&mut self, color: Color) -> Result<()> {
         self.ensure_new_protocol_init()?;
 
-        let packet_id = if self.is_wireless() {
-            APEX_2023_PACKET_ID_DIRECT_WIRELESS
-        } else {
-            APEX_2023_PACKET_ID_DIRECT_WIRED
-        };
+        let packet_id = self.direct_packet_id().unwrap_or(APEX_2023_PACKET_ID_DIRECT_WIRED);
 
         let num_keys = TKL_KEYS.len();
         let mut buf = vec![0u8; APEX_2023_PACKET_LENGTH];
@@ -329,6 +350,16 @@ crate::impl_keyboard_with_delegation!(ApexProTkl2023, {
         self.inner.set_zone_colors(colors).await
     }
 
+    async fn apply(&mut self) -> Result<()> {
+        // Direct mode is live-streamed. The APPLY/save command (0x09) makes the
+        // controller fall back to its stored profile, discarding the colours we
+        // just sent, so the board visibly ignores every RGB command.
+        if self.uses_new_protocol() {
+            return Ok(());
+        }
+        self.inner.apply().await
+    }
+
     async fn set_key_color(&mut self, key_id: KeyId, color: Color) -> Result<()> {
         self.set_key_colors(&[(key_id, color)]).await
     }
@@ -370,5 +401,73 @@ impl Deref for ApexProTkl2023 {
 impl DerefMut for ApexProTkl2023 {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.inner
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn keyboard_for(product_id: u16) -> ApexProTkl2023 {
+        let info = DeviceInfo {
+            name: std::borrow::Cow::Borrowed("Test Apex Pro TKL"),
+            device_type: DeviceType::Keyboard,
+            vendor_id: crate::STEELSERIES_VENDOR_ID,
+            product_id,
+            interface_number: 3,
+            usage_page: 0xFFC0,
+            usage: 0x01,
+            serial_number: None,
+            manufacturer: Some("SteelSeries".to_string()),
+            path: "/test/device/path".to_string(),
+        };
+        ApexProTkl2023::new_wireless_raw(info)
+    }
+
+    #[test]
+    fn gen3_models_use_the_direct_protocol() {
+        for pid in [
+            product_ids::APEX_PRO_TKL_2024,
+            product_ids::APEX_PRO_TKL_WIRELESS_2024_DONGLE,
+            product_ids::APEX_PRO_TKL_WIRELESS_2024,
+        ] {
+            assert!(
+                keyboard_for(pid).uses_new_protocol(),
+                "PID {pid:#06x} should use the 643-byte direct protocol"
+            );
+        }
+    }
+
+    #[test]
+    fn gen3_packet_ids_match_hardware() {
+        // Verified on hardware: the dongle and the same board on cable both answer
+        // to the wireless packet ID; the wired-only model uses 0x40.
+        assert_eq!(
+            keyboard_for(product_ids::APEX_PRO_TKL_WIRELESS_2024_DONGLE).direct_packet_id(),
+            Some(APEX_2023_PACKET_ID_DIRECT_WIRELESS)
+        );
+        assert_eq!(
+            keyboard_for(product_ids::APEX_PRO_TKL_WIRELESS_2024).direct_packet_id(),
+            Some(APEX_2023_PACKET_ID_DIRECT_WIRELESS)
+        );
+        assert_eq!(
+            keyboard_for(product_ids::APEX_PRO_TKL_2024).direct_packet_id(),
+            Some(APEX_2023_PACKET_ID_DIRECT_WIRED)
+        );
+    }
+
+    #[test]
+    fn wired_2023_keeps_its_own_path() {
+        let keyboard = keyboard_for(product_ids::APEX_PRO_TKL_2023);
+        assert!(!keyboard.uses_new_protocol());
+        assert_eq!(keyboard.direct_packet_id(), None);
+    }
+
+    #[test]
+    fn key_table_covers_every_led_including_the_logo() {
+        assert_eq!(TKL_KEYS.len(), 112);
+        assert_eq!(*TKL_KEYS.last().unwrap(), 0xFB, "logo LED must be addressed");
+        // The direct packet is a 3-byte header plus 4 bytes per key.
+        assert!(3 + TKL_KEYS.len() * 4 <= APEX_2023_PACKET_LENGTH);
     }
 }
