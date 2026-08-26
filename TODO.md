@@ -5,7 +5,7 @@
 
 ## Active backlog
 
-Fix the errors in `cargo clippy-ci`
+Fix the errors in `cargo clippy-ci` and `cargo test --locked --features audio`
 
 1. **Apex 3 TKL RGB (issue #173)** — commands report success but lighting never changes.
    Concrete lead: OpenRGB's 8-zone protocol (`0x21` = set zone colors, `0x23` = brightness);
