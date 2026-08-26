@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Releases and this changelog are generated automatically from
 [Conventional Commits](https://www.conventionalcommits.org/) by release-please.
 
+## [0.1.5](https://github.com/Ven0m0/steelseriesgg-rs/compare/v0.1.4...v0.1.5) (2026-08-26)
+
+
+### Fixed
+
+* **keyboards:** make RGB work on Apex Pro TKL Gen 3 (2024) ([#290](https://github.com/Ven0m0/steelseriesgg-rs/issues/290)) ([360b6c6](https://github.com/Ven0m0/steelseriesgg-rs/commit/360b6c6d7fc7fb6c9636a44ead65c08a1c67cccd))
+
 ## [0.1.4](https://github.com/Ven0m0/steelseriesgg-rs/compare/v0.1.3...v0.1.4) (2026-08-18)
 
 
