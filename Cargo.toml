@@ -120,3 +120,6 @@ opt-level = 0
 codegen-units = 256
 incremental = true
 debug = 0
+
+[lints.clippy]
+collapsible_if = "allow"
