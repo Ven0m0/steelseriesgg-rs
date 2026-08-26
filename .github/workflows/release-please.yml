@@ -129,7 +129,7 @@ jobs:
           ref: ${{ needs.create-tag.outputs.tag_name || needs.release-please.outputs.tag_name }}
       - uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.97.1
+          toolchain: 1.98.0
           targets: x86_64-pc-windows-msvc
       - uses: Swatinem/rust-cache@v2
       - name: Build release binary
