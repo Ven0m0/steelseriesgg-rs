@@ -68,7 +68,7 @@ smallvec = { version = "1.15.2", features = ["serde"] }
 
 # System information for diagnostics
 sysinfo = "0.39.6"
-tabled = "0.21.0"
+tabled = "0.22.0"
 
 # Error handling
 thiserror = "2.0.20"
