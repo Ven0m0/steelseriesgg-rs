@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Releases and this changelog are generated automatically from
 [Conventional Commits](https://www.conventionalcommits.org/) by release-please.
 
+## [0.1.6](https://github.com/Ven0m0/steelseriesgg-rs/compare/v0.1.5...v0.1.6) (2026-10-15)
+
+
+### Added
+
+* add scripts/capture-device.ps1 USBPcap helper for new-device captures ([dadc47a](https://github.com/Ven0m0/steelseriesgg-rs/commit/dadc47a885e88a0c2ebad597537bffda39eba75c))
+* support wired Apex Pro TKL 2023 (0x1628) RGB lighting ([dadc47a](https://github.com/Ven0m0/steelseriesgg-rs/commit/dadc47a885e88a0c2ebad597537bffda39eba75c))
+
 ## [0.1.5](https://github.com/Ven0m0/steelseriesgg-rs/compare/v0.1.4...v0.1.5) (2026-08-26)
 
 
