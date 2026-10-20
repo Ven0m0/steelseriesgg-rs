@@ -12,7 +12,7 @@ profile, and this page does not open it.
 
 It is a **file editor only**. It never opens a device node and writes nothing to
 a keyboard - the bytes it saves are what `ssgg onboard write` sends. The protocol behind them is
-reverse-engineered from GG captures of one Apex 7 (`0x1612`): its read, write and deploy are confirmed on
+reverse-engineered from GG captures of one Apex 7 (`0x1612`) and from GG's own device specifications. Its read, write and deploy are confirmed on
 that board, and decode and encode match GG for clean and modified profiles.
 
 ## Run
@@ -329,12 +329,18 @@ shims a real 24-bit BMP encoder so `board-preview.svg` carries the picture.
 
 The `oled` block is a **128 x 40 monochrome bitmap at 1 bit per pixel**: 8 pixels per byte,
 16 bytes per row, 40 rows = 640 bytes = `OLED_LEN`, which is why the decoder dumps it whole
-as `bytes_hex` instead of summarising it. **Bit 7 of each byte is its left pixel** - the
-operator read that off a screenshot of the image GG paints there, and decoding that image
-reproduces the bytes in the read. `oledPixels` rasterises it (a set bit is a lit pixel) and
+as `bytes_hex` instead of summarising it. **Bit 7 of each byte is its left pixel** - confirmed on an
+Apex 7 (`0x1612`): the operator took the image GG paints on that panel, decoded it into bytes, read those bytes
+back from the keyboard as the block, and writing them back paints the same picture. There is no bit-order
+switch. `oledPixels` rasterises it (a set bit is a lit pixel) and
 `oledDataUrl` makes a PNG through a canvas: the board rect draws it, the OLED panel shows it
 at 2x with `image-rendering: pixelated`. A page without a 2D canvas keeps its text label and
 says why; so does a dump that has no `bytes_hex`.
+
+The conversion is **GUI-only**: the Rust codec treats the block as an opaque byte array and carries it
+byte-for-byte (`decode` fills `bytes_hex`, `encode` writes it back untouched, so an on-board write sends exactly
+the bytes a read produced). Reading the block as a bitmap - and writing a bitmap back into it - happens here and
+nowhere else, so it is a display view, not a claim that the format is understood.
 
 GG's own decoder states the same geometry (`oled_height = 8`, `oled_width = 128`, `bpp = 1`,
 reading `pixel[row * 8 + col]` bit `7 - (col % 8)` for 40 rows), measured from the engine code
@@ -364,8 +370,8 @@ picture is mirrored in colour only and never moved, inverting twice is the ident
 no `bytes_hex` inverts to every pixel lit. `oled` is one of the four things the board can select: clicking the rect opens this panel in the column next to the board. Both actions
 rewrite `bytes_hex` and recompute `nonzero`, `fnv1a_64` and `head` from it, and
 `fileChanges` sees one changed path (`/oled/bytes_hex`), so the Changes panel lists it.
-Nothing here touches a keyboard: the page has no device access, and on-board writes are not
-supported on `0x1628`. Encode lives on the CLI side: `ssgg onboard encode <json>` writes a decode report
+Nothing here touches a keyboard: the page opens configs read from an Apex 7 (`0x1612`), has no device access, and
+writing to a board is `ssgg onboard write` on the CLI. Encode lives on the CLI side: `ssgg onboard encode <json>` writes a decode report
 back into payload bytes (verified byte-identical over the 11,696-byte payload of three factory
 reads). The page has no byte view and no encode control, so a
 JSON saved here is exactly what the CLI encodes.
@@ -377,6 +383,14 @@ where they do not agree.
 ## Macro records
 
 The JSON carries the block as a summary and as decoded records, and the page shows both.
+
+Only the last five macros **written to keyboard** are currently decoded.
+Existing bindings may reference macros outside of this scope, but there's
+no GUI way to set new bindings to the macro unless it's known.
+Decoding them is display support and partial support: the page can show a record
+and bind a key to one (the binding byte it writes is `ordinal * 7`), it cannot compose, edit, reorder, delete or
+name a record, and the encoder never serialises the list - a write sends the block's bytes back, so a list that
+disagrees with the bytes has no effect on the keyboard.
 
 `macro_data` is the summary: `offset`, `len`, `nonzero`, `fnv1a_64`, `head` - **and the block's own bytes as
 `bytes_hex`** (9,600 of them: the engine declares this field an opaque `bytearray` of
@@ -479,7 +493,7 @@ the rest of the JSON.
 
 ## Limits
 
-- The macro panel **reads** the record list; it edits nothing. `macro_data` carries the block's bytes
+- The macro panel **reads** the record list; it edits nothing, and the list covers the known macros. `macro_data` carries the block's bytes
   (`bytes_hex`) and the page writes them back exactly as loaded - it never rebuilds a block from the parsed
   records, and `crc_*` is never recomputed (the encoder in the CLI computes it). A block the list cannot walk
   is normal here: its bytes are what travels.

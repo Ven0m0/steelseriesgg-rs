@@ -20,7 +20,7 @@ Protocol work has three states. Never mix them up or upgrade a status without ha
 | `Apex8ZoneBrightnessCommand` | `0x23` | Experimental — Apex 3 TKL brightness, from OpenRGB, untested |
 | `CommandCode::ProfileChunk` / `ProfileChunkCommand` (Gen3 header `03 01 80`) | `0x03` | Experimental — `0x1628` profile upload chunk; checksum matches captures; never sent (no read-back) |
 | `CommandCode::ActuationControl` | `0x2D` | Experimental — firmware command unknown |
-| `OnboardDriverModeCommand` | `0x6C` | Experimental — seen in a GG capture only; nothing in `ssgg` sends it |
+| `OnboardDriverModeCommand` | `0x6C` | Experimental — `6c 00 01` is `DriverModeEnable` in the engine's init-sequence descriptor and is the fourth frame of GG's opening chain (read capture, answered by nothing); `6c 00 00` closes the mode at session close (engine-side only, not in the capture). Nothing in `ssgg` sends either |
 | `OnboardFirmwareVersionCommand` | `0x90` | Confirmed — Apex 7 `0x1612`, Linux, 2026-10-20: `90 00` and `90 01` both answered |
 | `OnboardPayloadPullCommand` | `0x85` | Confirmed — Apex 7 `0x1612`, Linux, 2026-10-20: 121 pulls answered by the input report |
 | `OnboardBufferReadCommand` | `0x83` | Confirmed — Apex 7 `0x1612`, Linux, 2026-10-20: a full profile slot collected |
@@ -29,13 +29,6 @@ Protocol work has three states. Never mix them up or upgrade a status without ha
 | `OnboardPayloadPushCommand` | `0x05` | Confirmed — Apex 7 `0x1612`, Linux, 2026-10-20: every push answered `05 01 …` |
 | `OnboardFileCommitCommand` | `0xEB` | Confirmed — Apex 7 `0x1612`, Linux, 2026-10-20: accepted with no write-specific answer |
 | `OnboardProfileDeployCommand` | `0x89` | Confirmed — Apex 7 `0x1612`, Linux, 2026-10-20: the keyboard runs the slot named |
-
-**Apex 7 on-board profile (`0x1612`).** Read, write and deploy of a profile slot are confirmed on hardware
-(2026-10-20), and `decode` / `encode` are verified against clean and modified profiles. What stays
-experimental on this family: the field meanings inside the OLED and macro blocks, the payload region behind
-the decoded payload, and the `0x1614` / `0x1616` / `0x1618` siblings (not enabled, never tested). An on-board
-write has no read-back frame: a write is checked from the device by reading the slot back with the read path
-and diffing the payload.
 
 ## Rules
 

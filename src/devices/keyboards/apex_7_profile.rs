@@ -5,13 +5,14 @@
 //! [`crate::devices::keyboards::apex_7`] (`Apex7`'s own read methods).
 //!
 //! Everything here belongs to this one protocol: the reply framing, resource-buffer and window sizes, the
-//! file-id base, payload sizes, schema words and the payload struct offsets all come from the platform's
-//! own protocol module (`apexui.dll`, the code GG runs on an Apex 7). Nothing is generic - the Gen3
+//! file-id base, payload sizes, schema words and the payload struct offsets all come from this platform's
+//! own device specification, and from the read and write captures of an Apex 7. Nothing is generic - the Gen3
 //! platform (`0x1628`) reads its on-board profile through a different transport
 //! ([`crate::devices::keyboards::apex_pro_tkl_2023_profile`]) and shares none of it. The engine's protocol
 //! file (`lisp/apex_7.lisp`) covers the whole legacy platform, so its words are evidence for the
-//! `0x1614` / `0x1616` / `0x1618` siblings too; this crate enables the path on the board it measured -
-//! discovery builds [`Apex7`](crate::devices::keyboards::apex_7::Apex7) for `0x1612` alone
+//! `0x1614` / `0x1616` / `0x1618` siblings too; those `.lisp` files are the **decrypted** contents of the
+//! `*.edevice` device specifications the Engine ships encrypted. This crate enables the path on the board it
+//! measured: discovery builds [`Apex7`](crate::devices::keyboards::apex_7::Apex7) for `0x1612` alone
 //! ([`discovery::keyboard_class`](crate::devices::discovery::keyboard_class)).
 //!
 //! Protocol status: reverse-engineered from the Windows engine's device descriptors plus one Windows
@@ -69,8 +70,9 @@
 //! profile index (`0..=4`).
 //!
 //! The first two payload bytes are the profile schema: GG probes a file with one 2-byte pull of the file
-//! head and one 2-byte payload read. Firmware `4.16.3` selects schema [`SCHEMA_B`]; older firmware uses
-//! [`SCHEMA_A`].
+//! head and one 2-byte payload read. The engine's decoder lists firmware `4.16.3` as selecting
+//! [`SCHEMA_B`] and older firmware [`SCHEMA_A`]; no capture has shown a schema `A` payload - both captures
+//! this code rests on are the same firmware and answer schema `B` throughout.
 //!
 //! The payload starts at file offset 0 with the schema word; the engine's payload structs carry one
 //! leading constant id byte that is not part of the file, so a payload read lands at its file offset and
@@ -117,7 +119,11 @@ pub const PROFILE_FS_BASE: u16 = 0x0201;
 /// same slots `Config 1` .. `Config 5`, and `ssgg onboard` takes that number: `--profile N` reads slot
 /// `N - 1`, the file it pulls as `0x020N`.
 pub const MAX_PROFILE_INDEX: u8 = 4;
-/// File id of the per-profile lighting config of slot 0.
+/// File id of the per-profile lighting config of slot 0; slot `n` is this plus `n`.
+///
+/// Presumed lighting from the engine's protocol words, **not confirmed on hardware**: no `0x030N` file has
+/// ever been read from or written to a keyboard, and nothing in ssgg addresses these ids - every frame the
+/// read and the write paths run on hardware is on a [`PROFILE_FS_BASE`] (`0x020N`) profile file.
 pub const LIGHTING_FS_BASE: u16 = 0x0301;
 /// Macro data block inside a profile payload, in bytes.
 pub const MACRO_DATA_LEN: usize = 9600;
@@ -134,7 +140,8 @@ pub const READ_REPLY_REPORT_ID: u8 = 0x83;
 /// Command byte of a pull, which is what the capture kit recorded in the frames it labels pull
 /// replies; the device answers a pull with its ordinary `0x01` input report, not with `0x85`.
 pub const PULL_REPLY_REPORT_ID: u8 = 0x85;
-/// Report ID of a lighting-config payload-read reply.
+/// Report ID of a lighting-config payload-read reply (`03`, the id the capture shows behind the
+/// `0x030N` file ids; that those files are the lighting config is a presumption, see [`LIGHTING_FS_BASE`]).
 pub const LIGHTING_READ_REPLY_REPORT_ID: u8 = 0x03;
 /// Buffer size to ask the transport for when reading a payload read back: [`ONBOARD_READ_WIRE_BYTES`] (642).
 /// The read side sends this number to the device as `wLength` verbatim - the capture's `GET_REPORT wValue
@@ -1104,6 +1111,9 @@ pub fn macro_mode_name(mode: u8) -> &'static str {
 ///
 /// Returns the records in list order and a note when the block does not parse cleanly; an all-zero
 /// block (the usual case, GG leaves it empty) yields no records and no note.
+///
+/// TODO: At the moment this only decodes the five most recent macros, but the keyboard evidently has
+/// more recorded somewhere.
 #[must_use]
 pub fn decode_macros(data: &[u8], offset: usize, len: usize) -> (Vec<OnboardMacro>, Option<String>) {
     let start = offset.min(data.len());
@@ -1268,9 +1278,12 @@ pub struct OnboardProfile {
     pub button_meta_mappings: Vec<KeyMapping>,
     /// Two wheel meta mappings.
     pub wheel_meta_mappings: Vec<KeyMapping>,
-    /// OLED pixel block, dumped in full: 128 x 40 monochrome pixels at 8 px per byte
-    /// ([`OLED_LEN`] = 640). `[EXPERIMENTAL]` - the bit layout is assumed by the GUI, never
-    /// read back from a keyboard.
+    /// OLED pixel block, carried verbatim: [`OLED_LEN`] = 640 bytes, opaque to `decode` and `encode`, so a
+    /// write sends back exactly the bytes a read produced. Its form is confirmed on a `0x1612` keyboard: a 128 x
+    /// 40 monochrome bitmap, 8 px per byte, 16 bytes per row, bit 7 of a byte the left pixel - the image GG
+    /// paints on the panel was decoded to bytes and read back as this block, and writing them back paints that
+    /// picture. `tools/profile-gui` does that conversion (draw, Clear / Invert, PNG export); nothing in this
+    /// codec rasterises.
     pub oled: MacroSummary,
     /// Rapid Tap block, schema [`SCHEMA_B`] only.
     pub rapid_tap: Option<RapidTap>,
@@ -1321,9 +1334,8 @@ pub struct OnboardProfile {
 /// and `profile_all_settings_schema_b_struct` (schema B) in `lisp/apex_7.lisp` and
 /// `lisp/base_apex_legacy.lisp`, whose byte comments give every offset below. `key_mapping` is
 /// `function: uint8` plus `key_codes: bytearray (size 4)` - five bytes per mapping entry, not four;
-/// `onboard_rapid_tap_pair` is five bytes. In a read image of the factory profile (slot 0, schema B,
-/// firmware 4.16.3) the trailing checksum verifies over `payload[0..11692]` (STM32 CRC-32 =
-/// `0xAE57B9DC`).
+/// `onboard_rapid_tap_pair` is five bytes. In a read image of the factory profile (slot 0, schema B)
+/// the trailing checksum verifies over `payload[0..11692]` (STM32 CRC-32 = `0xAE57B9DC`).
 ///
 /// Schema A: … wheel META (1375) → OLED (1385) → macro (2025) → GUID (11625) → 3 pad → CRC (11644).
 /// Schema B: … wheel META (1375) → OLED (1385) → Rapid Tap (2025) → macro (2076) → GUID (11676) →
@@ -2191,8 +2203,7 @@ impl OnboardProfileCodec for Apex7Onboard {
                 .to_string(),
             format!(
                 "  89 <slot + 1> deploys the slot after a {DEPLOY_SETTLE_MS} ms settle (the engine sleeps 250 ms \
-                 behind it and its commit path ends with an input read); no 6c driver-mode frame and no HIDCONFIG \
-                 pacing write is sent"
+                 behind it and its commit path ends with an input read); no 6c driver-mode frame is sent"
             ),
         ]
     }

@@ -14,6 +14,9 @@
 // `button_mappings` is the base layer, `button_meta_mappings` the META layer; Rapid Tap pairs and the
 // lock / META / Win lighting bytes carry raw HID codes.
 //
+// Every `lisp/*.lisp` citation below is a **decrypted** `*.edevice` device specification: GG ships those
+// specs encrypted in `apps\engine\deviceSpecifications\`, and the plaintext is lisp.
+//
 // The protocol behind these bytes is reverse-engineered from GG captures of one Apex 7 (`0x1612`); its
 // read, write and deploy are confirmed on that board, and decode and encode match GG for clean and modified
 // profiles. This page writes no keyboard.
@@ -334,8 +337,8 @@ function macroBindingOptions(doc, selected) {
   return options;
 }
 
-// The binding a factory profile has on a slot, measured from a stock slot read (`config_3.bin`,
-// firmware 4.16.3, the read with an empty macro block) and reproduced byte for byte for all 256
+// The binding a factory profile has on a slot, measured from a stock slot read (`config_3.bin`, the
+// read with an empty macro block) and reproduced byte for byte for all 256
 // entries of both layers by this rule plus the exceptions below: every key the 128-table maps is
 // bound to itself (0x51 with its own usage as the first code), the slots the table leaves unused
 // are all zero, GG's media cluster carries its consumer codes, two slots point at 0x90/0x91, and
@@ -766,7 +769,7 @@ function codesPerEntry(doc) {
 }
 
 // GG's factory defaults for a mapping entry, verbatim from a wired Apex 7 profile slot read
-// (firmware 4.16.3, slot 0): function 0x51 with the slot's own key as the first code and the rest
+// (slot 0): function 0x51 with the slot's own key as the first code and the rest
 // zero - a key bound to itself, not a remap - and the all-zero slot GG writes for keys the profile
 // does not bind. Only anything else is a real binding.
 function bindingOf(functionByte, codes, ownHid) {
@@ -1183,8 +1186,9 @@ const OLED_RECT = { x: 20, y: 0, w: 3 };
 OLED_RECT.h = ((OLED_RECT.w * UNIT - GAP) * 5 / 16 + GAP) / UNIT;
 
 // The oled block is a 128 x 40 monochrome bitmap: 8 pixels per byte, 16 bytes per row,
-// 40 rows = 640 bytes = OLED_LEN in the decoder. Bit 7 of a byte is its leftmost pixel
-// (operator-confirmed on a 0x1628 screen), so there is no bit-order switch.
+// 40 rows = 640 bytes = OLED_LEN in the decoder. Bit 7 of a byte is its leftmost pixel,
+// confirmed on an Apex 7 (0x1612): the image GG paints on its panel decodes to these bytes and
+// writing them back paints that picture. There is no bit-order switch.
 const OLED_W = 128;
 const OLED_H = 40;
 const OLED_BYTES = OLED_W * OLED_H / 8;
@@ -2327,7 +2331,7 @@ function renderMacrosPanel(file) {
   const recordsBytes = records.reduce((sum, record) => sum + (record.record_bytes ?? 0), 0);
   const rows = [el('p', {
     class: 'hint',
-    text: `payload offset ${summary.offset}, ${summary.len} bytes, ${summary.nonzero} non-zero. The block is a packed list of records with no fixed stride and no per-record length: a record is its 8-byte header (0x77, mode, id, flags, interval) plus its actions, and the next record starts at the next 0x77. ${records.length} record(s) decoded, filling ${recordsBytes} bytes${recordsBytes ? `, ${summary.offset} to ${summary.offset + recordsBytes - 1}` : ''}. The block carries no length word (apex_7.lisp's "length of the macro data" is the engine's in-memory field, not a word in the payload), so the decoder walks the actions and stops at the zero pad. A 0x71 binding names a record by its third code byte: the index is ${MACRO_STRIDE} times the record's position, so 0..${MACRO_STRIDE - 1} bind record 0, ${MACRO_STRIDE}..${2 * MACRO_STRIDE - 1} bind record 1, and an index is a deleted macro only when its ordinal (index / ${MACRO_STRIDE}) is past the list.`,
+    text: `payload offset ${summary.offset}, ${summary.len} bytes, ${summary.nonzero} non-zero. The block is a packed list of records with no fixed stride and no per-record length: a record is its 8-byte header (0x77, mode, id, flags, interval) plus its actions, and the next record starts at the next 0x77. ${records.length} record(s) decoded, filling ${recordsBytes} bytes${recordsBytes ? `, ${summary.offset} to ${summary.offset + recordsBytes - 1}` : ''}. The block carries no length word (apex_7.lisp's "length of the macro data" is the engine's in-memory field, not a word in the payload), so the decoder walks the actions and stops at the zero pad. A 0x71 binding names a record by its third code byte: the index is ${MACRO_STRIDE} times the record's position, so 0..${MACRO_STRIDE - 1} bind record 0, ${MACRO_STRIDE}..${2 * MACRO_STRIDE - 1} bind record 1, and an index is a deleted macro only when its ordinal (index / ${MACRO_STRIDE}) is past the list. GG keeps five macros per profile, the five most recently set: this panel lists the records the block walks to, and a write sends the block's bytes back, never this list.`,
   })];
   if (!Array.isArray(doc.macros)) {
     rows.push(el('p', { class: 'hint', text: 'this dump has no "macros" field - it was written before the record decode. Re-read the profile to get them.' }));
@@ -2387,7 +2391,7 @@ function renderOledPanel(file) {
       class: 'mono',
       text: `offset ${oled.offset}, ${oled.len} bytes, ${oled.nonzero} non-zero, fnv1a ${oled.fnv1a_64}`
         + (bytes && bytes.length && fnv1a64(bytes) !== oled.fnv1a_64 ? ` - the stored hash does not match the ${bytes.length} bytes in bytes_hex (those hash to ${fnv1a64(bytes)}); the picture is drawn from bytes_hex` : ''),
-    }), `${OLED_W} x ${OLED_H} monochrome pixels = 8 px per byte, 16 bytes per row, ${OLED_BYTES} bytes; bit 7 of a byte is its left pixel (confirmed on a 0x1628 screen, 2026-10-18), so there is no bit-order switch. The decoder writes the whole block as bytes_hex.`),
+    }), `${OLED_W} x ${OLED_H} monochrome pixels = 8 px per byte, 16 bytes per row, ${OLED_BYTES} bytes; bit 7 of a byte is its left pixel (confirmed on an Apex 7, 0x1612: the image GG paints on its panel decodes to these bytes, and writing them back paints that picture), so there is no bit-order switch. The decoder writes the whole block as bytes_hex.`),
   ];
   rows.push(line('Drawn',
     url
@@ -2405,12 +2409,12 @@ function renderOledPanel(file) {
   rows.push(line('Blank', button('Set all black', () => {
     setOledBitmap(doc, new Array(OLED_BYTES).fill(0));
     render();
-  }, 'btn oled-clear'), 'writes 640 zero bytes into oled.bytes_hex and recomputes len, nonzero, fnv1a_64 and head. Only the JSON changes: this page never writes a keyboard, and on-board writes are not supported on 0x1628.'));
+  }, 'btn oled-clear'), 'writes 640 zero bytes into oled.bytes_hex and recomputes len, nonzero, fnv1a_64 and head. Only the JSON changes: this page opens configs read from an Apex 7 and writes files, never a keyboard - the write to the board is `ssgg onboard write`.'));
   rows.push(line('Invert', button('Invert every pixel', () => {
     const src = bytes ? Array.from(bytes) : new Array(OLED_BYTES).fill(0);
     setOledBitmap(doc, src.map((byte) => byte ^ 0xff));
     render();
-  }, 'btn oled-invert'), `flips every bit of oled.bytes_hex: ${OLED_BYTES} bytes, ${OLED_W * OLED_H} pixels, lit becomes off and off becomes lit. Bit 7 stays the left pixel of its byte, so the picture is mirrored in colour only, never moved. len, nonzero, fnv1a_64 and head are recomputed, and inverting twice is the identity. A block with no bytes_hex inverts to every pixel lit. Only the JSON changes: this page never writes a keyboard, and on-board writes are not supported on 0x1628.`));
+  }, 'btn oled-invert'), `flips every bit of oled.bytes_hex: ${OLED_BYTES} bytes, ${OLED_W * OLED_H} pixels, lit becomes off and off becomes lit. Bit 7 stays the left pixel of its byte, so the picture is mirrored in colour only, never moved. len, nonzero, fnv1a_64 and head are recomputed, and inverting twice is the identity. A block with no bytes_hex inverts to every pixel lit. Only the JSON changes: this page opens configs read from an Apex 7 and writes files, never a keyboard - the write to the board is ssgg onboard write.`));
   return panel(`On-board OLED (the board rect, ${OLED_W}x${OLED_H} 1bpp)`, rows);
 }
 

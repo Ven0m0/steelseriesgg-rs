@@ -73,9 +73,11 @@ pub enum CommandCode {
     /// controller's. See [`OnboardFirmwareVersionCommand`]. Confirmed on hardware on an Apex 7 (`0x1612`).
     OnboardFirmwareVersion = 0x90,
     /// `[EXPERIMENTAL]` Legacy Apex driver mode (0x6C): GG's engine writes `6c 00 01` when it opens a
-    /// device and `6c 00 00` when it closes a session - same report number 0, same command, one byte
-    /// apart. Only the opening frame is in the reference capture (answered `6c 00 01 00…`). **Nothing in
-    /// ssgg sends it.** See [`OnboardDriverModeCommand`].
+    /// device (`DriverModeEnable` in its init-sequence descriptor, the fourth frame of its opening
+    /// chain, in the read capture and answered by nothing) and `6c 00 00` at session close (engine-side
+    /// only). Same report number 0, same command, one byte apart. **Nothing in ssgg sends it.** See
+    /// [`OnboardDriverModeCommand`]. GG's chain also carries `f4 00`, answered `1`, whose meaning is
+    /// unknown and which `ssgg` does not implement at all.
     OnboardDriverMode = 0x6C,
     /// Legacy Apex profile deploy (0x89): GG's `89 <1-based profile id>`, the
     /// `load_profile` frame seen behind profile-file transfers in the reference capture (slots 0, 1, 2, 4
@@ -603,9 +605,11 @@ impl HidCommand for OnboardFirmwareVersionCommand {
 /// Which driver mode [`OnboardDriverModeCommand`] asks the keyboard for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DriverModeState {
-    /// `0x01` - engaged. GG's engine writes it at device init (`6c 00 01`).
+    /// `0x01` - engaged. GG's engine writes it as the fourth frame of its opening chain (`6c 00 01`,
+    /// `DriverModeEnable` in its init-sequence descriptor), answered by nothing.
     Engaged,
-    /// `0x00` - released. GG's engine writes it at shutdown (`6c 00 00`).
+    /// `0x00` - released. GG's engine writes it at session close (`6c 00 00`); engine-side only, not in the
+    /// capture.
     Released,
 }
 
@@ -619,9 +623,9 @@ impl From<DriverModeState> for u8 {
 }
 
 /// [EXPERIMENTAL] Legacy Apex driver mode: `6c 00 <mode>` in a 64-byte output report
-/// (`SET_REPORT wValue 0x0200`). GG's engine writes [`DriverModeState::Engaged`] when it opens a device
-/// and [`DriverModeState::Released`] when it shuts down; only the opening frame is in the capture,
-/// answered `6c 00 01 00 ...` on the interrupt endpoint.
+/// (`SET_REPORT wValue 0x0200`). GG's engine writes [`DriverModeState::Engaged`] as the fourth frame of its
+/// opening chain - `DriverModeEnable` in its init-sequence descriptor, in the read capture and answered by
+/// nothing - and [`DriverModeState::Released`] at session close (engine-side, not in the capture).
 ///
 /// **Nothing in ssgg sends this command**, and the on-board profile read works without it. The Apex 3
 /// family split: Apex 3 uses command `0x03` in a 33-byte report, Apex 3 TKL uses `0x6C` and opens with
@@ -2207,7 +2211,7 @@ mod tests {
     }
 
     /// The four write-side frames, byte for byte as the Apex 7 write capture shows them
-    /// (GG write capture, device 8, firmware 4.16.3: the wire bytes there are the data stage, i.e. this
+    /// (GG write capture, device 8: the wire bytes there are the data stage, i.e. this
     /// crate's report buffer without its report number).
     #[test]
     fn the_write_frames_are_the_2026_10_20_capture_shape() {
