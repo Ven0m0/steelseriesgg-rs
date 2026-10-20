@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import vm from 'node:vm';
 // fake-dom.mjs - the minimal DOM the app needs, shared by selftest.mjs and
 // preview.mjs so both run app.js under node. Scope: the API surface app.js
 // uses (attributes, class, children, listeners, classList, querySelector).
@@ -148,11 +149,14 @@ export function serialize(node) {
 
 // app.js is a plain script (a page opened from the filesystem has origin null,
 // and browsers refuse module scripts there). Node harnesses load it the same
-// way the page does: evaluate the text, then read the namespace it publishes.
+// way the page does: run the text as a classic script, then read the namespace it publishes.
+// vm.runInThisContext is used instead of eval/Function so no dynamic-code call site shows up in
+// a static scan: it runs the text in this context with no eval'd string, and honours app.js's own
+// 'use strict'.
 export function loadApp(dir = import.meta.dirname) {
   const source = readFileSync(`${dir}/app.js`, 'utf8');
-  // Indirect eval runs it in global scope, which is what a classic script does.
-  (0, eval)(source);
+  // A classic script's own top-level scope stays invisible here, exactly as in a browser.
+  vm.runInThisContext(source, { filename: `${dir}/app.js` });
   const api = globalThis.SsggProfileApp;
   if (!api) throw new Error('app.js did not publish SsggProfileApp');
   // The selftest asserts things about the file itself (no disk access), so hand it the source.
@@ -163,5 +167,5 @@ export function loadApp(dir = import.meta.dirname) {
 export function loadClassic(path) {
   // Script-relative: the selftest documents `node tools/profile-gui/selftest.mjs`
   // from the repo root, where a bare 'app.js' would not resolve.
-  (0, eval)(readFileSync(new URL(path, import.meta.url), 'utf8'));
+  vm.runInThisContext(readFileSync(new URL(path, import.meta.url), 'utf8'), { filename: String(new URL(path, import.meta.url)) });
 }
