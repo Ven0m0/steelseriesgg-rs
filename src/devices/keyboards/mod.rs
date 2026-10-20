@@ -1,8 +1,11 @@
 //! Keyboard device support (Apex series).
 
 pub mod apex;
+pub mod apex_7;
+pub mod apex_7_profile;
 pub mod apex_pro_tkl_2023;
 pub mod apex_pro_tkl_2023_profile;
+pub mod onboard;
 
 use super::diagnostics::{HidOperation, with_global_diagnostics};
 use super::hid_reports::{
@@ -208,6 +211,60 @@ pub trait Keyboard: Device {
             "Setting actuation point not supported".to_string(),
         ))
     }
+
+    // === On-board profiles (`[EXPERIMENTAL]`) ===
+
+    /// The on-board profile protocol this keyboard speaks, as the family codec that can read and write
+    /// its bytes. `None` (the default) says this keyboard has no on-board profile protocol.
+    ///
+    /// The codec is a family-wide, device-free value: it decodes, encodes and reports payloads, and names
+    /// the slots. A keyboard that carries a protocol overrides this with its family's codec, which
+    /// [`onboard::codecs`](crate::devices::keyboards::onboard::codecs) also lists for file-only commands.
+    fn onboard_codec(&self) -> Option<&'static dyn crate::devices::keyboards::onboard::OnboardProfileCodec> {
+        None
+    }
+
+    /// Whether this keyboard answers the on-board profile protocol: whether [`Self::onboard_codec`] answers.
+    fn supports_onboard_profile(&self) -> bool {
+        self.onboard_codec().is_some()
+    }
+
+    /// Read one on-board profile slot (0-based; [`OnboardProfileCodec::slot_for_config`](crate::devices::keyboards::onboard::OnboardProfileCodec::slot_for_config)
+    /// is what maps GG's config number to it). Keyboards that do not carry the protocol return an error.
+    ///
+    /// `[EXPERIMENTAL]`: the protocol is reverse-engineered from a capture of official GG. A full
+    /// slot read completes on an Apex 7 under Linux (2026-10-18); the decode is not verified.
+    async fn read_onboard_profile(&self, _profile: u8) -> Result<crate::devices::keyboards::onboard::ProfileImage> {
+        Err(Error::DeviceCommunication(
+            "on-board profile read is not supported by this keyboard".to_string(),
+        ))
+    }
+
+    /// Write one on-board profile slot (0-based) with `payload` bytes, `[EXPERIMENTAL]`: the frames come
+    /// from the keyboard's own codec ([`OnboardProfileCodec::write_plan`]), and the keyboard ends the write
+    /// with the profile deploy frame (0x89). **This changes the keyboard's stored profile and makes it run
+    /// the slot written.** Keyboards without a known write sequence return an error.
+    ///
+    /// `[EXPERIMENTAL]`: the frame geometry is capture-confirmed on Apex 7 (`0x1612`, 2026-10-20). The
+    /// sequence has never been sent to a keyboard by this crate.
+    async fn write_onboard_profile(
+        &self,
+        _profile: u8,
+        _payload: &[u8],
+    ) -> Result<crate::devices::keyboards::onboard::WriteStats> {
+        Err(Error::DeviceCommunication(
+            "on-board profile write is not supported by this keyboard".to_string(),
+        ))
+    }
+
+    /// Make the keyboard run one on-board profile slot (0-based): GG's profile deploy frame (0x89), the
+    /// `1-based` profile id on the wire. **This changes what the keyboard is running right now.** Keyboards
+    /// that do not answer the frame return an error.
+    async fn load_onboard_profile(&self, _profile: u8) -> Result<()> {
+        Err(Error::DeviceCommunication(
+            "on-board profile deploy is not supported by this keyboard".to_string(),
+        ))
+    }
 }
 
 /// Generic SteelSeries keyboard implementation.
@@ -298,6 +355,13 @@ impl GenericKeyboard {
         }
     }
 
+    // Packet I/O on the collection this keyboard already owns.
+    pub(crate) fn connected_device(&self) -> Result<&Arc<Mutex<HidDevice>>> {
+        self.device
+            .as_ref()
+            .ok_or(Error::DeviceCommunication("Device not connected".to_string()))
+    }
+
     /// Send a HID report to the keyboard synchronously (blocking).
     fn send_report(&mut self, data: &[u8]) -> Result<()> {
         use tracing::debug;
@@ -310,11 +374,7 @@ impl GenericKeyboard {
 
         debug!("Sending HID report ({} bytes): {:02x?}", data.len(), data);
 
-        let device = self
-            .device
-            .as_ref()
-            .ok_or(Error::DeviceCommunication("Device not connected".to_string()))?;
-        let device = device.lock();
+        let device = self.connected_device()?.lock();
 
         let result = if let Some(result) = with_global_diagnostics(|diag| {
             diag.record_timed_operation(HidOperation::Send, data, || {
@@ -357,10 +417,7 @@ impl GenericKeyboard {
 
         debug!("Sending HID report ({} bytes): {:02x?}", data.len(), data);
 
-        let device = self
-            .device
-            .clone()
-            .ok_or(Error::DeviceCommunication("Device not connected".to_string()))?;
+        let device = self.connected_device()?.clone();
 
         let data = data.to_vec();
 
@@ -394,34 +451,31 @@ impl GenericKeyboard {
         result
     }
 
-    /// Send a HID feature report of arbitrary size (for Apex 2023 new protocol).
-    /// Uses direct ioctl to bypass hidapi's broken HIDIOCSFEATURE direction bits.
-    /// Resolves the hidraw path: `info.path` for the wired 2023 model, interface 1 for the original
-    /// Apex Pro, interface 3 for the others.
+    /// Send a HID feature report of arbitrary size (the Apex 2023 direct-mode packets): hidapi's
+    /// `send_feature_report`, i.e. the kernel's `HIDIOCSFEATURE` on Linux, on the handle the device
+    /// manager opened.
+    ///
+    /// `[EXPERIMENTAL]` - **needs a hardware test on the wired Apex Pro TKL 2023 (`0x1628`)**. This was
+    /// routed through the path-based `send_feature_report_raw`, but the bug this was supposed to work
+    /// around was fixed in hidapi 2.6.6.
     #[cfg(unix)]
     pub fn send_feature(&self, data: &[u8], report_len: usize) -> Result<()> {
-        use crate::devices::product_ids::{APEX_PRO, APEX_PRO_TKL_2023};
-        // The wired 2023 model takes feature reports on USB interface 1, the control collection
-        // discovery already selected; interface 3 is the wireless layout. OpenRGB opens the
-        // original Apex Pro on interface 1 [EXPERIMENTAL, untested here].
-        let interface = match self.info.product_id {
-            APEX_PRO_TKL_2023 => None,
-            APEX_PRO => Some(1),
-            _ => Some(3),
+        let device = self.connected_device()?;
+        let report = {
+            let mut report = vec![0u8; report_len.max(1)];
+            let copy_len = data.len().min(report.len());
+            report[..copy_len].copy_from_slice(&data[..copy_len]);
+            report
         };
-        let path = interface
-            .and_then(|i| super::find_hidraw_for_interface(self.info.vendor_id, self.info.product_id, i))
-            .unwrap_or_else(|| self.info.path.clone());
-        super::send_feature_report_raw(&path, data, report_len)
+        let device = device.lock();
+        device
+            .send_feature_report(&report)
+            .map_err(|e| Error::DeviceCommunication(e.to_string()))
     }
 
     #[cfg(not(unix))]
     pub fn send_feature(&self, data: &[u8], _report_len: usize) -> Result<()> {
-        let device = self
-            .device
-            .as_ref()
-            .ok_or(Error::DeviceCommunication("Device not connected".to_string()))?;
-        let device = device.lock();
+        let device = self.connected_device()?.lock();
 
         device
             .send_feature_report(data)
@@ -446,6 +500,55 @@ impl GenericKeyboard {
 
         self.send_command_async(RgbZoneCommand::new_all_zones(&self.zone_color_buffer))
             .await
+    }
+
+    /// Send one output report on this keyboard's collection (`SET_REPORT wValue 0x0200`).
+    pub(crate) fn write_profile_packet(&self, data: &[u8]) -> Result<()> {
+        let device = self.connected_device()?.lock();
+        let written = device
+            .write(data)
+            .map_err(|e| Error::DeviceCommunication(format!("output report write: {e}")))?;
+        if written != data.len() {
+            return Err(Error::DeviceCommunication(format!(
+                "output report write accepted {written} of {} bytes",
+                data.len()
+            )));
+        }
+        Ok(())
+    }
+
+    /// Read one feature report from this keyboard's collection (`GET_REPORT wValue 0x0300`).
+    pub(crate) fn read_profile_feature_packet(&self, report_id: u8, len: usize) -> Result<Vec<u8>> {
+        if len < 2 {
+            return Err(Error::DeviceCommunication(format!(
+                "feature report size {len} cannot hold a report ID byte and any data"
+            )));
+        }
+        let mut report = vec![report_id; len];
+        let device = self.connected_device()?.lock();
+        let received = device
+            .get_feature_report(&mut report)
+            .map_err(|e| Error::DeviceCommunication(format!("feature report read: {e}")))?;
+        report.truncate(received.min(len));
+        Ok(report)
+    }
+
+    /// Read one interrupt-endpoint input report from this keyboard's collection, waiting up to
+    /// `timeout_ms`.
+    pub(crate) fn read_profile_input_packet(&self, len: usize, timeout_ms: u64) -> Result<Option<Vec<u8>>> {
+        let mut report = vec![0u8; len.max(1)];
+        let poll_ms = i32::try_from(timeout_ms).unwrap_or(i32::MAX);
+        let received = {
+            let device = self.connected_device()?.lock();
+            device
+                .read_timeout(&mut report, poll_ms)
+                .map_err(|e| Error::DeviceCommunication(format!("input report read: {e}")))?
+        };
+        if received == 0 {
+            return Ok(None);
+        }
+        report.truncate(received);
+        Ok(Some(report))
     }
 
     /// Update the cached actuation point value.
@@ -488,11 +591,7 @@ impl Device for GenericKeyboard {
     }
 
     fn receive_raw(&mut self, buf: &mut [u8]) -> Result<usize> {
-        let device = self
-            .device
-            .as_ref()
-            .ok_or(Error::DeviceCommunication("Device not connected".to_string()))?;
-        let device = device.lock();
+        let device = self.connected_device()?.lock();
 
         if let Some(result) = with_global_diagnostics(|diag| {
             diag.record_timed_operation(HidOperation::Receive, &[], || {

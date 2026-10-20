@@ -1,0 +1,246 @@
+:root {
+  --bg: #0f1216;
+  --bg2: #151a21;
+  --panel: #1a212a;
+  --panel2: #202934;
+  --line: #2b3644;
+  --text: #d7dee8;
+  --muted: #8d9bad;
+  --accent: #5fb2ff;
+  --warn: #ffb454;
+  --bad: #ff6b6b;
+  --good: #58d68d;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'DejaVu Sans', sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+.mono { font-family: var(--mono); font-size: 12px; }
+code { font-family: var(--mono); }
+.tag { color: var(--warn); font-family: var(--mono); font-size: 11px; }
+.hint { color: var(--muted); }
+
+.bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg2);
+}
+
+.brand h1 { margin: 0; font-size: 17px; }
+.brand p { margin: 2px 0 0; color: var(--muted); }
+
+.toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+
+.btn {
+  background: var(--panel2);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 7px 11px;
+  cursor: pointer;
+  font: inherit;
+}
+.btn:hover { border-color: var(--accent); }
+.btn.primary { background: #173a5e; border-color: #2a6ba8; }
+.btn.warn { background: #3b2a17; border-color: #6a4a22; }
+.btn.seg.active { background: #1d3a24; border-color: #2f7a44; color: #b9f0c8; }
+.btn.file { display: inline-flex; align-items: center; gap: 8px; }
+/* A display:none input is not labelable: clicking the label would open nothing.
+   Keep it in the layout, invisible, so the label click opens the picker. */
+.btn.file input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+.seg { display: inline-flex; gap: 4px; }
+
+.tabs { display: flex; flex-wrap: wrap; gap: 6px; width: 100%; }
+.tab {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 12px;
+  padding: 4px 9px;
+  cursor: pointer;
+}
+.tab.active { color: var(--text); border-color: var(--accent); background: #16202b; }
+
+.status { margin: 0; padding: 8px 16px; color: var(--muted); border-bottom: 1px solid var(--line); }
+
+main {
+  display: grid;
+  /* Left: the board plus the summary panels under it. Right: the inspector, which always
+     edits what is selected on the board (a key, a wheel cap, or the OLED). */
+  grid-template-columns: minmax(760px, 1.9fr) minmax(360px, 1fr);
+  gap: 16px;
+  padding: 16px;
+  align-items: start;
+}
+
+@media (max-width: 1320px) { main { grid-template-columns: 1fr; } }
+
+.board-box {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px;
+  /* The board scales to this column (svg.board width:100% + viewBox): it always fits,
+     never scrolls, never crops. Keep the column's min width above 0 and the board grows. */
+}
+body.dropping .board-box { border-color: var(--accent); }
+.note { color: var(--muted); }
+
+/* The profile name editor sits above the board, where the profile being edited is visible while the
+   board is. app.js builds it (renderNameBar) and marks it when the name differs from the file as
+   loaded; the revert button is enabled only then. */
+.name-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  padding: 0 0 10px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 10px;
+}
+.name-bar label.name-label { color: var(--muted); font-family: var(--mono); font-size: 12px; }
+.name-bar input[type="text"] { min-width: 220px; }
+.name-state { color: var(--muted); font-family: var(--mono); font-size: 11px; }
+.name-state.changed { color: var(--warn); }
+.name-bar .name-note { flex-basis: 100%; }
+
+/* The viewBox is 25 key units x UNIT 48 (app.js); the browser scales it to the column, so the
+   board always fits. selftest.mjs checks width:100%/height:auto and the no-min-width rule. */
+svg.board { display: block; width: 100%; height: auto; }
+.key { cursor: pointer; }
+/* The cap is the control, so the click target is the cap: the outline rect and the state fill rect
+   are drawn as the full cap box, `pointer-events: all` makes the whole box hit even where nothing
+   is painted (a state colour is an opaque fill today, and a transparent one must still hit), and the
+   label, glyph and sub line are inert. A click anywhere inside the cap selects the key; a click in
+   the gap between caps selects nothing. app.js gives every cap role=button and tabindex and handles
+   Enter/Space on the group, so the keyboard selects the cap too, clips every line the cap draws to
+   the cap box (a long sub line - a macro binding - paints and hits only inside the button), and
+   draws focus on the cap rect, because a focused control's default ring follows the group's
+   bounding box, which the text lines widen. selftest.mjs checks all of it. */
+.key:focus { outline: none; }
+.key:focus .cap { stroke: var(--accent); stroke-width: 2.5; }
+.key .cap, .key .fill { pointer-events: all; }
+.key text { pointer-events: none; }
+.key .cap { fill: #0a0d11; stroke: #4d5c6e; stroke-width: 1.25; }
+/* Centred legends: a 1-unit cap is UNIT-GAP wide (42px at UNIT 48), 11px mono takes 5
+   glyphs there, so 6 and 7 glyph labels drop to 10px and 8.5px. */
+.key .label { fill: #eef3f9; font: 600 11px var(--mono); text-anchor: middle; }
+.key .label.long { font-size: 10px; }
+.key .label.xlong { font-size: 8.5px; }
+.key .arrow { fill: #eef3f9; font: 600 22px var(--sans); text-anchor: middle; }
+.key .sub { fill: #9fc7f2; font: 9.5px var(--mono); text-anchor: middle; }
+.key .sub.long { font-size: 8.5px; }
+.key .sub.xlong { font-size: 7.2px; }
+/* Half-height wheel cap: direction glyph over the mapping text. */
+.key .wheel-glyph { fill: #cfe3fb; font: 600 12px var(--mono); text-anchor: middle; }
+.key .wheel-sub { fill: #cfe3fb; font: 8px var(--mono); }
+.key.unmapped .label { fill: #6b7688; }
+.key.unmapped .arrow { fill: #6b7688; }
+/* The on-board OLED is a display, not a binding: dark screen, no pointer. */
+.oled .oled-screen { fill: #0b1016; stroke: #2c3747; stroke-width: 1.5; }
+.oled .oled-label { fill: #6f7e90; font: 600 9px var(--mono); text-anchor: middle; letter-spacing: 1.5px; }
+/* 128x40 is 3.2x the rect, so scale the bitmap with no smoothing. */
+/* Same rule as the caps: the OLED rect is the control, its label is inert. */
+.oled .oled, .oled .oled-screen { pointer-events: all; }
+.oled text { pointer-events: none; }
+.oled .oled { cursor: pointer; }
+.oled:focus { outline: none; }
+.oled.selected .oled-screen { stroke: var(--accent); stroke-width: 3; }
+.oled-img { image-rendering: pixelated; }
+.oled-box { margin-top: 8px; }
+.oled-preview { display: block; background: #000; border: 1px solid var(--line); image-rendering: pixelated; }
+.key.selected .cap { stroke: var(--accent); stroke-width: 2.5; }
+.key.changed .cap { stroke: var(--warn); stroke-width: 2.5; stroke-dasharray: 4 3; }
+.strip-label { fill: var(--muted); font: 11px var(--mono); }
+
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 10px; }
+.legend-item { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); }
+.swatch { width: 12px; height: 12px; border-radius: 3px; border: 1px solid var(--line); display: inline-block; }
+/* Swatches mirror FILL_COLORS in app.js (the selftest compares them). */
+.sw-self { background: #46537c; }
+.sw-none { background: #2d3449; }
+.sw-deactivated { background: #892424; }
+.sw-combokey { background: #217283; }
+.sw-meta { background: #6d2a84; }
+.sw-macro { background: #2a793e; }
+.sw-mediakey { background: #862757; }
+.sw-function { background: #8c6921; }
+.sw-nooffset { background: #0c0e12; }
+.sw-changed { background: transparent; border: 2px dashed var(--warn); }
+.sw-selected { background: transparent; border: 2px solid var(--accent); }
+
+/* The inspector edits the current selection; it stays in view while the panels under the
+   board scroll past. */
+.inspector { display: flex; flex-direction: column; gap: 12px; position: sticky; top: 12px; }
+/* Panels that describe the rest of the profile: they fill the wide space under the board. */
+.below-box { display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); gap: 12px; margin-top: 12px; }
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+.panel h2 { margin: 0 0 8px; font-size: 14px; color: var(--accent); }
+.panel h3.subhead { margin: 10px 0 4px; font-size: 12px; color: var(--muted); font-family: var(--mono); }
+
+.line {
+  display: grid;
+  grid-template-columns: 150px 1fr;
+  gap: 8px;
+  align-items: center;
+  padding: 3px 0;
+  border-top: 1px solid #222c37;
+}
+.line:first-of-type { border-top: 0; }
+.line-label { color: var(--muted); }
+.line-control { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.line-note { grid-column: 1 / -1; color: var(--muted); font-family: var(--mono); font-size: 11px; }
+.line.pair .line-control { gap: 6px; }
+
+select, input[type="text"], input[type="number"] {
+  background: #10151b;
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 5px 7px;
+  font: 12px var(--mono);
+}
+input[type="number"].num { width: 96px; }
+input[type="text"].text { min-width: 220px; }
+input[type="color"].color { width: 54px; height: 28px; padding: 2px; background: #10151b; border: 1px solid var(--line); border-radius: 6px; }
+.check { display: inline-flex; gap: 5px; align-items: center; color: var(--muted); }
+.btnrow { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+
+/* The whole macro, shown as its own block under the (short-labelled) binding select in the key panel. */
+ul.macro-actions { margin: 4px 0 0; padding: 0 0 0 16px; list-style: none; }
+ul.macro-actions li { margin: 2px 0; font-size: 11px; }
+
+ul.changes { margin: 6px 0 0; padding: 0 0 0 16px; color: var(--muted); }
+ul.changes li { margin: 2px 0; }
+
+.foot { padding: 12px 16px 24px; color: var(--muted); border-top: 1px solid var(--line); }
+
+/* custom-binding list rows jump to the key panel */
+table.grid tr.clickable { cursor: pointer; }
+table.grid tr.clickable:hover td { background: #20262f; }

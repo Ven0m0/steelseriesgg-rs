@@ -17,11 +17,12 @@ transfers (`bmRequestType 0x21`, `bRequest 9`). Replies came back on interrupt I
 | Output report, ID 0 | `0x0200` | 64 | commands and polls |
 
 The 644 is the on-wire length; it excludes the report-ID byte. For `0x1628` the code builds a
-`WIRED_2023_PACKET_LENGTH = 645` buffer (report-ID byte + 644 wire bytes) in `apex_pro_tkl_2023.rs`. On
-Unix, `GenericKeyboard::send_feature` (`keyboards/mod.rs`) writes to `info.path` for this model, the
-interface-1 control collection discovery selected. Other 2023/2024 models (Gen 3, wireless) still use
-`APEX_2023_PACKET_LENGTH = 643` and resolve hidraw interface 3 (`find_hidraw_for_interface(.., 3)`).
-The Linux hidraw path for `0x1628` is untested.
+`WIRED_2023_PACKET_LENGTH = 645` buffer (report-ID byte + 644 wire bytes) in `apex_pro_tkl_2023.rs`. `GenericKeyboard::send_feature`
+(`keyboards/mod.rs`) sends the frame on the device's own hidapi handle on every platform. It briefly
+routed this model through a sysfs-resolved path (interface 1) on 2026-10-15; that was reverted on
+2026-10-17 without ever being measured. **Needs a hardware test on `0x1628`**: if the keyboard ignores
+direct-mode frames sent on the collection discovery opened, the interface-1 reading is real and that
+collection has to be opened as its own device. The Linux path for `0x1628` is untested.
 
 ## Per-key lighting (feature report, command 0x40)
 

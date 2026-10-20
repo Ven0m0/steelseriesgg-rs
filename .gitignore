@@ -52,3 +52,6 @@ apexctl/
 *.pml.csv
 *.etl
 *.etl.csv
+
+# preview.mjs output (tools/profile-gui)
+tools/profile-gui/board-preview.svg

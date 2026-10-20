@@ -1,0 +1,2482 @@
+{
+  "product_id": 5650,
+  "product": "Apex 7",
+  "firmware": "4.16.3",
+  "slot": 2,
+  "schema": 11,
+  "schema_name": "b",
+  "name": "",
+  "name_hex": "",
+  "lighting": {
+    "oled_illumination_options": "00 02 00 00 00 00",
+    "lock_key_color": {
+      "r": 255,
+      "g": 255,
+      "b": 255
+    },
+    "meta_key_color": {
+      "r": 255,
+      "g": 32,
+      "b": 0
+    },
+    "disabled_win_key_color": {
+      "r": 32,
+      "g": 112,
+      "b": 255
+    },
+    "meta_mapped_elements": "00 00 00 00 00 00 00 00 3C 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 08 00 00 00",
+    "lock_key_hid_codes": "53 39 47",
+    "win_key_hid_code": 227,
+    "meta_key_background_dimmer": 255,
+    "idle_mode_dimmer": 255,
+    "idle_timeout_ms": 0
+  },
+  "meta_toggle_hid": 240,
+  "button_mappings": [
+    {
+      "offset": 0,
+      "hid_code": 41,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "29 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 1,
+      "hid_code": 53,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "35 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 2,
+      "hid_code": 43,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "2B 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 3,
+      "hid_code": 57,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "39 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 4,
+      "hid_code": 225,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "E1 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 5,
+      "hid_code": 224,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "E0 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 6,
+      "hid_code": null,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 7,
+      "hid_code": null,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 8,
+      "hid_code": 58,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "3A 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 9,
+      "hid_code": 30,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "1E 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 10,
+      "hid_code": 20,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "14 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 11,
+      "hid_code": 4,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "04 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 12,
+      "hid_code": 100,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "64 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 13,
+      "hid_code": 227,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "E3 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 14,
+      "hid_code": 72,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "48 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 15,
+      "hid_code": 97,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "61 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 16,
+      "hid_code": 59,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "3B 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 17,
+      "hid_code": 31,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "1F 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 18,
+      "hid_code": 26,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "1A 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 19,
+      "hid_code": 22,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "16 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 20,
+      "hid_code": 29,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "1D 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 21,
+      "hid_code": 226,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "E2 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 22,
+      "hid_code": 74,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "4A 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 23,
+      "hid_code": 87,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "57 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 24,
+      "hid_code": 60,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "3C 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 25,
+      "hid_code": 32,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "20 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 26,
+      "hid_code": 8,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "08 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 27,
+      "hid_code": 7,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "07 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 28,
+      "hid_code": 27,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "1B 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 29,
+      "hid_code": null,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "custom",
+      "key_codes": "91 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 30,
+      "hid_code": 75,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "4B 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 31,
+      "hid_code": 92,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "5C 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 32,
+      "hid_code": 61,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "3D 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 33,
+      "hid_code": 33,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "21 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 34,
+      "hid_code": 21,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "15 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 35,
+      "hid_code": 9,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "09 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 36,
+      "hid_code": 6,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "06 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 37,
+      "hid_code": 139,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "8B 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 38,
+      "hid_code": 83,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "53 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 39,
+      "hid_code": 93,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "5D 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 40,
+      "hid_code": 62,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "3E 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 41,
+      "hid_code": 34,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "22 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 42,
+      "hid_code": 23,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "17 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 43,
+      "hid_code": 10,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "0A 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 44,
+      "hid_code": 25,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "19 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 45,
+      "hid_code": 44,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "2C 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 46,
+      "hid_code": 84,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "54 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 47,
+      "hid_code": 94,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "5E 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 48,
+      "hid_code": 63,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "3F 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 49,
+      "hid_code": 35,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "23 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 50,
+      "hid_code": 28,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "1C 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 51,
+      "hid_code": 11,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "0B 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 52,
+      "hid_code": 5,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "05 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 53,
+      "hid_code": 138,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "8A 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 54,
+      "hid_code": 85,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "55 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 55,
+      "hid_code": 133,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "85 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 56,
+      "hid_code": 64,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "40 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 57,
+      "hid_code": 36,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "24 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 58,
+      "hid_code": 24,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "18 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 59,
+      "hid_code": 13,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "0D 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 60,
+      "hid_code": 17,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "11 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 61,
+      "hid_code": 136,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "88 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 62,
+      "hid_code": 86,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "56 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 63,
+      "hid_code": 89,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "59 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 64,
+      "hid_code": 65,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "41 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 65,
+      "hid_code": 37,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "25 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 66,
+      "hid_code": 12,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "0C 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 67,
+      "hid_code": 14,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "0E 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 68,
+      "hid_code": 16,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "10 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 69,
+      "hid_code": null,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "custom",
+      "key_codes": "90 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 70,
+      "hid_code": 77,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "4D 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 71,
+      "hid_code": 90,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "5A 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 72,
+      "hid_code": 66,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "42 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 73,
+      "hid_code": 38,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "26 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 74,
+      "hid_code": 18,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "12 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 75,
+      "hid_code": 15,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "0F 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 76,
+      "hid_code": 54,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "36 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 77,
+      "hid_code": 230,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "E6 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 78,
+      "hid_code": 78,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "4E 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 79,
+      "hid_code": 91,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "5B 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 80,
+      "hid_code": 67,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "43 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 81,
+      "hid_code": 39,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "27 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 82,
+      "hid_code": 19,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "13 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 83,
+      "hid_code": 51,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "33 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 84,
+      "hid_code": 55,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "37 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 85,
+      "hid_code": 231,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "E7 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 86,
+      "hid_code": 95,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "5F 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 87,
+      "hid_code": 99,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "63 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 88,
+      "hid_code": 68,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "44 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 89,
+      "hid_code": 45,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "2D 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 90,
+      "hid_code": 47,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "2F 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 91,
+      "hid_code": 52,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "34 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 92,
+      "hid_code": 56,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "38 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 93,
+      "hid_code": 240,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "F0 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 94,
+      "hid_code": 96,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "60 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 95,
+      "hid_code": 88,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "58 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 96,
+      "hid_code": 69,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "45 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 97,
+      "hid_code": 46,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "2E 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 98,
+      "hid_code": 48,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "30 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 99,
+      "hid_code": 50,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "32 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 100,
+      "hid_code": 135,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "87 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 101,
+      "hid_code": 228,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "E4 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 102,
+      "hid_code": null,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 103,
+      "hid_code": null,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 104,
+      "hid_code": 70,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "46 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 105,
+      "hid_code": 137,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "89 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 106,
+      "hid_code": 49,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "31 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 107,
+      "hid_code": 40,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "28 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 108,
+      "hid_code": 229,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "E5 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 109,
+      "hid_code": 80,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "50 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 110,
+      "hid_code": null,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 111,
+      "hid_code": null,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 112,
+      "hid_code": 71,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "47 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 113,
+      "hid_code": 42,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "2A 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 114,
+      "hid_code": 73,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "49 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 115,
+      "hid_code": 76,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "4C 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 116,
+      "hid_code": 82,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "52 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 117,
+      "hid_code": 81,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "51 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 118,
+      "hid_code": 79,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "4F 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 119,
+      "hid_code": 98,
+      "function": 81,
+      "function_name": "combo_key",
+      "binding": "self",
+      "key_codes": "62 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 120,
+      "hid_code": 241,
+      "function": 97,
+      "function_name": "media_key",
+      "binding": "custom",
+      "key_codes": "E2 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 121,
+      "hid_code": 242,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 122,
+      "hid_code": 243,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 123,
+      "hid_code": 244,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 124,
+      "hid_code": 245,
+      "function": 97,
+      "function_name": "media_key",
+      "binding": "custom",
+      "key_codes": "CD 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 125,
+      "hid_code": 246,
+      "function": 97,
+      "function_name": "media_key",
+      "binding": "custom",
+      "key_codes": "B5 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 126,
+      "hid_code": 247,
+      "function": 97,
+      "function_name": "media_key",
+      "binding": "custom",
+      "key_codes": "B6 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 127,
+      "hid_code": 248,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    }
+  ],
+  "wheel_mappings": [
+    {
+      "offset": 0,
+      "hid_code": 41,
+      "function": 97,
+      "function_name": "media_key",
+      "binding": "custom",
+      "key_codes": "E9 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 1,
+      "hid_code": 53,
+      "function": 97,
+      "function_name": "media_key",
+      "binding": "custom",
+      "key_codes": "EA 00 00 00",
+      "macro_index": null
+    }
+  ],
+  "button_meta_mappings": [
+    {
+      "offset": 0,
+      "hid_code": 41,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 1,
+      "hid_code": 53,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 2,
+      "hid_code": 43,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 3,
+      "hid_code": 57,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 4,
+      "hid_code": 225,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 5,
+      "hid_code": 224,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 6,
+      "hid_code": null,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 7,
+      "hid_code": null,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 8,
+      "hid_code": 58,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 9,
+      "hid_code": 30,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 10,
+      "hid_code": 20,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 11,
+      "hid_code": 4,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 12,
+      "hid_code": 100,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 13,
+      "hid_code": 227,
+      "function": 98,
+      "function_name": "meta",
+      "binding": "custom",
+      "key_codes": "05 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 14,
+      "hid_code": 72,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 15,
+      "hid_code": 97,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 16,
+      "hid_code": 59,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 17,
+      "hid_code": 31,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 18,
+      "hid_code": 26,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 19,
+      "hid_code": 22,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 20,
+      "hid_code": 29,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 21,
+      "hid_code": 226,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 22,
+      "hid_code": 74,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 23,
+      "hid_code": 87,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 24,
+      "hid_code": 60,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 25,
+      "hid_code": 32,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 26,
+      "hid_code": 8,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 27,
+      "hid_code": 7,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 28,
+      "hid_code": 27,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 29,
+      "hid_code": null,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 30,
+      "hid_code": 75,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 31,
+      "hid_code": 92,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 32,
+      "hid_code": 61,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 33,
+      "hid_code": 33,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 34,
+      "hid_code": 21,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 35,
+      "hid_code": 9,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 36,
+      "hid_code": 6,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 37,
+      "hid_code": 139,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 38,
+      "hid_code": 83,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 39,
+      "hid_code": 93,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 40,
+      "hid_code": 62,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 41,
+      "hid_code": 34,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 42,
+      "hid_code": 23,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 43,
+      "hid_code": 10,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 44,
+      "hid_code": 25,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 45,
+      "hid_code": 44,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 46,
+      "hid_code": 84,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 47,
+      "hid_code": 94,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 48,
+      "hid_code": 63,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 49,
+      "hid_code": 35,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 50,
+      "hid_code": 28,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 51,
+      "hid_code": 11,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 52,
+      "hid_code": 5,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 53,
+      "hid_code": 138,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 54,
+      "hid_code": 85,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 55,
+      "hid_code": 133,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 56,
+      "hid_code": 64,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 57,
+      "hid_code": 36,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 58,
+      "hid_code": 24,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 59,
+      "hid_code": 13,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 60,
+      "hid_code": 17,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 61,
+      "hid_code": 136,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 62,
+      "hid_code": 86,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 63,
+      "hid_code": 89,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 64,
+      "hid_code": 65,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 65,
+      "hid_code": 37,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 66,
+      "hid_code": 12,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 67,
+      "hid_code": 14,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 68,
+      "hid_code": 16,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 69,
+      "hid_code": null,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 70,
+      "hid_code": 77,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 71,
+      "hid_code": 90,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 72,
+      "hid_code": 66,
+      "function": 98,
+      "function_name": "meta",
+      "binding": "custom",
+      "key_codes": "01 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 73,
+      "hid_code": 38,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 74,
+      "hid_code": 18,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 75,
+      "hid_code": 15,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 76,
+      "hid_code": 54,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 77,
+      "hid_code": 230,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 78,
+      "hid_code": 78,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 79,
+      "hid_code": 91,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 80,
+      "hid_code": 67,
+      "function": 98,
+      "function_name": "meta",
+      "binding": "custom",
+      "key_codes": "02 01 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 81,
+      "hid_code": 39,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 82,
+      "hid_code": 19,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 83,
+      "hid_code": 51,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 84,
+      "hid_code": 55,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 85,
+      "hid_code": 231,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 86,
+      "hid_code": 95,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 87,
+      "hid_code": 99,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 88,
+      "hid_code": 68,
+      "function": 98,
+      "function_name": "meta",
+      "binding": "custom",
+      "key_codes": "03 01 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 89,
+      "hid_code": 45,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 90,
+      "hid_code": 47,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 91,
+      "hid_code": 52,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 92,
+      "hid_code": 56,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 93,
+      "hid_code": 240,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 94,
+      "hid_code": 96,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 95,
+      "hid_code": 88,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 96,
+      "hid_code": 69,
+      "function": 98,
+      "function_name": "meta",
+      "binding": "custom",
+      "key_codes": "04 01 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 97,
+      "hid_code": 46,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 98,
+      "hid_code": 48,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 99,
+      "hid_code": 50,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 100,
+      "hid_code": 135,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 101,
+      "hid_code": 228,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 102,
+      "hid_code": null,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 103,
+      "hid_code": null,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 104,
+      "hid_code": 70,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 105,
+      "hid_code": 137,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 106,
+      "hid_code": 49,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 107,
+      "hid_code": 40,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 108,
+      "hid_code": 229,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 109,
+      "hid_code": 80,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 110,
+      "hid_code": null,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 111,
+      "hid_code": null,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 112,
+      "hid_code": 71,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 113,
+      "hid_code": 42,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 114,
+      "hid_code": 73,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 115,
+      "hid_code": 76,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 116,
+      "hid_code": 82,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 117,
+      "hid_code": 81,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 118,
+      "hid_code": 79,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 119,
+      "hid_code": 98,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 120,
+      "hid_code": 241,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 121,
+      "hid_code": 242,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 122,
+      "hid_code": 243,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 123,
+      "hid_code": 244,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 124,
+      "hid_code": 245,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 125,
+      "hid_code": 246,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 126,
+      "hid_code": 247,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 127,
+      "hid_code": 248,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    }
+  ],
+  "wheel_meta_mappings": [
+    {
+      "offset": 0,
+      "hid_code": 41,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    },
+    {
+      "offset": 1,
+      "hid_code": 53,
+      "function": 0,
+      "function_name": "deactivated",
+      "binding": "none",
+      "key_codes": "00 00 00 00",
+      "macro_index": null
+    }
+  ],
+  "oled": {
+    "offset": 1385,
+    "len": 640,
+    "nonzero": 213,
+    "fnv1a_64": "ED411A7750D88E1B",
+    "head": "00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+    "bytes_hex": "00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 08 00 00 00 00 00 00 00 00 00 00 06 00 00 00 00 1C 00 00 0E 00 00 00 38 00 00 00 06 00 00 00 04 1C 00 00 0E 00 00 00 38 00 00 00 00 00 00 00 0E 1C 00 00 0E 00 00 00 38 00 00 00 00 00 00 00 04 7F 00 3C 0E 03 80 38 38 70 07 00 00 0E 01 C0 00 FF 80 FF 3F 8F E0 FE 39 FC 1F C6 76 3F 87 F0 01 C1 C1 E7 BF 9F F1 FF 3B 8E 38 E6 F6 71 CE 38 03 80 E1 C3 8E 38 3B 83 3B 06 30 67 86 60 CC 18 03 1C 61 E0 0E 38 3B 83 BB 80 60 36 06 C0 6E 00 1F 36 70 FC 0E 38 3B 83 B9 E0 60 36 06 C0 6F 80 3F 22 70 7F 0E 3F FB FF B8 FC 7F F6 06 FF E3 F0 1F 36 70 0F 8E 3F FB FF B8 1E 60 06 06 C0 00 78 03 1C 60 03 8E 38 03 80 38 07 60 06 06 C0 00 1C 03 80 E1 C1 8E 38 3B 83 BB 03 70 36 06 E0 6C 0C 01 C1 C1 E3 8F 9F F1 FF 3B 87 38 66 06 70 CE 1C 00 FF 80 FF 0F 8F E0 FE 39 FE 1F C6 06 3F 87 F8 00 7F 00 3E 07 83 80 38 38 78 07 06 06 0E 01 E0 00 1C 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00"
+  },
+  "rapid_tap": {
+    "enable": 0,
+    "pairs": [
+      {
+        "hid_1": 4,
+        "hid_2": 7,
+        "mode": 0,
+        "report_both_keys": false,
+        "reserved": "00 00"
+      },
+      {
+        "hid_1": 0,
+        "hid_2": 0,
+        "mode": 0,
+        "report_both_keys": false,
+        "reserved": "00 00"
+      },
+      {
+        "hid_1": 0,
+        "hid_2": 0,
+        "mode": 0,
+        "report_both_keys": false,
+        "reserved": "00 00"
+      },
+      {
+        "hid_1": 0,
+        "hid_2": 0,
+        "mode": 0,
+        "report_both_keys": false,
+        "reserved": "00 00"
+      },
+      {
+        "hid_1": 0,
+        "hid_2": 0,
+        "mode": 0,
+        "report_both_keys": false,
+        "reserved": "00 00"
+      },
+      {
+        "hid_1": 0,
+        "hid_2": 0,
+        "mode": 0,
+        "report_both_keys": false,
+        "reserved": "00 00"
+      },
+      {
+        "hid_1": 0,
+        "hid_2": 0,
+        "mode": 0,
+        "report_both_keys": false,
+        "reserved": "00 00"
+      },
+      {
+        "hid_1": 0,
+        "hid_2": 0,
+        "mode": 0,
+        "report_both_keys": false,
+        "reserved": "00 00"
+      },
+      {
+        "hid_1": 0,
+        "hid_2": 0,
+        "mode": 0,
+        "report_both_keys": false,
+        "reserved": "00 00"
+      },
+      {
+        "hid_1": 0,
+        "hid_2": 0,
+        "mode": 0,
+        "report_both_keys": false,
+        "reserved": "00 00"
+      }
+    ]
+  },
+  "macro_data": {
+    "offset": 2076,
+    "len": 9600,
+    "nonzero": 0,
+    "fnv1a_64": "083B452CD5075125",
+    "head": "00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00"
+  },
+  "macros": [],
+  "guid": "00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 03",
+  "guid_padding": "",
+  "crc_stored": 988161058,
+  "crc_computed": 988161058,
+  "crc_ok": true,
+  "crc_region_len": 11692,
+  "payload_len": 11696,
+  "source": "example: decode of a stock Config 3 slot capture from an Apex 7 read; the identity fields are what that read stamps in front of the profile"
+}

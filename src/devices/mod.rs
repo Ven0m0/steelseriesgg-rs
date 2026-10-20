@@ -258,76 +258,51 @@ pub fn write_padded_report(device: &HidDevice, data: &[u8], report_len: usize, i
 }
 
 #[cfg(unix)]
-/// Send a HID feature report by opening the hidraw device path directly.
-///
-/// We bypass hidapi's `send_feature_report` because the hidapi Rust crate's
-/// linux-native backend uses `ioctl_write_buf!` (IOC_WRITE only) for HIDIOCSFEATURE,
-/// but the Linux kernel defines it as `_IOWR` (IOC_WRITE|IOC_READ). This causes EINVAL
-/// on large feature reports. We call the ioctl directly with correct direction bits.
-pub fn send_feature_report_raw(hidraw_path: &str, data: &[u8], report_len: usize) -> Result<()> {
-    use std::fs::OpenOptions;
-    use std::os::unix::io::AsRawFd;
-    use tracing::debug;
-
-    let mut report = vec![0u8; report_len];
-    let copy_len = data.len().min(report_len);
-    report[..copy_len].copy_from_slice(&data[..copy_len]);
-
-    debug!(
-        "Sending HID feature report via {}: len={}, cmd={:#04x}",
-        hidraw_path,
-        report_len,
-        report.get(1).copied().unwrap_or(0)
-    );
-
-    let file = OpenOptions::new()
-        .read(true)
-        .write(true)
-        .open(hidraw_path)
-        .map_err(|e| Error::DeviceCommunication(format!("Failed to open {hidraw_path}: {e}")))?;
-
-    let fd = file.as_raw_fd();
-    // HIDIOCSFEATURE = _IOWR('H', 0x06, size) = (3 << 30) | (size << 16) | ('H' << 8) | 0x06
-    let ioctl_code: libc::c_ulong =
-        (3 << 30) | ((report_len as libc::c_ulong) << 16) | ((b'H' as libc::c_ulong) << 8) | 0x06;
-
-    let ret = unsafe { libc::ioctl(fd, ioctl_code, report.as_mut_ptr()) };
-    if ret < 0 {
-        let err = std::io::Error::last_os_error();
-        return Err(Error::DeviceCommunication(format!(
-            "HID feature report ioctl failed on {hidraw_path}: {err}"
-        )));
+fn interface_from_phys(phys: &str) -> Option<u32> {
+    let last = phys.rsplit('/').next()?;
+    if let Some(number) = last.strip_prefix("input") {
+        return number.parse().ok();
     }
+    last.parse().ok()
+}
 
-    Ok(())
+#[cfg(all(test, unix))]
+#[test]
+fn interface_from_phys_reads_the_trailing_interface() {
+    assert_eq!(interface_from_phys("usb-0:1.91:1.0/input7/1"), Some(1));
+    assert_eq!(interface_from_phys("usb-0:1.91:1.0/input7/3"), Some(3));
+    assert_eq!(interface_from_phys("usb-0:1.91:1.0/input7"), Some(7));
+    assert_eq!(interface_from_phys("usb-0:1.91:1.0/input7/x"), None);
 }
 
 #[cfg(unix)]
-/// Find the hidraw device path for a specific USB interface of a device.
-/// Scans /sys/class/hidraw/ to match vendor_id, product_id, and input number.
+/// Find the hidraw node of one USB interface of a device: scans `the device sysfs path` for the node whose
+/// `device/uevent` carries this vendor/product pair in `HID_ID` and a `HID_PHYS` whose interface number
+/// ([`interface_from_phys`]) is `interface`.
 pub fn find_hidraw_for_interface(vendor_id: u16, product_id: u16, interface: usize) -> Option<String> {
     use std::fs;
-    let target_phys_suffix = format!("/input{interface}");
+
+    let interface = u32::try_from(interface).ok()?;
     let target_hid_id = format!("0003:{:08X}:{:08X}", vendor_id as u32, product_id as u32);
 
-    for entry in fs::read_dir("/sys/class/hidraw").ok()? {
+    for entry in fs::read_dir("the device sysfs path").ok()? {
         let Ok(entry) = entry else { continue };
-        let uevent_path = entry.path().join("device/uevent");
-        let Ok(content) = fs::read_to_string(&uevent_path) else {
+        let Ok(content) = fs::read_to_string(entry.path().join("device/uevent")) else {
             continue;
         };
 
-        let has_hid_id = content.lines().any(|l| {
-            l.strip_prefix("HID_ID=")
-                .is_some_and(|v| v.eq_ignore_ascii_case(&target_hid_id))
-        });
-        let has_phys = content
-            .lines()
-            .any(|l| l.starts_with("HID_PHYS=") && l.ends_with(&target_phys_suffix));
+        let mut has_hid_id = false;
+        let mut phys_interface = None;
+        for line in content.lines() {
+            if let Some(value) = line.strip_prefix("HID_ID=") {
+                has_hid_id |= value.eq_ignore_ascii_case(&target_hid_id);
+            } else if let Some(value) = line.strip_prefix("HID_PHYS=") {
+                phys_interface = interface_from_phys(value);
+            }
+        }
 
-        if has_hid_id && has_phys {
-            let name = entry.file_name();
-            return Some(format!("/dev/{}", name.to_string_lossy()));
+        if has_hid_id && phys_interface == Some(interface) {
+            return Some(format!("/dev/{}", entry.file_name().to_string_lossy()));
         }
     }
     None
@@ -337,10 +312,11 @@ pub fn find_hidraw_for_interface(vendor_id: u16, product_id: u16, interface: usi
 /// Find a HID device path for a specific USB interface of a device.
 ///
 /// Windows splits one USB HID interface into several device nodes, one per top-level
-/// collection, all sharing the same VID/PID/interface number. The `interface` parameter alone
-/// cannot disambiguate them, so this matches on usage page instead: prefer the confirmed
-/// SteelSeries control page (`STEELSERIES_CONTROL_USAGE_PAGE`), then any other vendor-defined
-/// page (`>= 0xFF00`), tie-broken by lowest interface number.
+/// collection, all sharing the same VID/PID/interface number, so `interface` cannot disambiguate
+/// them and is ignored: this matches on usage page instead, preferring the confirmed SteelSeries
+/// control page (`STEELSERIES_CONTROL_USAGE_PAGE`) over any other vendor-defined page
+/// (`>= 0xFF00`), tie-broken by lowest interface number. That control collection is the one the
+/// reference capture shows carrying the profile traffic on `wIndex 1`.
 pub fn find_hidraw_for_interface(vendor_id: u16, product_id: u16, _interface: usize) -> Option<String> {
     let api = hidapi::HidApi::new().ok()?;
 
@@ -379,37 +355,6 @@ pub fn find_hidraw_for_interface(vendor_id: u16, product_id: u16, _interface: us
         }
     }
     None
-}
-
-#[cfg(not(unix))]
-/// Send a HID feature report using hidapi.
-/// On Linux the raw ioctl path is used instead to work around a hidapi direction-bit bug;
-/// on other platforms hidapi's send_feature_report works correctly.
-pub fn send_feature_report_raw(device_path: &str, data: &[u8], report_len: usize) -> Result<()> {
-    use std::ffi::CString;
-    use tracing::debug;
-
-    let mut report = vec![0u8; report_len];
-    let copy_len = data.len().min(report_len);
-    report[..copy_len].copy_from_slice(&data[..copy_len]);
-
-    debug!(
-        "Sending HID feature report via hidapi {}: len={}, cmd={:#04x}",
-        device_path,
-        report_len,
-        report.get(1).copied().unwrap_or(0)
-    );
-
-    let api = hidapi::HidApi::new().map_err(|e| Error::DeviceCommunication(format!("Failed to init HID API: {e}")))?;
-    let path =
-        CString::new(device_path).map_err(|e| Error::DeviceCommunication(format!("Invalid device path: {e}")))?;
-    let device = api
-        .open_path(&path)
-        .map_err(|e| Error::DeviceCommunication(format!("Failed to open {device_path}: {e}")))?;
-    device
-        .send_feature_report(&report)
-        .map_err(|e| Error::DeviceCommunication(format!("Feature report failed on {device_path}: {e}")))?;
-    Ok(())
 }
 
 /// HID vendor-defined usage page used by the SteelSeries control (RGB/actuation) collection.

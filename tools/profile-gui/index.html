@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>ssgg on-board profile editor</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="style.css">
+<script src="products.generated.js" defer></script>
+<script src="app.js" defer></script>
+<script src="main.js" defer></script>
+</head>
+<body>
+<header class="bar">
+  <div class="brand">
+    <h1>ssgg on-board profile editor</h1>
+    <p class="mono">edits the JSON of <code>ssgg onboard read --json</code> / <code>ssgg onboard decode --json</code> &middot;
+      files only, no device &middot; the protocol is <span class="tag">[EXPERIMENTAL]</span></p>
+  </div>
+  <div class="toolbar">
+    <label class="btn file">Open JSON<input id="fileInput" type="file" accept=".json,application/json"></label>
+    <button id="saveBtn" class="btn primary">Save a copy</button>
+    <span class="seg">
+      <button id="layerBaseBtn" class="btn seg active">Base layer</button>
+      <button id="layerMetaBtn" class="btn seg">META layer</button>
+    </span>
+  </div>
+  <div id="tabs" class="tabs"></div>
+</header>
+<p id="status" class="status mono"></p>
+<main>
+  <section id="boardBox" class="board-box">
+    <div id="nameBar" class="name-bar"></div>
+    <div id="boardMount"></div>
+    <div id="legend" class="legend"></div>
+    <p class="mono note">
+      The field above the board edits the profile name (the 24-byte name field of the payload) and marks
+      it when it differs from the file as loaded, with a button that takes the name back.
+      The board is an ANSI full-size drawing that scales to the column (no scrolling, never cropped).
+      Each cap shows its key legend and, under it, what the current layer binds it to; the mapping
+      offset, function byte and codes are in the hover tooltip and the Key panel. Keys with no offset
+      in the legacy family's HID table are dim. Rapid Tap pairs bind raw HID codes, marked
+      <span class="mono">[RT n]</span>. The two half caps above the numpad <span class="mono">-</span>
+      are the wheel mappings, and clicking one binds it in the Key panel like any key; the rectangle above the numpad is the on-board OLED, drawn from
+      the <span class="mono">oled.bytes_hex</span> block as a 128x40 monochrome bitmap, bit 7 of
+      each byte its left pixel; click the rect to edit the block.
+    </p>
+    <div id="belowBox" class="below-box"></div>
+  </section>
+  <section id="inspector" class="inspector"></section>
+</main>
+<footer class="foot mono">
+  Key binding source: <span class="mono">lisp/base_apex_legacy.lisp</span>
+  model names and the per-model feature set are imported from Rust
+  (<span class="mono">device_name_from_product_id</span> and <span class="mono">onboard_family</span>,
+  through <span class="mono">tools/profile-gui/sync-products.mjs</span> into
+  <span class="mono">products.generated.js</span>); the rest of the tables mirror
+  (<span class="mono">device-offset-lookup-table</span> inverted, as GG's
+  <span class="mono">onboard-to-config-button-mapping</span> uses it). Function names mirror
+  <span class="mono">function_name</span> in <span class="mono">src/devices/keyboards/apex_legacy_profile.rs</span>.
+  Nothing here is written to a keyboard by this page, and <span class="mono">crc_*</span> is never recomputed.
+</footer>
+</body>
+</html>
