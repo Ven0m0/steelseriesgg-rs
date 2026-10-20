@@ -46,41 +46,49 @@ pub enum CommandCode {
     ActuationControl = 0x2D,
     /// [EXPERIMENTAL] Apex Pro TKL 2023 on-board profile chunk (0x03, header `03 01 80`), see
     /// `ProfileChunkCommand`. The legacy Apex family uses the same command code with a different header
-    /// (`03 00 | buffer offset u16 | size u16 | payload`), see [`OnboardBufferWriteCommand`].
+    /// (`03 00 | buffer offset u16 | size u16 | payload`), confirmed on hardware on an Apex 7, see
+    /// [`OnboardBufferWriteCommand`].
     ProfileChunk = 0x03,
-    /// [EXPERIMENTAL] Legacy Apex (Apex 7, Apex Raw, Apex 2014) resource-buffer pull (0x85), see
-    /// `OnboardPayloadPullCommand`: answered by the keyboard's ordinary input report, not by a pull-specific one.
+    /// Legacy Apex (Apex 7, Apex Raw, Apex 2014) resource-buffer pull (0x85), see
+    /// `OnboardPayloadPullCommand`: answered by the keyboard's ordinary input report, not by a pull-specific
+    /// one. Confirmed on hardware on an Apex 7 (`0x1612`).
     OnboardPayloadPull = 0x85,
-    /// [EXPERIMENTAL] Legacy Apex resource-buffer push into a profile file (0x05), see [`OnboardPayloadPushCommand`]:
-    /// the write side of the transfer, answered by the interrupt report `05 01 …`.
+    /// Legacy Apex resource-buffer push into a profile file (0x05), see [`OnboardPayloadPushCommand`]:
+    /// the write side of the transfer, answered by the interrupt report `05 01 …`. Confirmed on hardware on
+    /// an Apex 7 (`0x1612`).
     OnboardPayloadPush = 0x05,
-    /// [EXPERIMENTAL] Legacy Apex on-board file open (0x88), see [`OnboardFileOpenCommand`]: the frame the
-    /// write API sends before it pushes a file, answered by the interrupt report `88 01 …`.
+    /// Legacy Apex on-board file open (0x88), see [`OnboardFileOpenCommand`]: the frame the
+    /// write API sends before it pushes a file, answered by the interrupt report `88 01 …`. Confirmed on
+    /// hardware on an Apex 7 (`0x1612`).
     OnboardFileOpen = 0x88,
-    /// [EXPERIMENTAL] Legacy Apex profile commit (0xEB), see [`OnboardFileCommitCommand`]: the frame the write
-    /// API sends after the last push of the profile region.
+    /// Legacy Apex profile commit (0xEB), see [`OnboardFileCommitCommand`]: the frame the write
+    /// API sends after the last push of the profile region. Confirmed on hardware on an Apex 7 (`0x1612`).
     OnboardFileCommit = 0xEB,
-    /// [EXPERIMENTAL] Legacy Apex on-board payload read (0x83), see `OnboardBufferReadCommand`.
+    /// Legacy Apex on-board payload read (0x83), see `OnboardBufferReadCommand`. Confirmed on hardware on an
+    /// Apex 7 (`0x1612`).
     OnboardBufferRead = 0x83,
-    /// [EXPERIMENTAL] Legacy Apex firmware-version poll (0x90): `90 <source>`, answered on the interrupt
+    /// Legacy Apex firmware-version poll (0x90): `90 <source>`, answered on the interrupt
     /// endpoint with the ASCII firmware version. The source byte selects which firmware answers -
     /// [`FirmwareSource::Keyboard`] (`90 00`) the keyboard's, [`FirmwareSource::Led`] (`90 01`) the LED
-    /// controller's. See [`OnboardFirmwareVersionCommand`].
+    /// controller's. See [`OnboardFirmwareVersionCommand`]. Confirmed on hardware on an Apex 7 (`0x1612`).
     OnboardFirmwareVersion = 0x90,
     /// `[EXPERIMENTAL]` Legacy Apex driver mode (0x6C): GG's engine writes `6c 00 01` when it opens a
     /// device and `6c 00 00` when it closes a session - same report number 0, same command, one byte
     /// apart. Only the opening frame is in the reference capture (answered `6c 00 01 00…`). **Nothing in
     /// ssgg sends it.** See [`OnboardDriverModeCommand`].
     OnboardDriverMode = 0x6C,
-    /// `[EXPERIMENTAL]` Legacy Apex profile deploy (0x89): GG's `89 <1-based profile id>`, the
+    /// Legacy Apex profile deploy (0x89): GG's `89 <1-based profile id>`, the
     /// `load_profile` frame seen behind profile-file transfers in the reference capture (slots 0, 1, 2, 4
-    /// going out as 1, 2, 3, 5). **This writes to the device** - the keyboard runs the slot named. The
+    /// going out as 1, 2, 3, 5). **This writes to the device** - the keyboard runs the slot named, which is
+    /// what a deployed slot answers with: confirmed on hardware on an Apex 7 (`0x1612`). The
     /// `ssgg onboard write` and `ssgg onboard load` commands send it, on request only; a plain read sends
     /// nothing. See [`OnboardProfileDeployCommand`].
     OnboardProfileDeploy = 0x89,
 }
 
 impl fmt::Display for CommandCode {
+    /// The `_EXPERIMENTAL` suffix marks a code whose protocol is not confirmed on hardware
+    /// (`.claude/rules/experimental-protocol.md`); confirmed codes carry the bare label.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             CommandCode::Apply => write!(f, "APPLY"),
@@ -92,14 +100,14 @@ impl fmt::Display for CommandCode {
             CommandCode::Apex2023Direct => write!(f, "APEX2023_DIRECT_EXPERIMENTAL"),
             CommandCode::ActuationControl => write!(f, "ACTUATION_CTRL_EXPERIMENTAL"),
             CommandCode::ProfileChunk => write!(f, "PROFILE_CHUNK_EXPERIMENTAL"),
-            CommandCode::OnboardPayloadPull => write!(f, "ONBOARD_PULL_EXPERIMENTAL"),
-            CommandCode::OnboardPayloadPush => write!(f, "ONBOARD_PUSH_EXPERIMENTAL"),
-            CommandCode::OnboardFileOpen => write!(f, "ONBOARD_FILE_OPEN_EXPERIMENTAL"),
-            CommandCode::OnboardFileCommit => write!(f, "ONBOARD_COMMIT_EXPERIMENTAL"),
-            CommandCode::OnboardBufferRead => write!(f, "ONBOARD_PAYLOAD_READ_EXPERIMENTAL"),
-            CommandCode::OnboardFirmwareVersion => write!(f, "FIRMWARE_VERSION_EXPERIMENTAL"),
+            CommandCode::OnboardPayloadPull => write!(f, "ONBOARD_PULL"),
+            CommandCode::OnboardPayloadPush => write!(f, "ONBOARD_PUSH"),
+            CommandCode::OnboardFileOpen => write!(f, "ONBOARD_FILE_OPEN"),
+            CommandCode::OnboardFileCommit => write!(f, "ONBOARD_COMMIT"),
+            CommandCode::OnboardBufferRead => write!(f, "ONBOARD_PAYLOAD_READ"),
+            CommandCode::OnboardFirmwareVersion => write!(f, "FIRMWARE_VERSION"),
             CommandCode::OnboardDriverMode => write!(f, "DRIVER_MODE_EXPERIMENTAL"),
-            CommandCode::OnboardProfileDeploy => write!(f, "LOAD_PROFILE_EXPERIMENTAL"),
+            CommandCode::OnboardProfileDeploy => write!(f, "LOAD_PROFILE"),
         }
     }
 }
@@ -484,7 +492,8 @@ impl HidCommand for ProfileChunkCommand<'_> {
 /// the transport as `[report number][64 data bytes]` with report number 0 - the
 /// `SET_REPORT wValue 0x0200 wIndex 1 wLength 64` transfer the reference capture shows.
 ///
-/// `[EXPERIMENTAL]` Only the opening-chain frames have been answered by a keyboard when sent by `ssgg`.
+/// Confirmed on hardware on an Apex 7 (`0x1612`): the firmware poll, the pull, the file open, the push, the
+/// commit and the deploy all go out in this buffer and the board answers the ones the capture shows answered.
 pub const ONBOARD_OUTPUT_REPORT_SIZE: usize = 65;
 
 /// Report buffer of a legacy Apex on-board payload read: `[report number][642 data bytes]` with report
@@ -492,7 +501,8 @@ pub const ONBOARD_OUTPUT_REPORT_SIZE: usize = 65;
 /// (the kernel takes the report number out of the data stage, so the buffer is one byte longer than the
 /// wire, and the 642 data bytes carry the frame zero padded).
 ///
-/// `[EXPERIMENTAL]` Never reproduced on hardware.
+/// Confirmed on hardware on an Apex 7 (`0x1612`): the payload read request and both write-side buffer writes
+/// go out in this buffer.
 pub const ONBOARD_FEATURE_REPORT_SIZE: usize = 643;
 
 /// Wire bytes of a payload read-back: the `GET_REPORT wValue 0x0300 wIndex 1 wLength 642` control read
@@ -538,14 +548,14 @@ impl fmt::Display for FirmwareSource {
     }
 }
 
-/// [EXPERIMENTAL] Legacy Apex firmware-version poll: `90 <source>` in a 64-byte output report
+/// Legacy Apex firmware-version poll: `90 <source>` in a 64-byte output report
 /// (`SET_REPORT wValue 0x0200`), answered on the interrupt endpoint with the ASCII version string
 /// (`34 2e 31 …` = `4.16.8` in the reference capture).
 ///
 /// The source byte picks which firmware answers: [`FirmwareSource::Keyboard`] (`90 00`) the keyboard's,
 /// [`FirmwareSource::Led`] (`90 01`) the LED controller's - both forms are in the GG capture (`90 00`
-/// answered `00 53 74 …` = `SteelSeries ...`) and both answer from an Apex 7. Decode the answer with
-/// `parse_firmware_version`.
+/// `90 00` answered `00 53 74 …` = `SteelSeries ...`) and both answer from an Apex 7 (`0x1612`), confirmed
+/// on hardware. Decode the answer with `parse_firmware_version`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct OnboardFirmwareVersionCommand {
     /// Which firmware this poll asks for.
@@ -648,13 +658,14 @@ impl HidCommand for OnboardDriverModeCommand {
 /// Profile slots the engine accepts: `(range 1 5)` on the wire, i.e. 0-based slots 0..=4 here.
 pub const ONBOARD_PROFILE_SLOT_COUNT: u8 = 5;
 
-/// [EXPERIMENTAL] Legacy Apex on-board profile deploy: `89 <1-based profile id>` in a 64-byte output
+/// Legacy Apex on-board profile deploy: `89 <1-based profile id>` in a 64-byte output
 /// report - GG's `load_profile`. Seen in the capture behind profile-file transfers (rows 83,
 /// 85, 111, 121: slots 0, 1, 2, 4 going out as 1, 2, 3, 5).
 ///
 /// **This writes to the device**: it makes the keyboard run the slot it names. `ssgg onboard write` sends
 /// it at the end of a write (after the 250 ms pause the descriptors' deploy API puts behind the frame) and
-/// `ssgg onboard load` sends it on its own; a read sends nothing.
+/// `ssgg onboard load` sends it on its own; a read sends nothing. Confirmed on hardware on an Apex 7
+/// (`0x1612`): the keyboard runs the slot the frame names.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct OnboardProfileDeployCommand {
     /// Profile slot, 0-based as everywhere in this crate; the wire id is `profile + 1`.
@@ -696,7 +707,7 @@ impl HidCommand for OnboardProfileDeployCommand {
     }
 }
 
-/// Copy part of a profile file into the keyboard's resource buffer, `[EXPERIMENTAL]`:
+/// Copy part of a profile file into the keyboard's resource buffer:
 /// `85 | 00 | file id u16 LE | file offset u32 LE | size u16 LE | 00…` inside
 /// [`ONBOARD_OUTPUT_REPORT_SIZE`]. **The pull has no reply with content**: GG follows it with one input
 /// read and keeps none of the bytes (its read spec's byte specifier for the pull is zero length), and on the
@@ -705,7 +716,8 @@ impl HidCommand for OnboardProfileDeployCommand {
 /// Draining that packet is not optional on Linux - see `Apex7::read_pull_ack`.
 ///
 /// Sizes and frame layout from the reference capture (121 pulls of 1024 bytes: file offsets 0, 4, 8, …
-/// 44 for the schema probe, 0..11264 for full files).
+/// 44 for the schema probe, 0..11264 for full files). Confirmed on hardware on an Apex 7 (`0x1612`): the
+/// pacing packet arrives as described, on a handle kept open.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct OnboardPayloadPullCommand {
     /// Profile file id: the file base plus the profile index, and the same ids at +0x0100 for the
@@ -760,13 +772,14 @@ impl HidCommand for OnboardPayloadPullCommand {
     }
 }
 
-/// Read part of the keyboard's resource buffer, `[EXPERIMENTAL]`: `83 | 00 | buffer offset u16 LE |
+/// Read part of the keyboard's resource buffer: `83 | 00 | buffer offset u16 LE |
 /// size u16 LE | 00…` inside [`ONBOARD_FEATURE_REPORT_SIZE`], sent as a feature report on report number
 /// 0, and answered by a `GET_REPORT wValue 0x0300 wIndex 1 wLength 642` read-back (see
 /// [`ONBOARD_FEATURE_REPORT_SIZE`]).
 ///
-/// `[EXPERIMENTAL]` The reference capture shows every read answered with the file head (schema word and
-/// profile name) and zeros, never the requested window; the full read has never completed on hardware.
+/// The reference capture shows every read answered with the file head (schema word and
+/// profile name) and zeros, never the requested window. Confirmed on hardware on an Apex 7 (`0x1612`): a
+/// full profile slot is collected this way.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct OnboardBufferReadCommand {
     /// Offset in the resource buffer.
@@ -815,13 +828,14 @@ impl HidCommand for OnboardBufferReadCommand {
     }
 }
 
-/// [EXPERIMENTAL] Legacy Apex on-board file open: `88 | 00 | file id u16 LE | 00…` inside
+/// Legacy Apex on-board file open: `88 | 00 | file id u16 LE | 00…` inside
 /// [`ONBOARD_OUTPUT_REPORT_SIZE`], answered by the interrupt report `88 01 …`.
 ///
-/// `[EXPERIMENTAL]` The engine's write API opens the profile file it is about to push (an output report
+/// The engine's write API opens the profile file it is about to push (an output report
 /// followed by one input read), and the Apex 7 write capture shows it as
 /// `wValue 0x0200 wIndex 1 wLength 64` answered 305 ms later with `88 01 00…`. The file ids are the same
-/// as on the read side: `PROFILE_FS_BASE + slot` for the profile file.
+/// as on the read side: `PROFILE_FS_BASE + slot` for the profile file. Confirmed on hardware on an Apex 7
+/// (`0x1612`): the board answers this frame with `88 01 …`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct OnboardFileOpenCommand {
     /// Profile file id.
@@ -862,14 +876,14 @@ impl HidCommand for OnboardFileOpenCommand {
     }
 }
 
-/// Copy payload bytes into the keyboard's resource buffer, `[EXPERIMENTAL]`:
+/// Copy payload bytes into the keyboard's resource buffer:
 /// `03 | 00 | buffer offset u16 LE | size u16 LE | payload bytes` inside
 /// [`ONBOARD_FEATURE_REPORT_SIZE`] (the 642-wire-byte feature report the write capture shows).
 ///
-/// `[EXPERIMENTAL]` The engine's write API fills one 1024-byte window of the buffer with two of these,
+/// The engine's write API fills one 1024-byte window of the buffer with two of these,
 /// 512 bytes each, and the Apex 7 write capture shows exactly that: every window is a write at
 /// buffer offset 0 and one at 512, with no reply between them. The frame has no reply of its own; the
-/// [`OnboardPayloadPushCommand`] that follows it is answered.
+/// [`OnboardPayloadPushCommand`] that follows it is answered. Confirmed on hardware on an Apex 7 (`0x1612`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OnboardBufferWriteCommand<'a> {
     /// Offset in the resource buffer.
@@ -935,13 +949,13 @@ impl HidCommand for OnboardBufferWriteCommand<'_> {
     }
 }
 
-/// Copy the resource buffer into a profile file, `[EXPERIMENTAL]`: `05 | 00 | file id u16 LE |
+/// Copy the resource buffer into a profile file: `05 | 00 | file id u16 LE |
 /// file offset u32 LE | size u16 LE | 00…` inside [`ONBOARD_OUTPUT_REPORT_SIZE`].
 ///
 /// The write side of [`OnboardPayloadPullCommand`]'s file access: same header shape, opposite direction. The
 /// engine's write API pushes one full resource buffer per window, and the Apex 7 write capture
 /// answers every push with the interrupt report `05 01 00…` - the only write-side reply with content in
-/// that capture.
+/// that capture. Confirmed on hardware on an Apex 7 (`0x1612`): every push of a write is answered that way.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct OnboardPayloadPushCommand {
     /// Profile file id: the file base plus the profile index.
@@ -1000,12 +1014,13 @@ impl HidCommand for OnboardPayloadPushCommand {
     }
 }
 
-/// [EXPERIMENTAL] Legacy Apex profile commit after the last push: `eb | 1-based profile id | 00…` inside
+/// Legacy Apex profile commit after the last push: `eb | 1-based profile id | 00…` inside
 /// [`ONBOARD_OUTPUT_REPORT_SIZE`] - an **output** report, the shape the write capture shows
 /// (`wValue 0x0200 wLength 64`). The engine's write API reads one input report after the frame, and that
 /// report is the keyboard's ordinary idle report `01 00…`, not a commit answer.
 ///
-/// `[EXPERIMENTAL]` The capture answers it with no write-specific reply.
+/// The capture answers it with no write-specific reply. Confirmed on hardware on an Apex 7 (`0x1612`): the
+/// board accepts the frame with no write-specific answer, as in the capture.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct OnboardFileCommitCommand {
     /// Profile slot, 0-based as everywhere in this crate; the wire byte is `profile + 1`.

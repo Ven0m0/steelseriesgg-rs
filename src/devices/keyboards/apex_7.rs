@@ -1,5 +1,5 @@
 //! The Apex 7 keyboard device: standard lighting control through [`GenericKeyboard`], plus the
-//! `[EXPERIMENTAL]` on-board profile read and write of its legacy "macho" protocol.
+//! on-board profile read, write and deploy of its legacy "macho" protocol.
 //!
 //! Frame construction, reply parsing, payload geometry and decoding live in
 //! [`crate::devices::keyboards::apex_7_profile`]; every wire fact the transfers depend on is stated
@@ -12,7 +12,9 @@
 //! that node is open, so the interrupt reports the transfers consume (the `0x90` answer, the packet after
 //! each pull) only arrive on a handle that stays open.
 //!
-//! `[EXPERIMENTAL]`: a full profile slot has been read from an Apex 7 under Linux; the decode is unproven.
+//! Read, write and deploy of a profile slot are confirmed on hardware on an Apex 7 (`0x1612`) under Linux
+//! (2026-10-20). Decode and encode are verified against clean and modified profiles; the field meanings
+//! inside the OLED and macro blocks stay reverse-engineered.
 
 use std::ops::{Deref, DerefMut};
 use std::time::{Duration, Instant};
@@ -41,7 +43,7 @@ use crate::rgb::{Color, PerKeyEffect};
 
 /// Report number to ask for when reading a payload read back: **0** - `GET_REPORT wValue 0x0300 wIndex 1`
 /// in the reference capture. The kernel writes the device's own report-ID byte into byte 0, so the reply's
-/// leading `03` arrives there whatever we ask for. `[EXPERIMENTAL]`
+/// leading `03` arrives there whatever we ask for. Confirmed on hardware on an Apex 7 (`0x1612`).
 const READ_REPLY_ID: u8 = 0x00;
 /// Buffer size to ask the transport for when reading a payload read back: [`READ_REPORT_LEN`] (642), the
 /// `wLength` the capture shows, forwarded verbatim - a 643-byte ask never completes. The report-ID byte
@@ -79,9 +81,9 @@ const INPUT_REPORT_MAX_LEN: usize = 1024;
 const WRITE_OPEN_ACK_ATTEMPTS: u32 = 40;
 /// Input-report polls allowed while waiting for a push answer (0x05): 5 ms after the frame in the capture.
 const WRITE_PUSH_ACK_ATTEMPTS: u32 = 20;
-/// Status byte every write-side answer of the capture carries. `[EXPERIMENTAL]`: what it means
-/// is observed, not proven; a write stops on any other value, because the frames after a refused one build
-/// on it.
+/// Status byte every write-side answer carries. Confirmed on hardware on an Apex 7 (`0x1612`): every
+/// answer a write gets carries it. What it means beyond "accepted" is observed, not proven; a write stops
+/// on any other value, because the frames after a refused one build on it.
 const WRITE_ACK_STATUS_OK: u8 = 0x01;
 
 /// A payload read reply arrives as `[report ID][641 bytes]`, and a header-echoing reply spends
@@ -94,9 +96,9 @@ const _: () = assert!(MAX_READ_LEN + READ_REPLY_FRAMING_LEN < READ_REPLY_BUFFER_
 // [`Apex7::write_output_command`]), `send_feature` for the feature-report read request, and
 // `read_profile_feature_packet` / `read_profile_input_packet` for the two reply shapes.
 //
-// `[EXPERIMENTAL]`: the firmware poll, the pull, the pacing read and the payload read-back all complete on
-// an Apex 7. A profile slot is collected without GG's opening chain and closing sequence, so this crate
-// sends neither.
+// Confirmed on hardware on an Apex 7 (`0x1612`): the firmware poll, the pull, the pacing read, the payload
+// read-back, the write-side frames and the deploy all complete. A profile slot is collected without GG's
+// opening chain and closing sequence, so this crate sends neither.
 
 /// Apex 7 keyboard device, with the on-board profile read on its own handle.
 ///
@@ -194,9 +196,8 @@ impl Apex7 {
     /// **This changes the keyboard**: it rewrites the profile file of the slot and then makes the keyboard
     /// run that slot. Lighting, audio and the other slots are untouched, and the write sends nothing else.
     ///
-    /// `[EXPERIMENTAL]`: the frames are the Apex 7 write capture's sequence, byte for byte
-    /// ([`write_plan`](crate::devices::keyboards::apex_7_profile::write_plan)). It has never been sent to
-    /// a keyboard by this crate.
+    /// Confirmed on hardware on an Apex 7 (`0x1612`): the frames are the write capture's sequence, byte for
+    /// byte ([`write_plan`](crate::devices::keyboards::apex_7_profile::write_plan)).
     ///
     /// # Errors
     ///
@@ -285,8 +286,9 @@ impl Apex7 {
 
     /// Makes the keyboard run one on-board profile slot: GG's profile deploy frame (0x89).
     /// **This changes what the keyboard is running right now.** The capture shows GG sending the frame with
-    /// no answer of its own, so this sends the frame and reads nothing back. It runs as part of
-    /// [`Self::write_profile`] and as `ssgg onboard load`.
+    /// no answer of its own, so this sends the frame and reads nothing back; the frame is confirmed on
+    /// hardware - a deployed slot is the slot the keyboard runs. It runs as part of [`Self::write_profile`]
+    /// and as `ssgg onboard load`.
     ///
     /// # Errors
     ///
@@ -312,8 +314,9 @@ impl Apex7 {
     /// Waits the answer a write-side frame gets: the capture answers the file open with `88 01 …` (305 ms
     /// after the frame) and every push with `05 01 …` (5 ms after it), so this is
     /// [`Apex7::read_protocol_report`] filtered by report number.
-    /// `[EXPERIMENTAL]`: the status byte is `01` in every answer of that capture. Any other value, and any
-    /// frame left unanswered, stops the write - the frames after it build on the one that was refused.
+    /// Confirmed on hardware on an Apex 7 (`0x1612`): the status byte is `01` in every answer a write gets,
+    /// and any other value, and any frame left unanswered, stops the write - the frames after it build on
+    /// the one that was refused.
     fn await_write_ack(&self, expected_id: u8, attempts: u32, label: &str) -> Result<usize> {
         let path = self.collection_label();
         let answer = self
@@ -342,7 +345,8 @@ impl Apex7 {
     ///
     /// The read decodes [`SCHEMA_B`] only, so any other answer stops the read here: nothing has been
     /// written yet, and a schema this decoder cannot lay out would surface later as a profile whose
-    /// checksum never matches. `[EXPERIMENTAL]`: the schema word has been read on hardware.
+    /// checksum never matches. Confirmed on hardware on an Apex 7 (`0x1612`): the schema word answers
+    /// [`SCHEMA_B`].
     fn probe_schema(&self, fs_id: u16) -> Result<u16> {
         self.pull_window(fs_id, 0, PROBE_PULL_LEN)?;
         let reply = self.read_window("schema probe", 0, PAYLOAD_READ_LEN as u16)?;
@@ -412,7 +416,7 @@ impl Apex7 {
 
     /// Polls GG's firmware version ([`OnboardFirmwareVersionCommand`]) and decodes its answer. The source
     /// byte selects it: [`FirmwareSource::Keyboard`] (`90 00`) is the firmware running the keyboard,
-    /// [`FirmwareSource::Led`] (`90 01`) the LED controller's. Both answer on hardware. `[EXPERIMENTAL]`.
+    /// [`FirmwareSource::Led`] (`90 01`) the LED controller's. Both answer on hardware (Apex 7 `0x1612`).
     ///
     /// The read calls this with [`FirmwareSource::Keyboard`] for the version line of a
     /// [`ProfileImage`](crate::devices::keyboards::apex_7_profile::ProfileImage); a keyboard that accepts

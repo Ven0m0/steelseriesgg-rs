@@ -828,9 +828,6 @@ async fn cmd_onboard(mut manager: Option<&mut DeviceManager>, action: OnboardAct
             // GG names its configs 1-5; the family codec maps that number to the slot it stores.
             let slot = codec.slot_for_config(args.profile)?;
             let label = onboard_device_label(keyboard.as_ref());
-            for line in codec.banner_lines() {
-                println!("{line}");
-            }
             println!("reading on the {label}");
             println!();
 

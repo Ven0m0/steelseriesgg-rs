@@ -1,6 +1,6 @@
-//! On-board profile protocol interface. `[EXPERIMENTAL]`: every protocol fact behind it is
-//! reverse-engineered from official GG captures and read from keyboards. The read path runs on hardware;
-//! the write path builds and prints the frames a write needs and sends them only when asked to.
+//! On-board profile protocol interface. The protocol facts behind it are reverse-engineered from official GG
+//! captures; on the Apex 7 (`0x1612`) the read, the write and the deploy are confirmed on hardware, and
+//! decode and encode are verified against clean and modified profiles. Writes go out only when asked to.
 //!
 //! Two interfaces, one per side of the work:
 //!
@@ -12,7 +12,7 @@
 //! - [`OnboardProfileCodec`] is that family's codec: the file-side work - decode, encode, report JSON,
 //!   dump file names, the text a read and a write plan print - which needs no device, so `ssgg onboard
 //!   decode`, `ssgg onboard encode` and `ssgg onboard write --dry-run` run it on files with no keyboard
-//!   connected.
+//!   connected. The bytes it encodes are what `onboard write` sends.
 //!
 //! One keyboard implements them today: `apex_7_profile` (Apex 7, `0x1612`), through
 //! [`Apex7Onboard`](crate::devices::keyboards::apex_7_profile::Apex7Onboard), which
@@ -76,9 +76,8 @@ pub trait OnboardProfileCodec: Send + Sync {
     /// Propagates a serde failure.
     fn profile_json(&self, profile: &OnboardProfile) -> Result<String>;
 
-    /// Frames to send, in wire order, to write one slot's payload, `[EXPERIMENTAL]`: a family that knows a
-    /// write sequence returns the engine's frames (see [`write_plan`]); the default says the family has no
-    /// write sequence known.
+    /// Frames to send, in wire order, to write one slot's payload: a family that knows a
+    /// write sequence returns the engine's frames (see [`write_plan`]); the default says the family has no write sequence known.
     ///
     /// # Errors
     ///
@@ -140,9 +139,6 @@ pub trait OnboardProfileCodec: Send + Sync {
 
     /// The lines describing one decoded profile.
     fn profile_lines(&self, profile: &OnboardProfile) -> Vec<String>;
-
-    /// The `[EXPERIMENTAL]` notes this family prints before a device read.
-    fn banner_lines(&self) -> Vec<String>;
 
     /// The result of comparing encoded bytes with a profile file, as `ssgg onboard encode --check` prints
     /// it. A read image is longer than the payload it carries, so what is compared is the payload and the

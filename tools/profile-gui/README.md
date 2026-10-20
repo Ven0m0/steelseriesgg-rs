@@ -11,8 +11,9 @@ record (`read --report FILE` - chunk headers, framing stats, image hash) is capt
 profile, and this page does not open it.
 
 It is a **file editor only**. It never opens a device node and writes nothing to
-a keyboard. The wire protocol behind these bytes is `[EXPERIMENTAL]`
-(one device, one capture).
+a keyboard - the bytes it saves are what `ssgg onboard write` sends. The protocol behind them is
+reverse-engineered from GG captures of one Apex 7 (`0x1612`): its read, write and deploy are confirmed on
+that board, and decode and encode match GG for clean and modified profiles.
 
 ## Run
 
@@ -175,8 +176,8 @@ not with a wheel mapping.
 
 Picking another binding, Undo and factory reset change binding bytes only; `meta_toggle_hid` is a field
 of its own that Undo and factory reset never move, and a byte change is listed on its own in the
-file-info diff. Byte writes are labelled `[EXPERIMENTAL]`: only the factory shape is measured in reads,
-and no toggle write has been sent to a keyboard.
+file-info diff. The field semantics behind these bytes stay reverse-engineered: only the factory shape is
+measured in reads.
 
 The **Meta cap** (`0x65`) has no slot under its own usage - the crate's `hid_to_offset(0x65)` is `None`
 and the legacy table has `-1` there - and GG carries it on slot 93, the slot whose table code is GG's
@@ -421,9 +422,10 @@ A `0x71` index past the record list is **not** a bug in the read: the record is 
 binding is left behind, and its index survives - the panel calls it `deleted macro: the record is
 gone and the binding is left behind`.
 
-The decode is `[EXPERIMENTAL]`: one read has ever carried macros, and the only ground truth is
+The macro block stays reverse-engineered: one read has ever carried macros, and the only ground truth is
 the macro GG shows for that keyboard (META+Insert, repeat every 5000 ms, pressing the `4` key).
-`flags` and the mode values other than 1 (once) and 4 (repeat every interval) are open.
+`flags` and the mode values other than 1 (once) and 4 (repeat every interval) are open. The decode around it
+is verified against clean and modified profiles.
 
 ## Model names and feature sets (imported from Rust)
 

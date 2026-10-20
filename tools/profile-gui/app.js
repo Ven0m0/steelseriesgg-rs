@@ -14,7 +14,9 @@
 // `button_mappings` is the base layer, `button_meta_mappings` the META layer; Rapid Tap pairs and the
 // lock / META / Win lighting bytes carry raw HID codes.
 //
-// The protocol behind these bytes is [EXPERIMENTAL] (one device, one capture).
+// The protocol behind these bytes is reverse-engineered from GG captures of one Apex 7 (`0x1612`); its
+// read, write and deploy are confirmed on that board, and decode and encode match GG for clean and modified
+// profiles. This page writes no keyboard.
 // Every label is derived from data in this repo, cited where used.
 
 // Loaded as a plain script (no ES modules): a page opened from the filesystem
@@ -193,7 +195,8 @@ const META_CAP_LABELS = {
 // reads says it is the key that switches META mode. That key is named by the profile byte at
 // `meta_toggle_hid` and by nothing else: some_rebounds.json names 0x10, the M key, whose base entry stays
 // self-bound (51 10 00 00 00) and whose META entry stays all zero; the factory byte is 0xF0, GG's code
-// for the Meta cap (META_KEY_GG_CODE). [EXPERIMENTAL] read-side only, never written to a keyboard.
+// for the Meta cap (META_KEY_GG_CODE). [EXPERIMENTAL] read-side evidence; an encode carrying it has been
+// written on an Apex 7 and read back.
 const META_TOGGLE_FUNCTION = 0x62;
 const META_LOCK_WIN_ACTION = 0x05;
 // The Meta cap is usage 0x65 - electrically the HID Application key, the keystroke that opens the
@@ -395,7 +398,8 @@ function toggleByteFor(hid) {
 // not set, and the wheel's two entries are never in it (no slot, no usage). The ninth file is
 // config_1-copy.json, edited on this page: its mask is the read's stale bytes and misses the binding
 // that edit added, which is why the mask is derived here and not typed.
-// [EXPERIMENTAL] measured in reads only; nothing of it has been sent to a keyboard.
+// [EXPERIMENTAL] measured bit-for-bit in the reads this page decodes; a write carrying the derived mask has
+// applied on an Apex 7 (2026-10-20).
 function computeMetaMask(doc) {
   const bits = new Array(256).fill(0);
   const byte = Number(doc.meta_toggle_hid ?? 0);
@@ -1676,7 +1680,7 @@ function renderHeader(file, changes) {
         const byteText = Number.isFinite(byte) && byte > 0 ? `${keyName(metaToggleByte(byte))} (meta_toggle_hid 0x${hex2(byte)})` : 'no key (meta_toggle_hid 0x00)';
         return `${byteText} | Lock Win bindings (62 05): ${toggle ? `${toggle.listName}[${toggle.offset}] = ${keyName(toggle.hid)}` : 'none in this file'}`;
       })(),
-    }), `meta_toggle_hid (the byte at META_TOGGLE_HID_OFFSET) is the binding: it names the key GG switches META mode with, and binding a key as Meta Toggle writes that byte and nothing else - some_rebounds.json carries 0x10, the M key, whose own entries are untouched. GG's code for the Meta cap is 0x${hex2(META_KEY_GG_CODE)}, which every stock read here carries; the cap is usage 0x${hex2(META_KEY_HID)}, which has no slot of its own and binds through slot ${META_KEY_SLOT} (GG's code 0xF0, ${keyName(META_KEY_GG_CODE)} in this page's usage table - the M key). The 0x${hex2(META_TOGGLE_FUNCTION)} with code 1 = 0x${hex2(META_LOCK_WIN_ACTION)} pair is the Lock Win action of the META layer (slot 13 = LWin in a stock read, slots 13 and 35 in the user profile): a binding byte, not this byte; this row edits nothing and the two are edited apart from each other in the binding window. [EXPERIMENTAL] no toggle binding has been written to a keyboard. The byte is edited in the key panel of the key you bind; the buttons below write it on the current file`),
+    }), `meta_toggle_hid (the byte at META_TOGGLE_HID_OFFSET) is the binding: it names the key GG switches META mode with, and binding a key as Meta Toggle writes that byte and nothing else - some_rebounds.json carries 0x10, the M key, whose own entries are untouched. GG's code for the Meta cap is 0x${hex2(META_KEY_GG_CODE)}, which every stock read here carries; the cap is usage 0x${hex2(META_KEY_HID)}, which has no slot of its own and binds through slot ${META_KEY_SLOT} (GG's code 0xF0, ${keyName(META_KEY_GG_CODE)} in this page's usage table - the M key). The 0x${hex2(META_TOGGLE_FUNCTION)} with code 1 = 0x${hex2(META_LOCK_WIN_ACTION)} pair is the Lock Win action of the META layer (slot 13 = LWin in a stock read, slots 13 and 35 in the user profile): a binding byte, not this byte; this row edits nothing and the two are edited apart from each other in the binding window. [EXPERIMENTAL] the binding byte's meaning is read-side evidence; writes of encoded profiles are hardware-tested on an Apex 7 (2026-10-20). The byte is edited in the key panel of the key you bind; the buttons below write it on the current file`),
     line('GUID', el('span', { class: 'mono', text: doc.guid }), doc.guid_padding ? `padding ${doc.guid_padding}` : 'schema b: no padding field in use'),
     line('Checksum', el('span', {
       class: 'mono',
@@ -1809,7 +1813,7 @@ function renderBindingPanel(file, target) {
     write(() => {
       doc.meta_toggle_hid = next;
     });
-    ui.status.textContent = `meta_toggle_hid 0x${hex2(previous)} -> 0x${hex2(next)}: ${on ? `${keyName(hid)} is now the key GG switches META mode with` : 'this file names no toggle key'} - the byte is the whole of the binding, this entry's bytes are untouched, and the board paints the named key as a meta key with META in its cap. [EXPERIMENTAL] no toggle write has been sent to a keyboard`;
+    ui.status.textContent = `meta_toggle_hid 0x${hex2(previous)} -> 0x${hex2(next)}: ${on ? `${keyName(hid)} is now the key GG switches META mode with` : 'this file names no toggle key'} - the byte is the whole of the binding, this entry's bytes are untouched, and the board paints the named key as a meta key with META in its cap. [EXPERIMENTAL] the byte's meaning is read-side evidence; writes of encoded profiles are hardware-tested on an Apex 7 (2026-10-20)`;
     render();
   };
 
@@ -1913,7 +1917,7 @@ function renderBindingPanel(file, target) {
     ));
     rows.push(el('p', {
       class: 'hint',
-      text: `function 0x62 (meta): the action is code 1, and it is named like the other actions - picking one writes code 1 and keeps the rest of the code bytes. A factory META layer binds four meta keys to META+F9..F12 (measured in a stock slot read: 01 00 00 00 on the F9 slot, then 02, 03 and 04, each with 01 in code 2). ${META_ACTION_NAMES[META_LOCK_WIN_ACTION]} (0x${hex2(META_LOCK_WIN_ACTION)}) is a meta action like those: it writes this entry's code 1 and touches nothing else - the META toggle is the profile byte below, and picking Lock Win no longer moves it (operator, 2026-10-19). GG's own reads carry 62 05 on the META layer of slot 13 = LWin${lockWinMarkers(doc).length ? ` (slots ${lockWinMarkers(doc).map((m) => String(m.offset)).join(', ')} in this file)` : ''}. [EXPERIMENTAL] measured only in reads; nothing here has been written to a keyboard`,
+      text: `function 0x62 (meta): the action is code 1, and it is named like the other actions - picking one writes code 1 and keeps the rest of the code bytes. A factory META layer binds four meta keys to META+F9..F12 (measured in a stock slot read: 01 00 00 00 on the F9 slot, then 02, 03 and 04, each with 01 in code 2). ${META_ACTION_NAMES[META_LOCK_WIN_ACTION]} (0x${hex2(META_LOCK_WIN_ACTION)}) is a meta action like those: it writes this entry's code 1 and touches nothing else - the META toggle is the profile byte below, and picking Lock Win no longer moves it (operator, 2026-10-19). GG's own reads carry 62 05 on the META layer of slot 13 = LWin${lockWinMarkers(doc).length ? ` (slots ${lockWinMarkers(doc).map((m) => String(m.offset)).join(', ')} in this file)` : ''}. [EXPERIMENTAL] measured in reads; writes of encoded profiles are hardware-tested on an Apex 7 (2026-10-20)`,
     }));
   } else {
     rows.push(selectRow(
@@ -1935,7 +1939,7 @@ function renderBindingPanel(file, target) {
     const toggleBox = el('input', { class: 'toggle-check', type: 'checkbox' });
     toggleBox.checked = namesThisKey;
     toggleBox.addEventListener('change', (event) => writeToggleByte(event.target.checked));
-    rows.push(line('Meta Toggle', toggleBox, `meta_toggle_hid = 0x${hex2(byte)} (${byte > 0 ? `names ${keyName(metaToggleByte(byte))}` : 'no key'}); checking it writes 0x${hex2(toggleByteFor(hid))} - this key's code${namesThisKey ? '' : `, which moves it off ${byte > 0 ? keyName(metaToggleByte(byte)) : 'no key'}`} - and unchecking writes 0x00. The byte is the whole of the binding: this entry's bytes are untouched, and some_rebounds.json shows exactly that shape (byte 0x10 names the M key, base entry self-bound 51 10 00 00 00, META entry all zero). [EXPERIMENTAL] no toggle byte has been written to a keyboard`));
+    rows.push(line('Meta Toggle', toggleBox, `meta_toggle_hid = 0x${hex2(byte)} (${byte > 0 ? `names ${keyName(metaToggleByte(byte))}` : 'no key'}); checking it writes 0x${hex2(toggleByteFor(hid))} - this key's code${namesThisKey ? '' : `, which moves it off ${byte > 0 ? keyName(metaToggleByte(byte)) : 'no key'}`} - and unchecking writes 0x00. The byte is the whole of the binding: this entry's bytes are untouched, and some_rebounds.json shows exactly that shape (byte 0x10 names the M key, base entry self-bound 51 10 00 00 00, META entry all zero). [EXPERIMENTAL] read-side evidence; writes of encoded profiles are hardware-tested on an Apex 7 (2026-10-20)`));
   }
 
   const original = file.original?.[listName]?.[index];

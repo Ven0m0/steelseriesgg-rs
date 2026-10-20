@@ -69,8 +69,9 @@ pub(crate) enum Commands {
         action: PollrateAction,
     },
 
-    /// Read a keyboard's on-board profile, decode a saved one, encode a decode report back to bytes
-    /// (experimental, reads only: nothing here writes to a keyboard)
+    /// Read a keyboard's on-board profile, decode a saved one, encode a decode report back to bytes,
+    /// write a profile and deploy a slot (reverse-engineered protocol, hardware-confirmed on the Apex 7;
+    /// decode and encode touch files only)
     Onboard {
         #[command(subcommand)]
         action: OnboardAction,
@@ -194,11 +195,11 @@ pub(crate) enum Commands {
     },
 }
 
-/// Read the on-board profile of a keyboard that supports this deature.
+/// Read the on-board profile of a keyboard that supports this feature.
 ///
-/// `decode` and `encode` work on files only and never touch a device. `read` talks to a keyboard: it is
-/// reverse-engineered protocol code that writes request frames to a raw device node, and it changes nothing
-/// on the keyboard. `write` and `load` change what the keyboard stores.
+/// `decode` and `encode` work on files only and never touch a device. `read` talks to a keyboard: the
+/// protocol is reverse-engineered, and the read changes nothing on the keyboard. `write` and `load` change
+/// what the keyboard stores. All of them are hardware-confirmed on an Apex 7 (`0x1612`).
 #[derive(Subcommand)]
 pub(crate) enum OnboardAction {
     /// Read one profile from a keyboard that answers the on-board profile protocol. Read-only: it writes
@@ -213,11 +214,12 @@ pub(crate) enum OnboardAction {
     Encode(OnboardEncodeArgs),
 
     /// Write a profile into a keyboard's on-board slot. **This changes the keyboard**: it rewrites the
-    /// slot's profile file and then makes the keyboard run that slot.
+    /// slot's profile file and then makes the keyboard run that slot. The frames are hardware-confirmed on
+    /// an Apex 7; `--yes` is what authorises sending them.
     Write(OnboardWriteArgs),
 
     /// Make a keyboard run one of its on-board profile slots: GG's profile deploy frame (0x89). **This
-    /// changes what the keyboard is running right now.**
+    /// changes what the keyboard is running right now.** Hardware-confirmed on an Apex 7.
     Load(OnboardLoadArgs),
 }
 

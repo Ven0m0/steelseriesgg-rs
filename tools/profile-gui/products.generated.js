@@ -5,7 +5,7 @@
 // `--check` (and `selftest.mjs`) fails when Rust moved and this file did not.
 globalThis.SsggProducts = {
   generatedFrom: ["src/devices/mod.rs","src/devices/discovery.rs","src/devices/keyboards/onboard.rs"],
-  sourceHash: "af60ef5aa754b71b",
+  sourceHash: "ac91ed3844bca055",
   productCount: 49,
   namedCount: 49,
   nameFallback: "Unknown SteelSeries Device",

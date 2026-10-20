@@ -129,9 +129,15 @@ GG names PID `0x1628` `apex_pro_tkl_2022` regardless of the retail year.
 
 ## Keyboard HID protocol
 
-Only one keyboard command has been replayed on hardware from this project: the `0x40` lighting frame on
-the wired Apex Pro TKL 2023 (`0x1628`), one solid colour, 2026-10-14 (details in the capture note). It
-is still `[EXPERIMENTAL]`. Every other code below is untested here.
+Two sets of commands have been replayed on hardware from this project:
+
+- the `0x40` lighting frame on the wired Apex Pro TKL 2023 (`0x1628`), one solid colour, 2026-10-14 (details
+  in the capture note); it is still `[EXPERIMENTAL]`;
+- the legacy Apex on-board profile frames on an Apex 7 (`0x1612`) under Linux, 2026-10-20 - `90` firmware
+  poll, `85` pull, `83` payload read, `88` file open, `03 00` resource-buffer write, `05` push, `EB` commit,
+  `89` profile deploy. These are **confirmed** on that model.
+
+Every other code below is untested here.
 
 ### Control endpoint
 
@@ -163,6 +169,15 @@ Keyboard output reports are 65 bytes: report ID `0x00`, command byte, data, zero
 | `0x3A` | (`APEX_GEN1_PACKET_ID_DIRECT`) | `[EXPERIMENTAL]` | Original Apex Pro `0x1610` direct frame: 643-byte feature report `00 3A N [usage R G B] xN` on interface 1, no init (OpenRGB `SteelSeriesApexController`, Gen 1). Untested here (issue #283). |
 | `0x4B` | `APEX_2023_PACKET_ID_INIT` | `[EXPERIMENTAL]` | Init feature report from OpenRGB, sent before direct frames on 2023/2024 models except `0x1628` (GG does not send it). |
 | `0x61` | `APEX_2023_PACKET_ID_DIRECT_WIRELESS` | `[EXPERIMENTAL]` | Direct frame ID for the wireless models. A code comment reports it working on Gen 3 wireless (`0x1644`/`0x1646`); no test record in this repo. |
+| `0x83` | `OnboardBufferRead` | confirmed (`0x1612`) | `83 \| 00 \| buffer offset u16 \| size u16` feature report, answered by the 642-byte `GET_REPORT` read-back. Reads a profile slot (`ssgg onboard read`). |
+| `0x85` | `OnboardPayloadPull` | confirmed (`0x1612`) | `85 \| 00 \| file id u16 \| file offset u32 \| size u16`: file into the resource buffer. Answered only by the keyboard's ordinary input report (flow control). |
+| `0x88` | `OnboardFileOpen` | confirmed (`0x1612`) | `88 \| 00 \| file id u16`: open the profile file a write is about to push, answered `88 01 …`. |
+| `0x03` (legacy header `03 00`) | `OnboardBufferWriteCommand` | confirmed (`0x1612`) | `03 \| 00 \| buffer offset u16 \| size u16 \| data` in the 642-wire-byte feature report: half of one 1024-byte write window. No reply of its own. |
+| `0x05` | `OnboardPayloadPush` | confirmed (`0x1612`) | `05 \| 00 \| file id u16 \| file offset u32 \| size u16`: buffer into the profile file, answered `05 01 …`. |
+| `0xEB` | `OnboardFileCommit` | confirmed (`0x1612`) | `eb \| 1-based profile id`: commit the slot after the last push; no write-specific answer. |
+| `0x89` | `OnboardProfileDeploy` | confirmed (`0x1612`) | `89 \| 1-based profile id`: GG's `load_profile`; the keyboard runs the slot named. Send it 250 ms after a commit - right after `eb` it can do nothing. |
+| `0x90` | `OnboardFirmwareVersion` | confirmed (`0x1612`) | `90 \| source` (`00` keyboard, `01` LED controller), answered with the ASCII firmware version on the interrupt endpoint. |
+| `0x6C` | `OnboardDriverMode` | `[EXPERIMENTAL]` | `6c 00 01` on GG's device open, `6c 00 00` on session close. Nothing in `ssgg` sends it. |
 
 No actuation read-back command is known. `src/bin/discover_actuation.rs` probed `0x00`-`0xFF` on
 2026-05-27 without a reply. GG may read the profile back at startup (open, `PLAN.md` P2).

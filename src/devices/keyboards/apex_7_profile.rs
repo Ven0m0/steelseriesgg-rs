@@ -1,4 +1,4 @@
-//! [EXPERIMENTAL] On-board profile read-back for the Apex 7, on its legacy "macho" protocol.
+//! On-board profile read, write and payload codec for the Apex 7, on its legacy "macho" protocol.
 //!
 //! The pure half of the read path: frame builders, reply parsing, payload assembly, struct decode,
 //! checksum reporting and JSON. It performs no I/O; the hardware loop is
@@ -21,8 +21,9 @@
 //! `0x0B`, i.e. schema [`SCHEMA_B`].
 //!
 //! A full profile slot read completes on hardware under Linux, and the read **changes nothing on the
-//! keyboard**: GG's opening chain and closing sequence are not sent. The payload struct offsets stay
-//! unverified until a read is compared with what GG shows for that slot.
+//! keyboard**: GG's opening chain and closing sequence are not sent. The write plan and the deploy frame have
+//! the same status on an Apex 7 (`0x1612`), and [`decode`] and [`encode_json`] are verified against clean and
+//! modified profiles. The field meanings inside the OLED and macro blocks stay reverse-engineered.
 //!
 //! # Wire format
 //!
@@ -158,7 +159,7 @@ pub const READ_REPLY_HEADER_LEN: usize = 5;
 pub const READ_REPLY_FRAMING_LEN: usize = 0;
 /// Settle in front of the profile **deploy** frame (`0x89`), in milliseconds.
 ///
-/// `[EXPERIMENTAL]`: measured on hardware - the deploy frame sent straight after the commit (`eb 01`) can
+/// Measured on hardware on an Apex 7 (`0x1612`) - the deploy frame sent straight after the commit (`eb 01`) can
 /// do nothing, and waiting **before** it is what makes the keyboard switch slots; how much the device needs
 /// is not measured. 250 ms is the engine's own number: its `load-profile-with-pause` sleeps 250 ms
 /// **behind** the deploy frame, and its commit path ends with an **input read** that blocks until the
@@ -223,7 +224,7 @@ pub const WRITE_PUSH_BYTES: usize = DEVICE_RESOURCE_BUFFER_LEN;
 pub const WRITE_WINDOW_COUNT: usize = PROFILE_REGION_BYTES / WRITE_PUSH_BYTES;
 
 /// One frame of the on-board profile write, in the order the engine sends them. The shape is the write
-/// API's and the byte pattern the Apex 7 write capture shows. `[EXPERIMENTAL]`.
+/// API's and the byte pattern the Apex 7 write capture shows. Confirmed on hardware on an Apex 7 (`0x1612`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum OnboardWriteFrame {
     /// `88 | 00 | file id u16 LE` in the 64-byte output report: open the profile file before pushing it.
@@ -333,7 +334,7 @@ impl OnboardWriteFrame {
 /// The frames `ssgg` sends for one on-board profile write, in wire order: built by [`write_plan`], printed
 /// by `ssgg onboard write --dry-run`, sent by a keyboard's write path.
 ///
-/// `[EXPERIMENTAL]` The geometry is capture-confirmed; the sequence has never been sent to a keyboard.
+/// The geometry is capture-confirmed and confirmed on hardware on an Apex 7 (`0x1612`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OnboardWritePlan {
     /// Profile slot, 0-based.
@@ -369,7 +370,10 @@ impl OnboardWritePlan {
 /// The deploy frame (0x89) is not part of the plan; the write path sends it right after the commit, and
 /// `ssgg onboard load` sends it on its own.
 ///
-/// `[EXPERIMENTAL]` Geometry capture-confirmed on Apex 7, never sent to a keyboard by `ssgg`.
+/// Geometry capture-confirmed on Apex 7, and sent on an Apex 7 by `ssgg` (2026-10-20).
+///
+/// A write pads the payload out to the whole region; a slot is verified from the device by reading it back
+/// with the read path and diffing the payload - an on-board write has no read-back frame of its own.
 ///
 /// # Errors
 ///
@@ -916,7 +920,8 @@ pub struct KeyMapping {
     /// `index / MACRO_INDEX_STRIDE` ([`MACRO_INDEX_STRIDE`] carries the measurement), so a binding of 7
     /// and a binding of 11 both bind the record at ordinal 1, and an index whose ordinal is past the
     /// record list is the deleted-macro state - GG deletes the macro and leaves the key bound.
-    /// `[EXPERIMENTAL]`, nothing here has been written back: the record list has no stride and no length word.
+    /// `[EXPERIMENTAL]`: the record list has no stride and no length word; a block the walker cannot walk
+    /// is refused by [`encode_json`] instead of written back.
     pub macro_index: Option<u8>,
 }
 
@@ -1026,8 +1031,8 @@ pub const MACRO_MODE_ONCE: u8 = 1;
 /// third code byte, so the index a key carries is `7` times the position of the record it binds, and
 /// `index / MACRO_INDEX_STRIDE` is the record. `[EXPERIMENTAL]`: every binding a read carried resolved by
 /// `index / 7` to a record whose content matched the bound key, and the largest binding seen (117 =
-/// 7 * 16 + 5) needs 17 records, the same order of size as the block holds. Nothing here has been written
-/// back to a keyboard.
+/// 7 * 16 + 5) needs 17 records, the same order of size as the block holds. The encode side writes these
+/// bytes back, and an encode verified against clean and modified profiles has been written on an Apex 7.
 pub const MACRO_INDEX_STRIDE: usize = 7;
 
 /// One action of a packed macro record. `[EXPERIMENTAL]`: the split below is what makes the 134
@@ -1324,8 +1329,9 @@ pub struct OnboardProfile {
 /// Schema B: … wheel META (1375) → OLED (1385) → Rapid Tap (2025) → macro (2076) → GUID (11676) →
 /// CRC (11692), with no padding word.
 ///
-/// `[EXPERIMENTAL]`: the field meanings inside each block are still reverse-engineered; the block
-/// offsets and strides are GG's own struct spec and match a hardware read.
+/// `[EXPERIMENTAL]`: the field meanings inside each block are still reverse-engineered. The block offsets
+/// and strides are GG's own struct spec, and the decode matches what GG shows for clean and modified
+/// profiles.
 /// Offset of the Rapid Tap enable byte (schema [`SCHEMA_B`]).
 pub const RAPID_TAP_ENABLE_OFFSET: usize = OLED_OFFSET + OLED_LEN;
 /// Offset of the Rapid Tap pair table (schema [`SCHEMA_B`]).
@@ -1451,8 +1457,8 @@ pub const META_KEY_SLOT: usize = 93;
 /// The slot GG carries the Meta cap on: the slot whose table code is [`META_KEY_GG_CODE`].
 /// `META_KEY_USAGE` itself has no slot ([`hid_to_offset`] returns `None` for it).
 ///
-/// The Meta cap / slot / code identity is read-side evidence from the Apex 7 capture, not
-/// a protocol fact confirmed on hardware (`[EXPERIMENTAL]`).
+/// The Meta cap / slot / code identity is read-side evidence from the Apex 7 capture: reverse-engineered,
+/// not a protocol fact proven on hardware.
 #[must_use]
 pub fn meta_key_offset() -> Option<usize> {
     OFFSET_TO_HID.iter().position(|&code| code == META_KEY_GG_CODE)
@@ -1938,8 +1944,9 @@ fn write_block(
 /// the report. Everything the report does not carry (the zero pad of the macro block, the padding
 /// behind the name) is written as the zero bytes the reference reads have there.
 ///
-/// `[EXPERIMENTAL]`: the layout this inverts is reverse-engineered and only read from keyboards,
-/// never written to one - no write path uses this yet, and nothing here has been sent to hardware.
+/// Verified against clean and modified profile files, and an encode of a decoded read has been written on
+/// an Apex 7 (`0x1612`) and read back. The layout this inverts is reverse-engineered: field meanings inside
+/// the OLED and macro blocks are not proven.
 ///
 /// # Errors
 ///
@@ -2146,8 +2153,9 @@ fn encode_macro_records(profile: &JsonProfile, macro_offset: usize, data: &mut [
 /// [`Apex7::onboard_codec`](crate::devices::keyboards::apex_7::Apex7). The report shape this codec carries is
 /// this layout as data; `onboard.rs` says how the next keyboard plugs in.
 ///
-/// `[EXPERIMENTAL]`: the layout is reverse-engineered from one GG capture of one `0x1612` and has only ever
-/// been read from keyboards. The text builders below are its words for a read and a decode.
+/// The layout is reverse-engineered from GG captures of one `0x1612`. It is read **and** written on that
+/// board, and its decode and encode are verified against clean and modified profiles. The text builders
+/// below are its words for a read and a decode.
 pub struct Apex7Onboard;
 
 impl OnboardProfileCodec for Apex7Onboard {
@@ -2247,10 +2255,6 @@ impl OnboardProfileCodec for Apex7Onboard {
         image_diff(a, b)
     }
 
-    fn banner_lines(&self) -> Vec<String> {
-        banner_lines()
-    }
-
     fn image_lines(&self, image: &ProfileImage, label: &str) -> Vec<String> {
         image_lines(image, label)
     }
@@ -2262,21 +2266,6 @@ impl OnboardProfileCodec for Apex7Onboard {
     fn check_lines(&self, encoded: &[u8], reference: &[u8], path: &str) -> Vec<String> {
         check_lines(encoded, reference, path)
     }
-}
-
-/// The `[EXPERIMENTAL]` notes printed before a device read: what the protocol is, what it has been
-/// verified against, and what to watch while it runs.
-fn banner_lines() -> Vec<String> {
-    vec![
-        format!("[EXPERIMENTAL] {} on-board profile read", Apex7Onboard.family_name()),
-        "  reverse-engineered from one GG USBPcap capture; it only reads - it sends no frames that".to_string(),
-        "  change anything on the keyboard.".to_string(),
-        "  the slot layout and checksum match GG's payload struct and a hardware read of the factory".to_string(),
-        "  profile (CRC verified); the field meanings inside the OLED and macro blocks are still".to_string(),
-        "  reverse-engineered - compare a read with GG.".to_string(),
-        "  watch the keyboard while it runs: if lighting flickers, Ctrl-C stops the read.".to_string(),
-        String::new(),
-    ]
 }
 
 /// One read image as the lines the CLI prints: the bytes it collected, the firmware poll answer, the
@@ -3757,7 +3746,7 @@ mod tests {
     /// wait, not a transfer), and the plan a `--dry-run` prints names it - a plan that prints 122 frames and
     /// sends a frame the keyboard needs a settle for must say so.
     ///
-    /// `[EXPERIMENTAL]`: hardware-measured settle - `89` straight after `eb 01` can do nothing, and waiting a
+    /// Hardware-measured settle - `89` straight after `eb 01` can do nothing, and waiting a
     /// little longer before it is what lands the switch. The engine sleeps 250 ms behind the deploy frame and
     /// its commit path ends with an input read (`base_apex_legacy.lisp`).
     #[test]

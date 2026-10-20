@@ -212,7 +212,7 @@ pub trait Keyboard: Device {
         ))
     }
 
-    // === On-board profiles (`[EXPERIMENTAL]`) ===
+    // === On-board profiles ===
 
     /// The on-board profile protocol this keyboard speaks, as the family codec that can read and write
     /// its bytes. `None` (the default) says this keyboard has no on-board profile protocol.
@@ -231,22 +231,16 @@ pub trait Keyboard: Device {
 
     /// Read one on-board profile slot (0-based; [`OnboardProfileCodec::slot_for_config`](crate::devices::keyboards::onboard::OnboardProfileCodec::slot_for_config)
     /// is what maps GG's config number to it). Keyboards that do not carry the protocol return an error.
-    ///
-    /// `[EXPERIMENTAL]`: the protocol is reverse-engineered from a capture of official GG. A full
-    /// slot read completes on an Apex 7 under Linux; the decode is not verified.
     async fn read_onboard_profile(&self, _profile: u8) -> Result<crate::devices::keyboards::onboard::ProfileImage> {
         Err(Error::DeviceCommunication(
             "on-board profile read is not supported by this keyboard".to_string(),
         ))
     }
 
-    /// Write one on-board profile slot (0-based) with `payload` bytes, `[EXPERIMENTAL]`: the frames come
+    /// Write one on-board profile slot (0-based) with `payload` bytes: the frames come
     /// from the keyboard's own codec ([`OnboardProfileCodec::write_plan`]), and the keyboard ends the write
     /// with the profile deploy frame (0x89). **This changes the keyboard's stored profile and makes it run
     /// the slot written.** Keyboards without a known write sequence return an error.
-    ///
-    /// `[EXPERIMENTAL]`: the frame geometry is capture-confirmed on Apex 7 (`0x1612`). The sequence has
-    /// never been sent to a keyboard by this crate.
     async fn write_onboard_profile(
         &self,
         _profile: u8,
