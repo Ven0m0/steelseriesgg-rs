@@ -388,10 +388,10 @@ impl OnboardWritePlan {
 /// payload, a payload longer than the region, a payload with no room for its checksum word, a region that
 /// is not a whole number of push windows, or a chunk pair that does not fill a window.
 pub fn write_plan(profile: u8, payload: &[u8]) -> Result<OnboardWritePlan> {
-    if profile >= MAX_PROFILE_INDEX {
+    if profile > MAX_PROFILE_INDEX {
         return Err(Error::InvalidConfig(format!(
             "profile slot {profile} out of range: the engine accepts 0..{}",
-            MAX_PROFILE_INDEX - 1
+            MAX_PROFILE_INDEX
         )));
     }
     if payload.is_empty() {
