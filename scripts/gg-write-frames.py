@@ -9,7 +9,7 @@ as the data stage, i.e. the bytes after the report number hidapi puts in byte 0 
 Output is a manifest the crate's tests compare their own write plan against: one line per frame
 (index, report kind, wire length, FNV-1a 64 of the frame's bytes, head bytes as hex). The digest is
 the same 64-bit FNV-1a the read side records block digests with
-(`steelseries_gg::devices::keyboards::apex_legacy_profile::fnv1a_64`), so the fixture needs no new
+(`steelseries_gg::devices::keyboards::apex_7_profile::fnv1a_64`), so the fixture needs no new
 dependency.
 
 Usage:  python3 -I scripts/gg-write-frames.py <capture.pcapng> <header-filter-value> > FRAME_MANIFEST

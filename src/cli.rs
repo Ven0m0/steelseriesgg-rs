@@ -194,30 +194,26 @@ pub(crate) enum Commands {
     },
 }
 
-/// [EXPERIMENTAL] Read the on-board profile of an Apex 7 (`0x1612`, the only board the path is enabled for).
+/// Read the on-board profile of a keyboard that supports this deature.
 ///
 /// `decode` and `encode` work on files only and never touch a device. `read` talks to a keyboard: it is
 /// reverse-engineered protocol code that writes request frames to a raw device node, and it changes nothing
-/// on the keyboard (measured 2026-10-19: the read works without GG's opening chain and closing sequence, so
-/// neither is sent). `write` and `load` change what the keyboard stores and are sent when asked; the flag
-/// that asks for the plan alone is `--dry-run`.
+/// on the keyboard. `write` and `load` change what the keyboard stores.
 #[derive(Subcommand)]
 pub(crate) enum OnboardAction {
     /// Read one profile from a keyboard that answers the on-board profile protocol. Read-only: it writes
-    /// no profile, and the CLI names no keyboard family: `--device <pid>` names the keyboard, and is needed
-    /// whenever more than one connected keyboard qualifies.
+    /// no profile.
     Read(OnboardReadArgs),
 
     /// Decode a profile image saved by an earlier read (no device, no hardware).
     Decode(OnboardDecodeArgs),
 
     /// Encode a profile JSON back into profile bytes (no device, no hardware). Nothing is sent to a
-    /// keyboard; `ssgg onboard write` is what puts these bytes on a keyboard.
+    /// keyboard;
     Encode(OnboardEncodeArgs),
 
     /// Write a profile into a keyboard's on-board slot. **This changes the keyboard**: it rewrites the
-    /// slot's profile file and then makes the keyboard run that slot. `--dry-run` prints the exact frames a
-    /// write would send, and needs no keyboard.
+    /// slot's profile file and then makes the keyboard run that slot.
     Write(OnboardWriteArgs),
 
     /// Make a keyboard run one of its on-board profile slots: GG's profile deploy frame (0x89). **This
@@ -227,10 +223,9 @@ pub(crate) enum OnboardAction {
 
 impl OnboardAction {
     /// Whether this subcommand runs on a keyboard, and so has to enumerate hardware **before** it is
-    /// dispatched. A subcommand that works on files (`decode`, `encode`) and a write asked for its plan
-    /// alone (`--dry-run`, which opens nothing) answer false, and the dispatch gives them no device
-    /// manager at all. A real write answers true: it sends frames, so it runs on a keyboard's own handle
-    /// like a read and a deploy do.
+    /// dispatched. File-only commands (`decode`, `encode`) and a write asked for its plan alone
+    /// (`--dry-run`) answer false and get no device manager at all. A real write answers true: it sends
+    /// frames, so it runs on a keyboard's own handle like a read and a deploy do.
     pub(crate) const fn needs_keyboard(&self) -> bool {
         match self {
             Self::Read(_) | Self::Load(_) => true,
@@ -241,25 +236,19 @@ impl OnboardAction {
 }
 
 /// One on-board profile read. The flags pick the keyboard, the config number and what to do with the
-/// result; nothing on the wire is a flag. The geometry is a protocol constant of the keyboard's protocol
-/// (`apex_7_profile`: 12 pulls of the device's 1024-byte resource buffer, each
-/// drained by two 512-byte payload reads), paced like GG and read with the reply framing the reference
-/// capture shows.
+/// result; nothing on the wire is a flag.
 #[derive(clap::Args)]
 pub(crate) struct OnboardReadArgs {
     /// GG's config number (`Config 1` is `1`). How many configs the keyboard has, and which slot is behind
-    /// the number, is what the keyboard's family answers - so an out-of-range number is refused there, in
-    /// the family's own wording, not by a limit the CLI hard-codes. The pull count, buffer size, window
-    /// size, pacing and reply framing are protocol constants, not options.
+    /// the number, is what the keyboard's family answers - an out-of-range number is refused there, in the
+    /// family's own wording.
     #[arg(short, long, default_value = "1", value_parser = clap::value_parser!(u8))]
     pub(crate) profile: u8,
 
-    /// Product ID of the keyboard to read, as hex: `1612`. Optional **only** when exactly one connected
+    /// Product ID of the keyboard to read, as hex. Optional **only** when exactly one connected
     /// keyboard answers the on-board profile protocol - a mouse or a headset is not a candidate, and several
-    /// collections of one keyboard count as one. More than one keyboard and the read asks for this flag; the
-    /// CLI has no default product ID and names no keyboard family. Every SteelSeries device answers the same
-    /// vendor ID, so the product ID identifies the device. The read runs on that keyboard's own handle - the
-    /// collection the device manager opened.
+    /// collections of one keyboard count as one. Every SteelSeries device answers the same vendor ID, so the
+    /// product ID identifies the device. The read runs on that keyboard's own handle.
     #[arg(short, long, value_name = "PID", value_parser = parse_product_id)]
     pub(crate) device: Option<u16>,
 
@@ -287,9 +276,7 @@ pub(crate) struct OnboardReadArgs {
     pub(crate) verify: bool,
 }
 
-/// clap parser for `onboard read --device`: the product ID in the hex form every reference writes it in
-/// (`1612`, `0x1612`). The vendor ID is not asked for: every SteelSeries device answers `0x1038`, so the
-/// product ID identifies the device.
+/// clap parser for `onboard read --device`: the product ID in the hex form every reference writes it in.
 fn parse_product_id(text: &str) -> std::result::Result<u16, String> {
     let text = text.trim();
     let digits = text.strip_prefix("0x").or(text.strip_prefix("0X")).unwrap_or(text);
@@ -356,9 +343,7 @@ pub(crate) struct OnboardEncodeArgs {
 /// here) or, with `--bin`, the payload bytes an earlier `ssgg onboard read --bin` wrote. The geometry is the
 /// keyboard family's (see
 /// [`OnboardProfileCodec::write_plan`](crate::devices::keyboards::onboard::OnboardProfileCodec::write_plan))
-/// and the frames are the write capture's. `[EXPERIMENTAL]`: the geometry is capture-confirmed on
-/// Apex 7 (`0x1612`); the sequence has never been sent to a keyboard by this crate. Without `--dry-run` the
-/// frames are sent.
+/// and the frames are the write capture's. Without `--dry-run` the frames are sent.
 #[derive(clap::Args)]
 pub(crate) struct OnboardWriteArgs {
     /// Profile JSON as written by `ssgg onboard decode` (or `onboard read --out`): encoded to payload bytes
@@ -372,12 +357,11 @@ pub(crate) struct OnboardWriteArgs {
     pub(crate) bin: Option<PathBuf>,
 
     /// GG's config number to write (`Config 1` is `1`). There is no default: a write names the slot it
-    /// rewrites. The keyboard's family maps the number to the slot it stores, and refuses a number it does
-    /// not have
+    /// rewrites. The keyboard's family maps the number to a slot and refuses a number it does not have.
     #[arg(short, long, value_parser = clap::value_parser!(u8))]
     pub(crate) profile: u8,
 
-    /// Product ID of the keyboard to write, as hex: `1612`. Optional only when exactly one connected keyboard
+    /// Product ID of the keyboard to write, as hex. Optional only when exactly one connected keyboard
     /// answers the on-board profile protocol. The write runs on that keyboard's own handle
     #[arg(short, long, value_name = "PID", value_parser = parse_product_id)]
     pub(crate) device: Option<u16>,
@@ -391,12 +375,11 @@ pub(crate) struct OnboardWriteArgs {
 /// One on-board profile deploy: make the keyboard run the slot GG's config number names.
 #[derive(clap::Args)]
 pub(crate) struct OnboardLoadArgs {
-    /// GG's config number to run (`Config 1` is `1`). There is no default: a deploy names the slot it runs,
-    /// same as a write names the slot it rewrites
+    /// GG's config number to run (`Config 1` is `1`). There is no default: a deploy names the slot it runs.
     #[arg(short, long, value_parser = clap::value_parser!(u8))]
     pub(crate) profile: u8,
 
-    /// Product ID of the keyboard, as hex: `1612`. Optional only when exactly one connected keyboard answers
+    /// Product ID of the keyboard, as hex. Optional only when exactly one connected keyboard answers
     /// the on-board profile protocol
     #[arg(short, long, value_name = "PID", value_parser = parse_product_id)]
     pub(crate) device: Option<u16>,

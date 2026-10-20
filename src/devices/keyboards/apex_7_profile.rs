@@ -1,83 +1,66 @@
 //! [EXPERIMENTAL] On-board profile read-back for the Apex 7, on its legacy "macho" protocol.
 //!
-//! This module is the pure half of the read path: frame builders, reply parsing, payload assembly,
-//! struct decode, checksum reporting and JSON. It performs no I/O. The hardware loop is
+//! The pure half of the read path: frame builders, reply parsing, payload assembly, struct decode,
+//! checksum reporting and JSON. It performs no I/O; the hardware loop is
 //! [`crate::devices::keyboards::apex_7`] (`Apex7`'s own read methods).
 //!
-//! It lives in this keyboard namespace next to its consumers, because everything
-//! in it belongs to this one protocol: the reply framing, resource-buffer and window sizes, file-id
-//! base, payload sizes, schema words and the payload struct offsets all come from the platform's
-//! own protocol module (`apexui.dll`, the same code GG runs on an Apex 7). Nothing here is generic - the
-//! Gen3 platform (`0x1628`) reads its on-board profile through a completely different transport (see
-//! [`crate::devices::keyboards::apex_pro_tkl_2023_profile`]) and shares none of it. The engine's own
-//! protocol file (`lisp/apex_7.lisp`) covers the whole legacy platform, `lisp/base_apex_legacy.lisp:6`,
-//! and its words apply to the `0x1614` / `0x1616` / `0x1618` siblings as protocol evidence; this crate
-//! enables the path on the board it measured: the scope is the device class, and discovery builds
-//! [`Apex7`](crate::devices::keyboards::apex_7::Apex7) for `0x1612` alone
+//! Everything here belongs to this one protocol: the reply framing, resource-buffer and window sizes, the
+//! file-id base, payload sizes, schema words and the payload struct offsets all come from the platform's
+//! own protocol module (`apexui.dll`, the code GG runs on an Apex 7). Nothing is generic - the Gen3
+//! platform (`0x1628`) reads its on-board profile through a different transport
+//! ([`crate::devices::keyboards::apex_pro_tkl_2023_profile`]) and shares none of it. The engine's protocol
+//! file (`lisp/apex_7.lisp`) covers the whole legacy platform, so its words are evidence for the
+//! `0x1614` / `0x1616` / `0x1618` siblings too; this crate enables the path on the board it measured -
+//! discovery builds [`Apex7`](crate::devices::keyboards::apex_7::Apex7) for `0x1612` alone
 //! ([`discovery::keyboard_class`](crate::devices::discovery::keyboard_class)).
 //!
-//! Protocol status: reverse-engineered. The file ids, chunk geometry, frame layouts and the payload
-//! struct layout below are reproduced from the Windows engine's device descriptors, and the wire part of
-//! them is visible in one Windows USBPcap capture of the official GG talking to an Apex 7 (firmware
-//! 4.16.8, 2026-10-15, capture notes, decoded from the engine capture 2 frame by frame):
-//! 120 pulls of 1024 bytes at file offsets 0..11264, each drained by reads at buffer offsets 0 and 512,
-//! 100 of them on file `0x0201` (profile slot 0) plus one schema probe; 241 payload reads, every one of
-//! them answering with the first payload byte `0x0B`, i.e. schema [`SCHEMA_B`]. On 2026-10-15 an Apex 7
-//! accepted a pull and a payload-read request on its interface-4 vendor collection and answered a pull
-//! on the interrupt endpoint; the payload read timed out there, which is why the reply is read on the
-//! control endpoint first. Since the read-back fix of 2026-10-17 a full slot read completes on an Apex 7
-//! under Linux (reported 2026-10-18). Measured 2026-10-19: GG's opening chain and its closing sequence are
-//! **not needed** - the read collects a profile slot without either, so this crate sends neither, and the
-//! read **changes nothing on the keyboard**. Nothing here writes a profile, and the payload struct offsets
-//! stay unverified until a read is compared with what GG shows for that slot.
+//! Protocol status: reverse-engineered from the Windows engine's device descriptors plus one Windows
+//! USBPcap capture of official GG on an Apex 7 (firmware 4.16.8): 120 pulls of 1024 bytes at file offsets
+//! 0..11264 - 100 of them on file `0x0201` (profile slot 0) plus one schema probe - each drained by reads
+//! at buffer offsets 0 and 512; 241 payload reads, every one answering with the first payload byte
+//! `0x0B`, i.e. schema [`SCHEMA_B`].
+//!
+//! A full profile slot read completes on hardware under Linux, and the read **changes nothing on the
+//! keyboard**: GG's opening chain and closing sequence are not sent. The payload struct offsets stay
+//! unverified until a read is compared with what GG shows for that slot.
 //!
 //! # Wire format
 //!
-//! All transfers run on the keyboard's vendor collections. The Apex 7 exposes usage page `0xffc0` on
-//! USB interface 1 (this is where the reference capture shows every profile transfer running) and usage
-//! page `0xffc1` on interface 4 (the collection the Linux `hidraw` node for the profile protocol sits
-//! on). Report numbers are embedded in the payload, so in `hidapi` terms the first byte of every buffer
-//! is the report ID.
+//! All transfers run on the keyboard's vendor collections: usage page `0xffc0` on USB interface 1 (where
+//! the capture shows every profile transfer running) and usage page `0xffc1` on interface 4 (the
+//! collection the Linux `hidraw` node for the profile protocol sits on). Report numbers are embedded in the
+//! payload, so in `hidapi` terms the first byte of every buffer is the report ID.
 //!
 //! * firmware poll (output report ID `0x00`, 64 data bytes on the wire, `SET_REPORT wValue 0x0200 wIndex
 //!   1 wLength 64): `90 <source>`, answered on the interrupt endpoint with the ASCII firmware version
-//!   (`34 2e 31 …` = `4.16.8`, see [`parse_firmware_version]). The source byte selects which
-//!   firmware answers: `90 00` the keyboard's, `90 01` the LED controller's (both read from an Apex 7 on
-//!   2026-10-19, and both forms are in the reference capture). The read sends `90 00` in front of the probe
-//!   for the image's firmware line; GG's own session polls both. The capture contains no 13-byte transfer
-//!   anywhere, so the pacing frame earlier versions of this module sent is not part of GG's read.
+//!   (`34 2e 31 …` = `4.16.8`, see [`parse_firmware_version]). The source byte selects which firmware
+//!   answers: `90 00` the keyboard's, `90 01` the LED controller's - both read from an Apex 7, both forms
+//!   in the capture. The read sends `90 00` in front of the probe for the image's firmware line; GG's own
+//!   session polls both.
 //! * pull (`HIDIO`, output report ID `0x00`, 64 bytes on the wire, `SET_REPORT wValue 0x0200 wIndex 1`):
 //!   `85 | 00 | file_id u16 LE | offset u32 LE | size u16 LE | 00…` (10 frame bytes, 11-byte report buffer)
 //!   — copies `size` bytes of the profile file into the device's resource buffer at buffer offset 0.
-//!   **The pull has no answer of its own.** The interrupt endpoint streams the keyboard's ordinary
-//!   input reports (endpoint `0x82`, report `0x01`, 63 bytes, all-zero = no keys; median gap 14 ms =
-//!   the poll interval), and GG's read API consumes exactly one of them per chunk with
-//!   `read-chunk HIDIO 65`, keeping **no bytes** of it: the byte specifier for the pull chunk in the
-//!   read API is `(0 0 0)` - zero length. The read answer is what carries the data ([`PAYLOAD_READ_LEN`] bytes
-//!   from reply byte 1 in GG's specifiers, our framing constant's offset behind the report-ID byte).
-//!   All 121 pulls in the capture are followed by an all-zero `0x01` report 1.7-3.7 ms later, and so
-//!   are all 72 pushes of the write runs: the interrupt packet is a pacing token, not a status frame.
-//!   The `85 00 fs offset size` frames the capture kit lists as 64-byte "pull replies" are the
-//!   `SET_REPORT` requests themselves.
+//!   **The pull has no answer of its own.** The interrupt endpoint streams the keyboard's ordinary input
+//!   reports (endpoint `0x82`, report `0x01`, 63 bytes, all-zero = no keys; median gap 14 ms = the poll
+//!   interval) and GG consumes exactly one of them per chunk, keeping **no bytes** of it. All 121 pulls in
+//!   the capture are followed by an all-zero `0x01` report 1.7-3.7 ms later, and so are all 72 pushes of
+//!   the write runs: the interrupt packet is a pacing token, not a status frame. The read answer is what
+//!   carries the data ([`PAYLOAD_READ_LEN`] bytes behind the report-ID byte, the offset of
+//!   [`READ_REPLY_FRAMING_LEN`]).
 //! * payload read (`HIDFEATURE`, feature report ID `0x00`, 642 bytes on the wire, `SET_REPORT wValue
 //!   0x0300 wIndex 1`): `83 | 00 | offset u16 LE | size u16 LE | 00…` (6 frame bytes, a
 //!   `crate::devices::hid_reports::ONBOARD_FEATURE_REPORT_SIZE` write buffer, report number byte included)
 //!   — returns `size` bytes of the resource buffer. GG reads the answer with `GET_REPORT wValue 0x0300
 //!   wIndex 1 wLength 642`, and that answer carries no header: the payload starts at byte 1. The 2-byte
 //!   probe of file `0x0201` answers `03 | 0b 00` and the first 512-byte read of the same file answers
-//!   `03 | 0b 00 43 6f 6e 66 69 67 20 31 …`, i.e. the schema word at payload offset 0 and the profile
-//!   name at payload offset 2. Some firmware echoes the request header instead, with the payload from
-//!   byte 6; [`parse_read_reply`] accepts both.
+//!   `03 | 0b 00 43 6f 6e 66 69 67 20 31 …`, i.e. the schema word at payload offset 0 and the profile name
+//!   at payload offset 2. Some firmware echoes the request header instead, with the payload from byte 6;
+//!   [`parse_read_reply`] accepts both.
 //! * GG's closing sequence (output report ID `0x00`, 64 bytes on the wire, `SET_REPORT wValue 0x0200 wIndex
 //!   1 wLength 64`): `69 00…`, `89 <slot + 1> 00…`, `41 00 00…`, `6c 00 00…` - OLED off, deploy that slot,
 //!   profile not volatile, close driver mode, with the engine's 250 ms sleep behind the deploy frame.
-//!   **This crate sends none of them**: measured 2026-10-19, the read works without them. They matter as a
-//!   set because `89` **writes** - the keyboard runs the slot named - so a tool that sends them changes the
-//!   keyboard's active profile. The named builders
-//!   [`OnboardProfileDeployCommand`](crate::devices::hid_reports::OnboardProfileDeployCommand) and
-//!   [`OnboardDriverModeCommand`](crate::devices::hid_reports::OnboardDriverModeCommand) exist for that
-//!   work and nothing in ssgg sends them
-//!   (`docs/development/apex-7-onboard-profile-read.md` §Driver mode).
+//!   **The read sends none of them.** They matter as a set because `89` **writes** - the keyboard runs the
+//!   slot named - so a tool that sends them changes the keyboard's active profile.
 //!
 //! The read geometry is not tunable: a profile file is read as [`PULLS_PER_FILE`] resource-buffer fills
 //! ([`DEVICE_RESOURCE_BUFFER_LEN`] each); every fill is drained with two [`PAYLOAD_READ_LEN`]-byte payload
@@ -98,8 +81,8 @@ use crate::devices::hid_reports::{
 };
 use crate::devices::keyboards::apex_pro_tkl_2023_profile::profile_checksum;
 use crate::devices::keyboards::onboard::OnboardProfileCodec;
-// Generic payload helpers live in the interface module since 2026-10-19; re-exported here because this
-// family's decode, encode and read path, and `src/main.rs`'s older call sites, name them through it.
+// Generic payload helpers live in the interface module; re-exported here because this family's decode,
+// encode and read path name them through it.
 pub use crate::devices::keyboards::onboard::{hex_dump, hex_of, image_diff, payload_diff, schema_of};
 use crate::error::{Error, Result};
 use serde::{Deserialize, Serialize};
@@ -153,10 +136,9 @@ pub const PULL_REPLY_REPORT_ID: u8 = 0x85;
 /// Report ID of a lighting-config payload-read reply.
 pub const LIGHTING_READ_REPLY_REPORT_ID: u8 = 0x03;
 /// Buffer size to ask the transport for when reading a payload read back: [`ONBOARD_READ_WIRE_BYTES`] (642).
-/// The read side sends this number to the device as `wLength` verbatim, which is the capture's
-/// `GET_REPORT wValue 0x0300 wIndex 1 wLength 642`; asking 643 makes the transfer never complete
-/// (`Connection timed out`, measured 2026-10-15). The kernel lands the device's report-ID byte in buffer[0],
-/// so the reply arrives as `[report ID][641 bytes]`.
+/// The read side sends this number to the device as `wLength` verbatim - the capture's `GET_REPORT wValue
+/// 0x0300 wIndex 1 wLength 642`; a 643-byte ask never completes. The kernel lands the device's report-ID
+/// byte in buffer[0], so the reply arrives as `[report ID][641 bytes]`.
 pub const READ_REPORT_LEN: usize = ONBOARD_READ_WIRE_BYTES;
 /// Data-stage length of the 64-byte output reports of this protocol (`SET_REPORT wValue 0x0200
 /// wIndex 1 wLength 64`): the firmware poll and every pull. The report number the transport prefixes
@@ -170,31 +152,22 @@ pub const GG_INPUT_READ_BYTES: usize = OUTPUT_REPORT_DATA_LEN + 1;
 /// Header of a header-echoing payload-read reply, report ID byte excluded: `reserved, offset u16, size u16`.
 pub const READ_REPLY_HEADER_LEN: usize = 5;
 /// Framing bytes between the report-ID byte and the payload of a payload-read reply (`GET_REPORT
-/// wValue 0x0300 wIndex 1 wLength 642`): the report-ID byte, and nothing else — the payload starts
-/// directly behind it, so the framing length is 0. In the capture every one of the 241
-/// replies answers `03` as its first byte: the 2-byte probe of file `0x0201` answers `03 0b 00`
-/// (schema [`SCHEMA_B`]) and the 512-byte read at buffer offset 0 answers
-/// `03 0b 00 …`, the profile name 2 bytes behind the schema word, the offset the
-/// Windows engine decoder documents. An earlier version of this constant said 20: that many bytes sit
-/// between the payload and the report bytes in the capture's **text** export, which prefixes every
-/// report with the USBPcap header, and 20 of 241 replies matched by accident. The hardware
-/// probe accepted 6. There is no CLI knob for it (the `--reply-header` option was removed 2026-10-17):
-/// a keyboard that anchors its payload elsewhere is a change of this constant, not an option.
+/// wValue 0x0300 wIndex 1 wLength 642`): the report-ID byte and nothing else, so the framing length is 0.
+/// All 241 replies of the capture answer `03` as their first byte, with the payload behind it. There is no
+/// CLI knob for it: a keyboard that anchors its payload elsewhere is a change of this constant.
 pub const READ_REPLY_FRAMING_LEN: usize = 0;
 /// Settle in front of the profile **deploy** frame (`0x89`), in milliseconds.
 ///
-/// `[EXPERIMENTAL]`: measured on hardware by the operator on 2026-10-19 on an Apex 7 `0x1612` - the deploy frame
-/// sent straight after the commit (`eb 01`) can do nothing, and a bit more waiting **before** it is what makes the
-/// keyboard switch slots. The engine's own sequence has settles this path did not: its commit path ends with an
-/// **input read** that blocks until the keyboard answers (`base_apex_legacy.lisp:1993-2022`), and
-/// `load-profile-with-pause` sleeps 250 ms **behind** the deploy frame (`:2039-2045`; the write capture shows 301 ms
-/// from that frame to the session's next frame). 250 ms is the engine's own number; the keyboard's need for a settle
-/// **before** the frame is the hardware observation, and how much the device needs is not measured.
+/// `[EXPERIMENTAL]`: measured on hardware - the deploy frame sent straight after the commit (`eb 01`) can
+/// do nothing, and waiting **before** it is what makes the keyboard switch slots; how much the device needs
+/// is not measured. 250 ms is the engine's own number: its `load-profile-with-pause` sleeps 250 ms
+/// **behind** the deploy frame, and its commit path ends with an **input read** that blocks until the
+/// keyboard answers (`base_apex_legacy.lisp`).
 pub const DEPLOY_SETTLE_MS: u64 = 250;
 
 /// Median gap between two device replies during a GG profile read in the reference capture, in
 /// milliseconds: the fixed pacing between our own transfers. (GG's opening-chain frames are 11 ms apart;
-/// this read replays none of them. `--gap-ms` is gone, so this constant is the pacing.)
+/// this read replays none of them.)
 pub const GG_GAP_MS: u64 = 5;
 
 /// Firmware version a [`crate::devices::hid_reports::CommandCode::OnboardFirmwareVersion`] answer carries: the printable
@@ -765,7 +738,7 @@ pub struct ProfileImage {
     /// The image bytes **behind** the payload, as a block summary, in the read's record. The read fills the
     /// whole profile region ([`PROFILE_FILE_BYTES`]) and only its head is the payload; the rest is recorded
     /// and decoded by nothing. `None` skips the field (an image no longer than the payload).
-    /// `[EXPERIMENTAL]`: no byte of this region is understood; see `ONBOARD.md`.
+    /// `[EXPERIMENTAL]`: no byte of this region is understood.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub region: Option<MacroSummary>,
 }
@@ -943,8 +916,7 @@ pub struct KeyMapping {
     /// `index / MACRO_INDEX_STRIDE` ([`MACRO_INDEX_STRIDE`] carries the measurement), so a binding of 7
     /// and a binding of 11 both bind the record at ordinal 1, and an index whose ordinal is past the
     /// record list is the deleted-macro state - GG deletes the macro and leaves the key bound.
-    /// `[EXPERIMENTAL]`, nothing here has been written back:
-    /// `docs/development/apex-7-onboard-profile-read.md` §The macro block is a packed record list.
+    /// `[EXPERIMENTAL]`, nothing here has been written back: the record list has no stride and no length word.
     pub macro_index: Option<u8>,
 }
 
@@ -1052,14 +1024,10 @@ pub const MACRO_MODE_REPEAT: u8 = 4;
 pub const MACRO_MODE_ONCE: u8 = 1;
 /// Records per binding index: a `0x71` mapping row carries `record ordinal * MACRO_INDEX_STRIDE` in its
 /// third code byte, so the index a key carries is `7` times the position of the record it binds, and
-/// `index / MACRO_INDEX_STRIDE` is the record. `[EXPERIMENTAL]`, measured 2026-10-19 on
-/// `some_rebounds.json` (schema B, profile "Some rebounds"): 14 keys carry bindings 0, 7, 14, 21, 25,
-/// 28, 33, 38, 43, 46, 63, 92, 96, 117, and every binding whose record the block holds resolves by
-/// `index / 7` with content that matches the bound key - 0, 7, 14 name the records that press Shift and
-/// release C, V and X, the three keys that carry those very bindings; 21 and 25 share record 3 (the Ctrl
-/// repeat) and 28 and 33 share record 4, an empty record. The block's 581 non-zero bytes hold about 20
-/// records and the largest binding, 117 = 7 * 16 + 5, needs 17 - the same order of size. Nothing here
-/// has been written back to a keyboard.
+/// `index / MACRO_INDEX_STRIDE` is the record. `[EXPERIMENTAL]`: every binding a read carried resolved by
+/// `index / 7` to a record whose content matched the bound key, and the largest binding seen (117 =
+/// 7 * 16 + 5) needs 17 records, the same order of size as the block holds. Nothing here has been written
+/// back to a keyboard.
 pub const MACRO_INDEX_STRIDE: usize = 7;
 
 /// One action of a packed macro record. `[EXPERIMENTAL]`: the split below is what makes the 134
@@ -1331,7 +1299,7 @@ pub struct OnboardProfile {
     /// Bytes the image carries **behind** the payload. The read fills the whole profile region
     /// ([`PROFILE_REGION_BYTES`]) and only its head is the payload: what sits behind it is recorded here
     /// and decoded by nothing. `0` skips the field, so a payload-only image (a saved `.bin`) says nothing.
-    /// `[EXPERIMENTAL]`: no byte of this region is understood; see `ONBOARD.md`.
+    /// `[EXPERIMENTAL]`: no byte of this region is understood.
     #[serde(skip_serializing_if = "is_zero")]
     pub extra_len: usize,
     /// 64-bit FNV-1a of that region, hex, for identity between reads. Absent when there is no region.
@@ -1348,10 +1316,9 @@ pub struct OnboardProfile {
 /// and `profile_all_settings_schema_b_struct` (schema B) in `lisp/apex_7.lisp` and
 /// `lisp/base_apex_legacy.lisp`, whose byte comments give every offset below. `key_mapping` is
 /// `function: uint8` plus `key_codes: bytearray (size 4)` - five bytes per mapping entry, not four;
-/// `onboard_rapid_tap_pair` is five bytes. A real read image of the factory profile (slot 0, schema
-/// B, firmware 4.16.3) agrees: at stride 5, 112 of the 128 base slots are `0x51` + the slot's own
-/// HID code and the 5th byte is 0 in all 128, and the trailing checksum verifies over
-/// `payload[0..11692]` (STM32 CRC-32 = `0xAE57B9DC`, measured 2026-10-19).
+/// `onboard_rapid_tap_pair` is five bytes. In a read image of the factory profile (slot 0, schema B,
+/// firmware 4.16.3) the trailing checksum verifies over `payload[0..11692]` (STM32 CRC-32 =
+/// `0xAE57B9DC`).
 ///
 /// Schema A: … wheel META (1375) → OLED (1385) → macro (2025) → GUID (11625) → 3 pad → CRC (11644).
 /// Schema B: … wheel META (1375) → OLED (1385) → Rapid Tap (2025) → macro (2076) → GUID (11676) →
@@ -2180,8 +2147,7 @@ fn encode_macro_records(profile: &JsonProfile, macro_offset: usize, data: &mut [
 /// this layout as data; `onboard.rs` says how the next keyboard plugs in.
 ///
 /// `[EXPERIMENTAL]`: the layout is reverse-engineered from one GG capture of one `0x1612` and has only ever
-/// been read from keyboards. The text builders below are its words for a read and a decode - they moved out of
-/// `src/main.rs` on 2026-10-19, when the CLI stopped naming keyboards.
+/// been read from keyboards. The text builders below are its words for a read and a decode.
 pub struct Apex7Onboard;
 
 impl OnboardProfileCodec for Apex7Onboard {
@@ -2572,10 +2538,8 @@ mod tests {
         buffer[1..frame_len + 1].to_vec()
     }
 
-    /// A macro data block of the measured shape (see
-    /// `docs/development/apex-7-onboard-profile-read.md` §The macro block is a packed record list):
-    /// two packed records, 20 bytes then 116, marker `0x77`, then the zero pad. The numbers and the
-    /// keys here are **made up** - the measurements live in the docs, and no bytes of a real profile
+    /// A macro data block of the measured shape: two packed records, 20 bytes then 116, marker `0x77`, then
+    /// the zero pad. The numbers and the keys here are **made up** - no bytes of a real profile
     /// are kept in this file. What the fixture carries is the structure the decoder has to walk: no
     /// stride, no length word, the second record starting at the next `0x77`, a press of 8 bytes
     /// (`02 key 01 01 word u16 ms u16`), a release of 4 (`02 key 01 00`) and a delay of 4
@@ -2659,11 +2623,10 @@ mod tests {
         }
     }
 
-    /// Macro bytes as a keyboard with GG macros carries them (`Some rebounds`, read 2026-10-19): five
-    /// packed records this grammar walks (28, 28, 28, 16, 8 bytes), the zero byte that ends the list, then
-    /// the byte that stops it - `03`, not a `0x77` marker. The first 109 bytes are the block as the
-    /// keyboard wrote them; the eight behind that byte are ours, standing in for the bytes the report
-    /// does not ship.
+    /// Macro bytes as a keyboard with GG macros carries them (`Some rebounds`): five packed records this
+    /// grammar walks (28, 28, 28, 16, 8 bytes), the zero byte that ends the list, then the byte that stops
+    /// it - `03`, not a `0x77` marker. The first 109 bytes are the block as the keyboard wrote them; the
+    /// eight behind that byte are ours, standing in for the bytes the report does not ship.
     const GG_MACRO_BYTES: [u8; 117] = [
         0x77, 0x01, 0x05, 0x00, 0x01, 0x01, 0x0F, 0x00, 0x02, 0xE0, 0x01, 0x01, 0x02, 0x06, 0x01, 0x01, 0x04, 0x00,
         0x14, 0x00, 0x02, 0x06, 0x01, 0x00, 0x02, 0xE0, 0x01, 0x00, 0x77, 0x01, 0x05, 0x00, 0x01, 0x01, 0x0F, 0x00,
@@ -3787,16 +3750,16 @@ mod tests {
     /// The write session, checked with nothing outside the repository: every frame of GG's session
     /// matches the plan on index, report kind, wire length and header bytes, and the frames carrying no
     /// payload bytes - the `88 00` open, the 40 `05 00` pushes, the `eb` commit - are byte-identical to
-    /// the capture. The 80 buffer writes carry payload bytes, so their content is the operator's
-    /// acceptance: see the ignored test below.
-    /// The deploy frame's settle: the engine's own pause number, the frame list carries no settle (it is a
+    /// the capture. The 80 buffer writes carry payload bytes, so their content is checked by the hardware
+    /// test below.
+    ///
+    /// The deploy frame's settle: the engine's own pause number; the frame list carries no settle (it is a
     /// wait, not a transfer), and the plan a `--dry-run` prints names it - a plan that prints 122 frames and
     /// sends a frame the keyboard needs a settle for must say so.
     ///
-    /// `[EXPERIMENTAL]`: the settle is hardware-measured (operator, 2026-10-19, Apex 7 `0x1612`): `89` straight
-    /// after `eb 01` can do nothing, and waiting a little longer before it is what lands the switch. The engine
-    /// sleeps 250 ms behind the deploy frame and its commit path ends with an input read
-    /// (`base_apex_legacy.lisp:2039-2045`, `:1993-2022`).
+    /// `[EXPERIMENTAL]`: hardware-measured settle - `89` straight after `eb 01` can do nothing, and waiting a
+    /// little longer before it is what lands the switch. The engine sleeps 250 ms behind the deploy frame and
+    /// its commit path ends with an input read (`base_apex_legacy.lisp`).
     #[test]
     fn the_deploy_settle_is_the_engine_pause_number_and_the_plan_names_it() {
         assert_eq!(

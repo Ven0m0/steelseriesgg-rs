@@ -6,13 +6,13 @@ image: `Config 1` -> `config_1.json`), edits them on a drawn keyboard, and saves
 the JSON back. No build step, no dependencies, no network: four plain files
 (`index.html`, `style.css`, `app.js`, `main.js`).
 
-`read` writes that report directly since 2026-10-18: it decodes the image it pulled. The per-pull read
+`read` writes that report directly: it decodes the image it pulled. The per-pull read
 record (`read --report FILE` - chunk headers, framing stats, image hash) is capture telemetry, not a
 profile, and this page does not open it.
 
 It is a **file editor only**. It never opens a device node and writes nothing to
 a keyboard. The wire protocol behind these bytes is `[EXPERIMENTAL]`
-(one device, one capture; see `docs/development/apex-7-onboard-profile-read.md`).
+(one device, one capture).
 
 ## Run
 
@@ -29,19 +29,15 @@ publishes one namespace object (`globalThis.SsggProfileApp`).
 Open a dump - the Open button, or drop a file anywhere on the page. **One profile
 is open at a time**: a new load replaces the open one (dropping several files loads
 the first and says so), so the board, the panels and the Save prompt can never point
-at a stale slot. The reference reads (`config_1.json` .. `config_4.json`) sit in the repo root;
-the picker opens in `tools/profile-gui/`, so navigate up or copy a dump here first. The tracked
-fixtures under `examples/` are **decodes of real slot captures**: `sample-identity.json` is the
-stock slot (`config_3.bin`, macro block empty, profile name `Config 3`), `sample-remap.json` is
-that decode with base remaps written in and the profile name `Remapped`. The third sample the suite
-uses, `sample-macros.json` - a decode of a capture that carries **5 packed macro records** (`p4.bin`,
-profile name `Some rebounds`) - is **not in the repo**: it carries the operator's own macros, so it sits
-in the repo root with the other captures and `.gitignore` keeps it out; the suite's macro checks report
-`skip` in a checkout without it. The block bytes it carries (`macro_data.bytes_hex`) are assembled from that decode: the
-five record runs as the decode lists them, the zero byte at `+108` and the `0x03` at `+109` exactly as its
-decode note names them, and eight bytes standing in for what the decoder does not name. That is what the
-macro checks run on, so the fixtures carry a block the record grammar **rejects**. A read *record* (the per-pull
-telemetry with `chunks` and no `oled` block) is refused by name: this page edits profiles, not logs.
+at a stale slot. The picker opens in `tools/profile-gui/`, so copy a dump here first or
+navigate to where it is. The tracked fixtures under `examples/` are **decodes of real slot
+captures**: `sample-identity.json` is the stock slot (macro block empty, profile name
+`Config 3`), `sample-remap.json` is that decode with base remaps written in and the profile
+name `Remapped`. A third sample that carries packed macro records is not tracked - it holds
+the operator's own macros - and the suite's macro checks report `skip` in a checkout without
+it; those checks run on the fixture bytes `selftest.mjs` assembles, which include a block the
+record grammar **rejects**. A read *record* (the per-pull telemetry with `chunks` and no `oled`
+block) is refused by name: this page edits profiles, not logs.
 `Save a copy` prompts for nothing: the browser download already asks where to put the file, so a
 dialog in front of it is one extra question for one decision. The copy name is derived from the
 loaded file - `x.json` downloads as `x-copy.json`, a copy of a copy stays `x-copy.json`, and a
@@ -117,7 +113,7 @@ A mapping entry is GG's `key_mapping`: **one function byte + four key-code
 bytes** (`KEY_MAPPING_LEN = 5`). Rapid Tap pairs, the lock-key codes, the Win
 key code and the META toggle byte carry raw HID codes, not offsets; a Rapid Tap
 key is marked `[RT n]` on the cap. Function names mirror `function_name` in
-`src/devices/keyboards/apex_legacy_profile.rs` (`0x00` deactivated, `0x51`
+`src/devices/keyboards/apex_7_profile.rs` (`0x00` deactivated, `0x51`
 combo_key, `0x62` meta, `0x71` macro, ...).
 
 **What counts as a binding** is the part a stock profile gets wrong if you only
@@ -132,7 +128,7 @@ classified:
 | `none` | all zero | neutral cap (one step darker), prints nothing |
 | `custom` | anything else | coloured by function, its target printed in the cap, listed in **Custom bindings** |
 
-A factory wired Apex 7 read (`examples/sample-identity.json`, decoded from `config_3.bin`)
+A factory wired Apex 7 read (`examples/sample-identity.json`)
 therefore reads `base: 6 custom, 112 bound to themselves, 10 empty` - the 4 media-cluster
 entries (slots 120, 124, 125, 126: function `0x61` with consumer codes) plus slots 29 and 69
 (`0x51` pointing at F13/F14), which is what GG ships. The **Custom bindings** panel lists only the real remaps, in slot
@@ -184,7 +180,7 @@ and no toggle write has been sent to a keyboard.
 
 The **Meta cap** (`0x65`) has no slot under its own usage - the crate's `hid_to_offset(0x65)` is `None`
 and the legacy table has `-1` there - and GG carries it on slot 93, the slot whose table code is GG's
-`0xF0` (`Fn F0` in the page's usage table, `apex_legacy_profile::meta_key_offset`). So the cap is an
+`0xF0` (`Fn F0` in the page's usage table, `apex_7_profile::meta_key_offset`). So the cap is an
 ordinary key in every panel: its binding select rebinds it (a stock read binds slot 93 to itself,
 `51 F0 00 00 00`; the user profile binds it to `0x65`, the Context Menu keystroke), and binding it as
 binding it as the toggle action writes `62 05 00 00 00` on slot 93 and sets the byte to `0xF0`.
@@ -297,30 +293,24 @@ edits none of them.
 ```sh
 node tools/profile-gui/sync-products.mjs           # import the product table from Rust
 node tools/profile-gui/sync-products.mjs --check   # fail if products.generated.js is stale
-node tools/profile-gui/selftest.mjs    # 197 checks (13 of them measure the profile JSONs in the repo
-                                       # root - the operator's captures, `config_*.json`,
-                                       # `some_rebounds*.json`, `sample-macros.json`, not files of the
-                                       # repo - and report `skip` in a checkout that has none of them): tables, binding, geometry, round-trip, edits, fake-DOM
-                                       # page wiring, the index.html script order, the picker path, the
-                                       # one-profile rule and the save-a-copy prompt, the wheel caps,
-                                       # the OLED rect, its 128x40 raster, its bit order and its hash
-                                       # fields, the label rules, and the factory read classifying as
-                                       # 0 base remaps, the binding select, the Meta action select (Lock Win, Rapid Tap, the F9-F12 actions),
-                                       # the META layer and wheel entries refusing that action, the Meta
-                                       # cap rebinding through slot 93, the byte as a field of its own,
-                                       # the name bar above the board, the shortened macro select
-                                       # and the whole macro under it, the bottom-row drawing order, the
-                                       # read-only header, the macro block's bytes shipped in the report,
-                                       # written back byte for byte by a save, and what a report without them says
+node tools/profile-gui/selftest.mjs    # 197 checks; 13 of them read the profile JSONs in the repo
+                                       # root (the operator's captures, not files of the repo) and
+                                       # report `skip` in a checkout that has none of them. Covers:
+                                       # tables, binding, geometry, round-trip, edits, fake-DOM page
+                                       # wiring, index.html script order, the picker path, the
+                                       # one-profile rule, the save-a-copy prompt, the wheel caps,
+                                       # the OLED rect (raster, bit order, hash fields), the label
+                                       # rules, the binding and Meta action selects, the name bar,
+                                       # the macro block's bytes and what a report without them says
 node tools/profile-gui/preview.mjs [-o FILE] [--source FILE] [profile.json ...]   # -o defaults to board-preview.svg
 ```
 
 `selftest.mjs` runs `app.js` against a minimal fake DOM (`fake-dom.mjs`), so the
 same code the page runs is checked in CI-able plain node. It loads
-`examples/sample-identity.json` (a **stock** wired Apex 7 slot decoded from `config_3.bin`,
-decoder `oled.bytes_hex` intact, macro block all zero) and `examples/sample-remap.json` (base remaps
-written in, meta colour edited); plus `sample-macros.json` in the repo root - a decode of a capture with
-5 packed records, `p4.bin`, carrying its macro block's 9,600 bytes as `macro_data.bytes_hex` - which is
+`examples/sample-identity.json` (a **stock** wired Apex 7 slot, decoder `oled.bytes_hex` intact,
+macro block all zero) and `examples/sample-remap.json` (base remaps
+written in, meta colour edited); plus `sample-macros.json` in the repo root - a decode carrying
+5 packed records and its macro block's 9,600 bytes as `macro_data.bytes_hex` - which is
 the operator's file and not in the repo, so those checks skip without it.
 
 The macro checks run on that root file: five records at indices 0, 7, 14, 21, 28 -
@@ -328,8 +318,7 @@ i.e. ordinals 0..4 with the measured stride of 7 - modes `once`/`repeat`, 4, 4, 
 three `0x71` bindings on the base layer whose third code byte is the index, and the deleted-macro
 case is produced in the suite by pointing a binding index past the list. The Rust side keeps its
 own fixtures (`SYNTH_MACRO_BLOCK`, and `GG_MACRO_BYTES` - the record runs of that real block, the zero byte,
-the `0x03` and a standing-in tail) for the codec tests. The measured record content is written up in
-`docs/development/apex-7-onboard-profile-read.md`. Paths are resolved against the script, so
+the `0x03` and a standing-in tail) for the codec tests. Paths are resolved against the script, so
 `node tools/profile-gui/selftest.mjs` works from the repo root as well as from this
 directory. The canvas the raster needs is faked in `fake-dom.mjs` (no 2D context) and in
 the checks that want a bitmap, where a stub canvas returns a fixed data URL; `preview.mjs`
@@ -348,7 +337,7 @@ says why; so does a dump that has no `bytes_hex`.
 
 GG's own decoder states the same geometry (`oled_height = 8`, `oled_width = 128`, `bpp = 1`,
 reading `pixel[row * 8 + col]` bit `7 - (col % 8)` for 40 rows), measured from the engine code
-in `app_code/core.zip` on 2026-10-19: byte 0 bit 7 is the top-left pixel and byte 16 is the
+in `app_code/core.zip`: byte 0 bit 7 is the top-left pixel and byte 16 is the
 first pixel of row 2. That is the sentence the panel, the rect tooltip, the exported SVG and
 the decoder's JSON all print.
 
@@ -356,8 +345,7 @@ The panel row next to the rect lists the hash the dump records (`oled.fnv1a_64`)
 FNV-1a-64 recomputed over `bytes_hex`. In a dump this crate decoded the two are equal: the
 decoder hashes the **block bytes** with the engine's **short prime** (43981) and the page
 recomputes with that same variant. The published FNV-1a prime (0x100000001b3) gives a value that
-agrees only in the low 32 bits - an earlier revision of this page used it and reported the
-decoder's field as inconsistent, and the suite now pins the variant on both halves of that
+agrees only in the low 32 bits, so the page pins the engine variant on both halves of that
 difference. If a dump's stored field disagrees with its `bytes_hex` the panel says so in those
 words. `Set all black` writes 640 zero bytes and recomputes `len`, `nonzero`, `fnv1a_64` and
 `head`; only the JSON changes.
@@ -377,8 +365,8 @@ rewrite `bytes_hex` and recompute `nonzero`, `fnv1a_64` and `head` from it, and
 `fileChanges` sees one changed path (`/oled/bytes_hex`), so the Changes panel lists it.
 Nothing here touches a keyboard: the page has no device access, and on-board writes are not
 supported on `0x1628`. Encode lives on the CLI side: `ssgg onboard encode <json>` writes a decode report
-back into payload bytes (2026-10-19; verified byte-identical over the 11,696-byte payload of
-`config_1.bin`, `config_1_2.bin` and `config_3.bin`). The page has no byte view and no encode control, so a
+back into payload bytes (verified byte-identical over the 11,696-byte payload of three factory
+reads). The page has no byte view and no encode control, so a
 JSON saved here is exactly what the CLI encodes.
 
 `fnv1a_64` is a summary field the decoder computes over the block's own bytes; `bytes_hex` is
@@ -390,13 +378,13 @@ where they do not agree.
 The JSON carries the block as a summary and as decoded records, and the page shows both.
 
 `macro_data` is the summary: `offset`, `len`, `nonzero`, `fnv1a_64`, `head` - **and the block's own bytes as
-`bytes_hex`** (9,600 of them, since 2026-10-19: the engine declares this field an opaque `bytearray` of
+`bytes_hex`** (9,600 of them: the engine declares this field an opaque `bytearray` of
 `(macro-data-size)` = 9600 and parses nothing inside it, `lisp/apex_7.lisp:62, 101`). A **write sends those
 bytes back verbatim**, so the page carries them through untouched: the file panel row names `bytes 9600` with
 the block FNV, the Macro panel prints them and says plainly that a write sends them back unchanged. The
 parsed list under them is a display view, and a partial one: a real profile's block walks as 5 records
 (108 bytes) and stops at the `03` at `+109`, which is no marker we know, so its `macro_note` is printed as the
-limit of the list, not of the profile. A report from a read older than 2026-10-19 carries no `bytes_hex`: the
+limit of the list, not of the profile. A report from a read that predates the block dump carries no `bytes_hex`: the
 panel and the file panel row then say the write has nothing to send verbatim and name the re-read that fixes
 it. There is **no length word** in the payload region behind the block - bytes 2020..2075 of the reference
 profile are all zero - so nothing in the dump declares how long the record list is.
@@ -447,9 +435,9 @@ node tools/profile-gui/sync-products.mjs           # writes products.generated.j
 node tools/profile-gui/sync-products.mjs --check   # exit 1 when Rust moved and the file did not
 ```
 
-`sync-products.mjs` parses three Rust regions - `pub mod product_ids` and
-`device_name_from_product_id` in `src/devices/mod.rs`, `onboard_family` in
-`src/devices/keyboards/apex7.rs`, `device_type_from_product_id` for the device kind, and the
+`sync-products.mjs` parses these Rust regions - `pub mod product_ids`,
+`device_name_from_product_id` and `device_type_from_product_id` in `src/devices/mod.rs`, the
+`keyboard_class` family arms in `src/devices/discovery.rs`, and the
 `codecs()` registry in `src/devices/keyboards/onboard.rs` - and writes `products.generated.js`,
 which `index.html` loads **before** `app.js`, so the page reads it as `globalThis.SsggProducts`.
 Run it after changing any of those tables; `selftest.mjs` runs `--check` as a check, so a stale
@@ -463,7 +451,7 @@ What the page derives from it:
   used only when the registry is silent);
 - the device kind (`keyboard` / `mouse` / `headset` / registry fallback), which decides whether a
   mouse button layout or the line `no keyboard layout: a headset has no key mappings` is printed;
-- the on-board family set (`onboard_family` in `apex7.rs`): a model in it gets
+- the on-board family set (the `KeyboardClass::Apex7` arms of `keyboard_class`): a model in it gets
   `payload layout: legacy Apex 750-byte A/B` plus the extra blocks this page decodes (128 mapping
   slots, scroll wheel, OLED, macros); a model outside it is labelled
   `payload layout: not the one this page encodes`, because a profile from it needs that family's own
@@ -494,7 +482,7 @@ the rest of the JSON.
   records, and `crc_*` is never recomputed (the encoder in the CLI computes it). A block the list cannot walk
   is normal here: its bytes are what travels.
 - `oled` carries the block itself (`bytes_hex`), so the GUI draws it and can replace it in the
-  JSON; the bit order is the operator-confirmed one and is no longer a user switch.
+  JSON; the bit order is the operator-confirmed one, with no user switch.
 - `schema` and `schema_name` are shown, not editable: the layout of the payload
   behind them is the decoder's business. `schema` is a **number** (the capture
   read writes `11`) and `schema_name` is the letter (`"b"`).

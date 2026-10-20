@@ -18,11 +18,11 @@ transfers (`bmRequestType 0x21`, `bRequest 9`). Replies came back on interrupt I
 
 The 644 is the on-wire length; it excludes the report-ID byte. For `0x1628` the code builds a
 `WIRED_2023_PACKET_LENGTH = 645` buffer (report-ID byte + 644 wire bytes) in `apex_pro_tkl_2023.rs`. `GenericKeyboard::send_feature`
-(`keyboards/mod.rs`) sends the frame on the device's own hidapi handle on every platform. It briefly
-routed this model through a sysfs-resolved path (interface 1) on 2026-10-15; that was reverted on
-2026-10-17 without ever being measured. **Needs a hardware test on `0x1628`**: if the keyboard ignores
-direct-mode frames sent on the collection discovery opened, the interface-1 reading is real and that
-collection has to be opened as its own device. The Linux path for `0x1628` is untested.
+(`keyboards/mod.rs`) sends the frame on the device's own hidapi handle on every platform.
+**Needs a hardware test on `0x1628`**: if the keyboard ignores
+direct-mode frames sent on the collection discovery opened, the interface-1 control collection
+(the one carrying this model's profile traffic on `wIndex 1`) has to be opened as its own device.
+The Linux path for `0x1628` is untested.
 
 ## Per-key lighting (feature report, command 0x40)
 

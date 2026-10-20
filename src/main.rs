@@ -150,10 +150,8 @@ async fn main() -> Result<()> {
 
         Commands::Onboard { action } => {
             // The subcommands that run on a keyboard get the device manager, which is how they get the
-            // keyboard: the selection runs before the command, so `write` reaches the on-board selection
-            // messages (which keyboard answers the protocol, `--device` between two) instead of the
-            // no-keyboard guard below it. `--dry-run` is the flag that makes a write print its plan, and
-            // it is the same fact the dispatch reads.
+            // keyboard: the selection runs before the command, so a write reaches the on-board selection
+            // messages instead of the no-keyboard guard below it.
             if action.needs_keyboard() {
                 let mut manager = new_device_manager()?;
                 cmd_onboard(Some(&mut manager), action).await?;
@@ -807,16 +805,11 @@ async fn cmd_profile(action: ProfileAction) -> Result<()> {
     Ok(())
 }
 
-/// [EXPERIMENTAL] On-board profile commands of a keyboard's on-board protocol. The read collects a
-/// profile, `decode` and `encode` work on files: all of it runs through the interfaces in
-/// src/devices/keyboards/onboard.rs and names no keyboard family - which family a device speaks is what
-/// `Keyboard::onboard_codec` answers, and which one a file belongs to is what the codec registry answers.
-///
-/// The protocol of the family registered today is reverse-engineered from the GG USBPcap capture written
-/// up in docs/development/apex-7-onboard-profile-read.md; a full slot read has completed on an Apex 7 and
-/// the decoded layout and checksum now match GG's payload struct and a hardware read of the factory
-/// profile. Field meanings inside the OLED and macro blocks are still reverse-engineered. Nothing here
-/// writes to a keyboard.
+/// On-board profile commands of a keyboard's on-board protocol. The read collects a
+/// profile, `decode` and `encode` work on files, `write` and `load` send frames: all of it runs through the
+/// interfaces in src/devices/keyboards/onboard.rs and names no keyboard family - which family a device
+/// speaks is what `Keyboard::onboard_codec` answers, and which one a file belongs to is what the codec
+/// registry answers.
 async fn cmd_onboard(mut manager: Option<&mut DeviceManager>, action: OnboardAction) -> Result<()> {
     use steelseries_gg::devices::keyboards::onboard::{self as onboard, codec_for_bytes, codec_for_json};
 

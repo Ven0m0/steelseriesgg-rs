@@ -1,24 +1,21 @@
 // ssgg on-board profile JSON editor.
 //
-// Edits the JSON that `ssgg onboard read` (-o/--out) and `ssgg onboard decode --out` write (schema
-// `a`/`b`: docs/development/apex-7-onboard-profile-read.md). It is a file editor only - it never
-// opens a device and writes nothing to a keyboard; sending a profile is the CLI's job
-// (`ssgg onboard write`). The report the page edits is the whole decoded profile: the keyboard
-// identity first as three top-level fields (product_id, product, firmware - stamped by a device read,
-// absent for a file decode, which names no keyboard), then schema, name, lighting, the META toggle
-// byte, the four mapping tables, the OLED block, the Rapid Tap block, the macro block summary and its
-// packed records, the GUID, its padding and the checksum words. Every label is derived from data in
-// this repo, cited where used.
+// Edits the JSON `ssgg onboard read -o` and `ssgg onboard decode --out` write (schema `a`/`b`) and
+// encodes it back for `ssgg onboard encode`. It is a file editor only: it never opens a device and
+// writes nothing to a keyboard - sending a profile is the CLI's job (`ssgg onboard write`). The report
+// is the whole decoded profile: keyboard identity (product_id, product, firmware - stamped by a device
+// read, absent for a file decode), schema, name, lighting, the META toggle byte, the four mapping
+// tables, the OLED block, the Rapid Tap block, the macro block and its packed records, the GUID and the
+// checksum words. The crc_* fields come from the read and are never recomputed here.
 //
-// Key identity: GG turns a profile mapping offset into a key with the legacy
-// family's HID -> offset table (lisp/base_apex_legacy.lisp,
-// device-offset-lookup-table) inverted, and its own onboard -> config conversion
-// goes through that inverse (onboard-to-config-button-mapping). button_mappings
-// is the base layer, button_meta_mappings the META layer. Rapid Tap pairs and
-// the lock / META / Win lighting bytes carry raw HID codes.
+// Key identity: GG turns a profile mapping offset into a key with the legacy family's HID -> offset
+// table (`lisp/base_apex_legacy.lisp`, `device-offset-lookup-table`) inverted, and its own
+// onboard -> config conversion goes through that inverse (`onboard-to-config-button-mapping`).
+// `button_mappings` is the base layer, `button_meta_mappings` the META layer; Rapid Tap pairs and the
+// lock / META / Win lighting bytes carry raw HID codes.
 //
 // The protocol behind these bytes is [EXPERIMENTAL] (one device, one capture).
-// The crc_* fields come from the read and are never recomputed here.
+// Every label is derived from data in this repo, cited where used.
 
 // Loaded as a plain script (no ES modules): a page opened from the filesystem
 // has origin `null`, and browsers refuse module scripts there, so the app
@@ -179,10 +176,9 @@ const MOUSE_NAMES = {
 // `META_CAP_LABELS` is the short word the cap prints. 0x05 is Lock Win (it locks the Windows key) and
 // 0x0A is Rapid Tap - the same reading GG's own UI uses, and the stock META layer agrees with the first
 // of them: the slot GG marks with 0x05 is slot 13, LWin. None of it is measured in writes.
-// Lock Win and the META toggle are two separate things and this page keeps them apart (2026-10-19,
-// operator-reported: the binding window must not make Lock Win write the toggle byte): Lock Win is a meta
-// action, a binding byte (`0x62` with code 1 = `0x05`); the META toggle is the profile byte at
-// `meta_toggle_hid`, which names the key GG switches META mode with and carries no binding byte at all.
+// Lock Win and the META toggle are two separate things: Lock Win is a meta action, a binding byte
+// (`0x62` with code 1 = `0x05`); the META toggle is the profile byte at `meta_toggle_hid`, which names
+// the key GG switches META mode with and carries no binding byte at all.
 const META_ACTION_NAMES = {
   0x01: 'Profile Switch (F9)', 0x02: 'Macro (F10)', 0x03: 'Brightness Down (F11)',
   0x04: 'Brightness Up (F12)', 0x05: 'Lock Win', 0x0a: 'Rapid Tap',
@@ -192,13 +188,12 @@ const META_CAP_LABELS = {
   0x05: 'Lock Win', 0x0a: 'Rapid Tap',
 };
 // The meta function and its Lock Win action. In every read this page decodes, the META-layer entry GG
-// marks is `0x62` with code 1 = `0x05` - the Lock Win action - and it sits on slot 13 = LWin (a stock
-// slot read), on slots 13 and 35 in the user profile some_rebounds.json. It is a binding byte pair:
-// nothing in the reads says it is the key that switches META mode.
-// The key that switches META mode is named by the profile byte at meta_toggle_hid and by nothing else:
-// some_rebounds.json names 0x10, the M key, whose base entry stays self-bound (51 10 00 00 00) and whose
-// META entry stays all zero. The factory byte is 0xF0, GG's code for the Meta cap (META_KEY_GG_CODE).
-// [EXPERIMENTAL] none of this has been written to a keyboard; all of it is read-side.
+// marks is `0x62` with code 1 = `0x05` - the Lock Win action - on slot 13 = LWin (a stock slot read) and
+// on slots 13 and 35 in the user profile some_rebounds.json. It is a binding byte pair: nothing in the
+// reads says it is the key that switches META mode. That key is named by the profile byte at
+// `meta_toggle_hid` and by nothing else: some_rebounds.json names 0x10, the M key, whose base entry stays
+// self-bound (51 10 00 00 00) and whose META entry stays all zero; the factory byte is 0xF0, GG's code
+// for the Meta cap (META_KEY_GG_CODE). [EXPERIMENTAL] read-side only, never written to a keyboard.
 const META_TOGGLE_FUNCTION = 0x62;
 const META_LOCK_WIN_ACTION = 0x05;
 // The Meta cap is usage 0x65 - electrically the HID Application key, the keystroke that opens the
@@ -206,9 +201,9 @@ const META_LOCK_WIN_ACTION = 0x05;
 // hid_to_offset(0x65) is None: no profile key is named Meta). The key GG switches META mode with is slot
 // 93, the slot whose table code is GG's 0xF0 - the code this page's usage table names Fn F0, the M key
 // of the Apex 7. Every stock read this page decodes carries meta_toggle_hid 0xF0 with slot 93 bound to
-// itself (51 F0 00 00 00), and some_rebounds.json binds slot 93 to 0x65, the Context Menu keystroke,
-// while its byte 0x10 names the M key. The page draws the cap at usage 0x65 and binds it through slot
-// 93, so the cap edits like any other key (the crate's meta_key_offset carries the same alias).
+// itself (51 F0 00 00 00), and some_rebounds.json binds slot 93 to 0x65 while its byte 0x10 names the M
+// key. The page draws the cap at usage 0x65 and binds it through slot 93, so it edits like any other key
+// (the crate's meta_key_offset carries the same alias).
 const META_KEY_HID = 0x65;
 const META_KEY_GG_CODE = 0xf0;
 const META_KEY_SLOT = 93;
@@ -298,8 +293,7 @@ function mediaKeyOptions(selected) {
 
 // The Meta group's own list: the meta actions of function 0x62. Lock Win (0x05) is one of them and
 // writes only this entry's code 1. The META toggle is not in this list - it is the profile byte at
-// meta_toggle_hid and has its own row in the binding window (separated 2026-10-19 after the operator
-// reported the two being mixed up).
+// meta_toggle_hid and has its own row in the binding window (the two are separate options).
 function metaActionOptions(selected) {
   const options = Object.keys(META_ACTION_NAMES).map(Number).sort((a, b) => a - b)
     .map((code) => ({ value: code, label: `${META_ACTION_NAMES[code]} (0x${hex2(code)})` }));
@@ -310,8 +304,8 @@ function metaActionOptions(selected) {
 }
 
 function macroBindingOptions(doc, selected) {
-  // The value written is always ordinal * MACRO_STRIDE: a dump from before the 2026-10-19 measurement
-  // carries `index` as the position, and writing that byte back would bind the wrong record.
+  // The value written is always ordinal * MACRO_STRIDE: an older dump carries `index` as the position, and
+  // writing that byte back would bind the wrong record.
   // Short labels only: a select is as wide as its longest option, and a long macro is a long
   // keystroke list. The whole record is shown under the select (macroDetailRows).
   const options = macroRecords(doc).map((record, position) => {
@@ -1186,7 +1180,7 @@ OLED_RECT.h = ((OLED_RECT.w * UNIT - GAP) * 5 / 16 + GAP) / UNIT;
 
 // The oled block is a 128 x 40 monochrome bitmap: 8 pixels per byte, 16 bytes per row,
 // 40 rows = 640 bytes = OLED_LEN in the decoder. Bit 7 of a byte is its leftmost pixel
-// (operator-confirmed on a 0x1628 screen, 2026-10-18), so there is no bit-order switch.
+// (operator-confirmed on a 0x1628 screen), so there is no bit-order switch.
 const OLED_W = 128;
 const OLED_H = 40;
 const OLED_BYTES = OLED_W * OLED_H / 8;
@@ -1473,7 +1467,7 @@ function setOledBitmap(doc, bytes) {
 let ui = null;
 
 // Fill the board's OLED rect from the block bytes: a PNG data URL when the page can raster,
-// the text label when it cannot (or when the dump has no bytes, i.e. a pre-2026-10-19 read).
+// the text label when it cannot (or when the dump has no bytes, i.e. a read that predates the block dump).
 function paintOled(board, doc) {
   const group = board.querySelector('g.oled');
   if (!group || !doc.oled) return;
@@ -1831,7 +1825,7 @@ function renderBindingPanel(file, target) {
   // on Meta with the Meta Toggle action, whatever the entry's own bytes say.
   // The key the profile byte names is painted as a meta key on the board and its cap prints META;
   // that is the byte's doing alone. Its binding window shows the entry's own bytes - the toggle is not
-  // a binding (operator, 2026-10-19: Lock Win and the META toggle are separate options).
+  // a binding (Lock Win and the META toggle are separate options).
   const group = bindingGroup(entry.function);
   rows.push(selectRow(
     'Binding',
@@ -2199,7 +2193,7 @@ function renderRapidTapPanel(file) {
 // decodes the block; this page reads the records it wrote.
 const MACRO_MARKER = 0x77;
 const MACRO_MODE_NAMES = { 4: 'repeat', 1: 'once' };
-// Records per binding index (apex_7_profile::MACRO_INDEX_STRIDE). Measured 2026-10-19 on a read
+// Records per binding index (apex_7_profile::MACRO_INDEX_STRIDE). Measured on a read
 // ("Some rebounds", schema B) whose keys carry indices 0, 7, 14, 21, 25, 28, 33, 38, 43, 46, 63, 92,
 // 96, 117: the third code byte is 7 times the record's position in the packed list, and every index
 // whose record the block holds resolves by floor division with content that matches the bound key -

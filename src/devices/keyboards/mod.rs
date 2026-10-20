@@ -217,7 +217,7 @@ pub trait Keyboard: Device {
     /// The on-board profile protocol this keyboard speaks, as the family codec that can read and write
     /// its bytes. `None` (the default) says this keyboard has no on-board profile protocol.
     ///
-    /// The codec is a family-wide, device-free value: it decodes, encodes and reports payloads, and names
+    /// A codec is a family-wide, device-free value: it decodes, encodes and reports payloads, and names
     /// the slots. A keyboard that carries a protocol overrides this with its family's codec, which
     /// [`onboard::codecs`](crate::devices::keyboards::onboard::codecs) also lists for file-only commands.
     fn onboard_codec(&self) -> Option<&'static dyn crate::devices::keyboards::onboard::OnboardProfileCodec> {
@@ -233,7 +233,7 @@ pub trait Keyboard: Device {
     /// is what maps GG's config number to it). Keyboards that do not carry the protocol return an error.
     ///
     /// `[EXPERIMENTAL]`: the protocol is reverse-engineered from a capture of official GG. A full
-    /// slot read completes on an Apex 7 under Linux (2026-10-18); the decode is not verified.
+    /// slot read completes on an Apex 7 under Linux; the decode is not verified.
     async fn read_onboard_profile(&self, _profile: u8) -> Result<crate::devices::keyboards::onboard::ProfileImage> {
         Err(Error::DeviceCommunication(
             "on-board profile read is not supported by this keyboard".to_string(),
@@ -245,8 +245,8 @@ pub trait Keyboard: Device {
     /// with the profile deploy frame (0x89). **This changes the keyboard's stored profile and makes it run
     /// the slot written.** Keyboards without a known write sequence return an error.
     ///
-    /// `[EXPERIMENTAL]`: the frame geometry is capture-confirmed on Apex 7 (`0x1612`, 2026-10-20). The
-    /// sequence has never been sent to a keyboard by this crate.
+    /// `[EXPERIMENTAL]`: the frame geometry is capture-confirmed on Apex 7 (`0x1612`). The sequence has
+    /// never been sent to a keyboard by this crate.
     async fn write_onboard_profile(
         &self,
         _profile: u8,
@@ -455,9 +455,9 @@ impl GenericKeyboard {
     /// `send_feature_report`, i.e. the kernel's `HIDIOCSFEATURE` on Linux, on the handle the device
     /// manager opened.
     ///
-    /// `[EXPERIMENTAL]` - **needs a hardware test on the wired Apex Pro TKL 2023 (`0x1628`)**. This was
-    /// routed through the path-based `send_feature_report_raw`, but the bug this was supposed to work
-    /// around was fixed in hidapi 2.6.6.
+    /// `[EXPERIMENTAL]` - **needs a hardware test on the wired Apex Pro TKL 2023 (`0x1628`)**: if that
+    /// board ignores frames sent on the collection discovery opened, its interface-1 control collection has
+    /// to be opened as a device of its own.
     #[cfg(unix)]
     pub fn send_feature(&self, data: &[u8], report_len: usize) -> Result<()> {
         let device = self.connected_device()?;

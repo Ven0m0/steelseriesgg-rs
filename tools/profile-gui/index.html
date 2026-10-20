@@ -51,12 +51,12 @@
 <footer class="foot mono">
   Key binding source: <span class="mono">lisp/base_apex_legacy.lisp</span>
   model names and the per-model feature set are imported from Rust
-  (<span class="mono">device_name_from_product_id</span> and <span class="mono">onboard_family</span>,
+  (<span class="mono">device_name_from_product_id</span> and <span class="mono">keyboard_class</span>,
   through <span class="mono">tools/profile-gui/sync-products.mjs</span> into
   <span class="mono">products.generated.js</span>); the rest of the tables mirror
   (<span class="mono">device-offset-lookup-table</span> inverted, as GG's
   <span class="mono">onboard-to-config-button-mapping</span> uses it). Function names mirror
-  <span class="mono">function_name</span> in <span class="mono">src/devices/keyboards/apex_legacy_profile.rs</span>.
+  <span class="mono">function_name</span> in <span class="mono">src/devices/keyboards/apex_7_profile.rs</span>.
   Nothing here is written to a keyboard by this page, and <span class="mono">crc_*</span> is never recomputed.
 </footer>
 </body>

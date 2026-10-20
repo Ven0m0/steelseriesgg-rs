@@ -70,10 +70,7 @@ pub enum CommandCode {
     /// `[EXPERIMENTAL]` Legacy Apex driver mode (0x6C): GG's engine writes `6c 00 01` when it opens a
     /// device and `6c 00 00` when it closes a session - same report number 0, same command, one byte
     /// apart. Only the opening frame is in the reference capture (answered `6c 00 01 00…`). **Nothing in
-    /// ssgg sends it.** The engine side (the sleep behind the deploy frame, the lighting-reset frame the
-    /// engine also writes on closing) and the Apex 3 family split (`0x03` in a 33-byte report on Apex 3,
-    /// `0x6C` with a different opening byte on Apex 3 TKL) is in
-    /// `docs/development/apex-7-onboard-profile-read.md` §Driver mode. See [`OnboardDriverModeCommand`].
+    /// ssgg sends it.** See [`OnboardDriverModeCommand`].
     OnboardDriverMode = 0x6C,
     /// `[EXPERIMENTAL]` Legacy Apex profile deploy (0x89): GG's `89 <1-based profile id>`, the
     /// `load_profile` frame seen behind profile-file transfers in the reference capture (slots 0, 1, 2, 4
@@ -483,13 +480,11 @@ impl HidCommand for ProfileChunkCommand<'_> {
     }
 }
 
-/// Report buffer of a legacy Apex (Apex 7, Apex Raw, Apex 2014) on-board profile transfer, handed to
-/// the transport as `[report number][64 data bytes]` with report number 0, which is the
-/// `SET_REPORT wValue 0x0200 wIndex 1 wLength 64` transfer the 2026-10-15 reference capture shows.
+/// Report buffer of a legacy Apex on-board profile transfer, handed to
+/// the transport as `[report number][64 data bytes]` with report number 0 - the
+/// `SET_REPORT wValue 0x0200 wIndex 1 wLength 64` transfer the reference capture shows.
 ///
-/// `[EXPERIMENTAL]` Layout and sizes from
-/// `docs/development/apex-7-onboard-profile-read.md`. Only the opening-chain frames have been answered by
-/// a keyboard when sent by `ssgg` (firmware `4.16.8` on 2026-10-15).
+/// `[EXPERIMENTAL]` Only the opening-chain frames have been answered by a keyboard when sent by `ssgg`.
 pub const ONBOARD_OUTPUT_REPORT_SIZE: usize = 65;
 
 /// Report buffer of a legacy Apex on-board payload read: `[report number][642 data bytes]` with report
@@ -502,20 +497,18 @@ pub const ONBOARD_FEATURE_REPORT_SIZE: usize = 643;
 
 /// Wire bytes of a payload read-back: the `GET_REPORT wValue 0x0300 wIndex 1 wLength 642` control read
 /// the reference capture shows, which is also the length to ask the transport for. On Linux the read side
-/// sends the buffer length verbatim (`HIDIOCGFEATURE`: hidapi hands the slice length straight to the
-/// ioctl, `src/linux_native/ioctl.rs:26`), so **ask with 642, never 643** - measured 2026-10-15:
-/// 642 answers, 643 makes the control transfer never complete (`Connection timed out`). The kernel writes
-/// the device's report-ID byte into buffer[0], so the bytes behind it are 641.
+/// sends the buffer length verbatim (`HIDIOCGFEATURE` hands the slice length straight to the ioctl), so
+/// **ask with 642, never 643**: 642 answers, 643 makes the control transfer never complete
+/// (`Connection timed out`). The kernel writes the device's report-ID byte into buffer[0], so the bytes
+/// behind it are 641.
 ///
-/// `[EXPERIMENTAL]` Wire length capture-confirmed on Windows (Apex 7, 2026-10-15); the answering length
-/// measured on Linux the same day.
+/// `[EXPERIMENTAL]` Wire length capture-confirmed on Windows, answering length measured on Linux.
 pub const ONBOARD_READ_WIRE_BYTES: usize = 642;
 
 /// Bytes a payload read frame may ask for. A reply report arrives as `[report ID][641 bytes]`, and a
 /// header-echoing reply puts a further 5-byte header (`03 01 01 00 01`, see `READ_REPLY_HEADER_LEN` in
 /// `apex_7_profile`) in front of the payload, so the payload a read can ask for tops out at
-/// 642 - 1 - 5 = 636. An earlier version of this constant said 641: it subtracted the report-ID byte but
-/// not the header, which let a read frame ask for a size no reply can carry.
+/// 642 - 1 - 5 = 636: an ask above it is a size no reply can carry.
 pub const ONBOARD_MAX_READ_LEN: usize = ONBOARD_READ_WIRE_BYTES - 1 - 5;
 
 /// Firmware source byte for [`OnboardFirmwareVersionCommand`]: which firmware the `90` poll asks for.
@@ -550,10 +543,9 @@ impl fmt::Display for FirmwareSource {
 /// (`34 2e 31 …` = `4.16.8` in the reference capture).
 ///
 /// The source byte picks which firmware answers: [`FirmwareSource::Keyboard`] (`90 00`) the keyboard's,
-/// [`FirmwareSource::Led`] (`90 01`) the LED controller's. Measured: the GG capture has both
-/// forms on the wire (capture summary: `90 00` answered
-/// `00 53 74 …` = `SteelSeries ...`), and ssgg read both strings from an Apex 7 on
-/// 2026-10-19. Decode the answer with `parse_firmware_version`.
+/// [`FirmwareSource::Led`] (`90 01`) the LED controller's - both forms are in the GG capture (`90 00`
+/// answered `00 53 74 …` = `SteelSeries ...`) and both answer from an Apex 7. Decode the answer with
+/// `parse_firmware_version`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct OnboardFirmwareVersionCommand {
     /// Which firmware this poll asks for.
@@ -618,13 +610,12 @@ impl From<DriverModeState> for u8 {
 
 /// [EXPERIMENTAL] Legacy Apex driver mode: `6c 00 <mode>` in a 64-byte output report
 /// (`SET_REPORT wValue 0x0200`). GG's engine writes [`DriverModeState::Engaged`] when it opens a device
-/// and [`DriverModeState::Released`] when it shuts down; only the opening frame is in the 2026-10-15
-/// capture, answered `6c 00 01 00 ...` on the interrupt endpoint.
+/// and [`DriverModeState::Released`] when it shuts down; only the opening frame is in the capture,
+/// answered `6c 00 01 00 ...` on the interrupt endpoint.
 ///
-/// **Nothing in ssgg sends this command.** The on-board profile read was measured on 2026-10-19 to work
-/// without it. The engine-side detail and the **Apex 3 family split** (Apex 3 uses command `0x03` in a
-/// 33-byte report, Apex 3 TKL uses `0x6C` and opens with driver mode engaged) is in
-/// `docs/development/apex-7-onboard-profile-read.md` §Driver mode.
+/// **Nothing in ssgg sends this command**, and the on-board profile read works without it. The Apex 3
+/// family split: Apex 3 uses command `0x03` in a 33-byte report, Apex 3 TKL uses `0x6C` and opens with
+/// driver mode engaged.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct OnboardDriverModeCommand {
     /// Driver mode to set.
@@ -713,8 +704,8 @@ impl HidCommand for OnboardProfileDeployCommand {
 /// all 121 pulls of the capture. The pull is flow control; the profile bytes come from [`OnboardBufferReadCommand`].
 /// Draining that packet is not optional on Linux - see `Apex7::read_pull_ack`.
 ///
-/// Sizes and frame layout from the 2026-10-15 reference capture (121 pulls of 1024 bytes at file
-/// offsets 0, 4, 8, … 44 for the schema probe and 0..11264 for full files).
+/// Sizes and frame layout from the reference capture (121 pulls of 1024 bytes: file offsets 0, 4, 8, …
+/// 44 for the schema probe, 0..11264 for full files).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct OnboardPayloadPullCommand {
     /// Profile file id: the file base plus the profile index, and the same ids at +0x0100 for the
@@ -830,8 +821,7 @@ impl HidCommand for OnboardBufferReadCommand {
 /// `[EXPERIMENTAL]` The engine's write API opens the profile file it is about to push (an output report
 /// followed by one input read), and the Apex 7 write capture shows it as
 /// `wValue 0x0200 wIndex 1 wLength 64` answered 305 ms later with `88 01 00…`. The file ids are the same
-/// as on the read side: `PROFILE_FS_BASE + slot` for the profile file. Descriptor and capture facts:
-/// `docs/development/apex-7-onboard-profile-write.md`.
+/// as on the read side: `PROFILE_FS_BASE + slot` for the profile file.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct OnboardFileOpenCommand {
     /// Profile file id.
@@ -2483,7 +2473,7 @@ mod tests {
         // Read side: the buffer length goes to the device verbatim (HIDIOCGFEATURE), so the ask equals the
         // capture's GET wLength. Write side: the kernel strips the report number, so the 643-byte buffer of
         // ONBOARD_FEATURE_REPORT_SIZE goes out as wLength 642. The asymmetry is the kernel's, and the
-        // measured lengths are the anchor: 642 answers, 643 never completes (2026-10-15).
+        // measured lengths are the anchor: 642 answers, 643 never completes
         assert_eq!(ONBOARD_READ_WIRE_BYTES, 642, "the capture's GET wLength and our ask");
         assert_eq!(
             ONBOARD_FEATURE_REPORT_SIZE,

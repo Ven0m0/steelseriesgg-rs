@@ -12,8 +12,8 @@
 // tables, and `node tools/profile-gui/sync-products.mjs --check` (also run as a check below) to fail
 // on drift without rewriting.
 //
-// Every check is a thunk, so an API the suite gets wrong is reported as a failing check and
-// the run reaches the summary instead of dying halfway. Exits non-zero when any check fails.
+// Every check is a thunk: a check the suite gets wrong fails and the run reaches the summary.
+// Exits non-zero when any check fails.
 import { existsSync, readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { installFakeDom, loadApp } from './fake-dom.mjs';
@@ -1631,8 +1631,7 @@ ok('the META mask is the measured rule: bound META-layer keys by their own HID c
   const copyDoc = app.addFile('mask-copy.json', rootTexts[4]).file.doc;
   // The copy is the file a page edit made: its binding table carries one META binding more than a stock
   // read, and its mask carries the bit that binding needs and the stock mask has no bit for. That extra
-  // bit is the measurement that the mask follows the META layer (the stored bytes were the read's stale
-  // ones until this page's own write re-derived them on 2026-10-20).
+  // bit is the measurement that the mask follows the META layer (the stored bytes were the read's stale ones).
   const copyBits = app.computeMetaMask(copyDoc);
   const stockBits = apex.lighting.meta_mapped_elements;
   const byteNum = (mask, index) => Number(`0x${mask.split(' ')[index]}`);
