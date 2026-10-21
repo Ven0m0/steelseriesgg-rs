@@ -89,13 +89,29 @@ pub fn profile_slot(usage: u8) -> Option<usize> {
     WIRED_2023_PROFILE_SLOTS.iter().position(|&u| u == usage)
 }
 
-/// Colour of `usage` in a per-key request (last entry wins), black if it is not listed.
-fn per_key_color(key_colors: &[(u8, Color)], usage: u8) -> Color {
-    key_colors
-        .iter()
-        .rev()
-        .find(|(k, _)| *k == usage)
+/// Colour of `usage` in a per-key request (last entry wins), else its colour in `previous`, else black.
+fn per_key_color(key_colors: &[(u8, Color)], previous: &[(u8, Color)], usage: u8) -> Color {
+    [key_colors, previous]
+        .into_iter()
+        .find_map(|list| list.iter().rev().find(|(k, _)| *k == usage))
         .map_or(Color::BLACK, |(_, c)| *c)
+}
+
+/// File holding the last direct frame ssgg sent, as `[usage][R][G][B]` entries. The board has no
+/// colour read-back, so this is the only way a per-key request can leave the other keys alone.
+/// shortcut: only knows what ssgg sent; GG or on-board changes since then are invisible, upgrade if a
+/// read-back command is found.
+fn last_frame_path(product_id: u16) -> Option<std::path::PathBuf> {
+    crate::config::Config::config_dir().map(|dir| dir.join(format!("direct-frame-{product_id:04x}.bin")))
+}
+
+fn parse_last_frame(bytes: &[u8]) -> Vec<(u8, Color)> {
+    bytes
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|e| (e[0], Color::new(e[1], e[2], e[3])))
+        .collect()
 }
 
 /// Apex Pro TKL 2023 implementation; also drives the other models that take direct-mode lighting
@@ -207,7 +223,33 @@ impl ApexProTkl2023 {
     fn send_direct_frame(&mut self, color_for: impl Fn(u8) -> Color) -> Result<()> {
         self.ensure_new_protocol_init()?;
         let buf = self.build_direct_frame(color_for);
-        self.inner.send_feature(&buf, buf.len())
+        self.inner.send_feature(&buf, buf.len())?;
+        self.save_last_frame(&buf);
+        Ok(())
+    }
+
+    /// Remember the entries of a frame that reached the board. Best effort: a failed save only costs
+    /// the next per-key request its merge base, so it is logged and not propagated.
+    fn save_last_frame(&self, frame: &[u8]) {
+        let Some(path) = last_frame_path(self.inner.info().product_id) else {
+            return;
+        };
+        let entries = &frame[3..3 + self.direct_keys().len() * 4];
+        let saved = path
+            .parent()
+            .map_or(Ok(()), std::fs::create_dir_all)
+            .map_err(crate::Error::from)
+            .and_then(|()| crate::fs_utils::secure_write(&path, entries));
+        if let Err(e) = saved {
+            tracing::warn!("Could not save the last direct frame to {}: {e}", path.display());
+        }
+    }
+
+    fn load_last_frame(&self) -> Vec<(u8, Color)> {
+        last_frame_path(self.inner.info().product_id)
+            .and_then(|path| std::fs::read(path).ok())
+            .map(|bytes| parse_last_frame(&bytes))
+            .unwrap_or_default()
     }
 
     fn build_direct_frame(&self, color_for: impl Fn(u8) -> Color) -> Vec<u8> {
@@ -236,8 +278,8 @@ impl ApexProTkl2023 {
         self.send_direct_frame(|_| color)
     }
 
-    /// [EXPERIMENTAL] Per-key colours as one direct frame. Keys not listed are sent black: a frame
-    /// replaces every key and the board has no known read-back, so there is no prior state to keep.
+    /// [EXPERIMENTAL] Per-key colours as one direct frame. A frame replaces every key and the board has
+    /// no known read-back, so unlisted keys keep the colour of the last frame ssgg sent (black if none).
     fn send_direct_key_colors(&mut self, key_colors: &[(u8, Color)]) -> Result<()> {
         for (usage, _) in key_colors.iter().filter(|(u, _)| !self.direct_keys().contains(u)) {
             tracing::warn!("HID usage {usage:#04x} is not addressable in direct mode; skipped");
@@ -247,7 +289,11 @@ impl ApexProTkl2023 {
                 "None of the requested keys is addressable in direct mode".to_string(),
             ));
         }
-        self.send_direct_frame(|usage| per_key_color(key_colors, usage))
+        let previous = self.load_last_frame();
+        if previous.is_empty() {
+            tracing::warn!("No saved frame; keys not named are sent black");
+        }
+        self.send_direct_frame(|usage| per_key_color(key_colors, &previous, usage))
     }
 
     /// Set actuation point for all keys (global).
@@ -480,7 +526,7 @@ mod tests {
     fn wired_2023_per_key_frame_lights_only_requested_keys() {
         let keyboard = keyboard_for(product_ids::APEX_PRO_TKL_2023);
         let requested = [(0x1A, Color::RED), (0x29, Color::BLUE)]; // W, Esc
-        let frame = keyboard.build_direct_frame(|usage| per_key_color(&requested, usage));
+        let frame = keyboard.build_direct_frame(|usage| per_key_color(&requested, &[], usage));
 
         assert_eq!(frame.len(), WIRED_2023_PACKET_LENGTH);
         assert_eq!(&frame[..3], &[0x00, APEX_2023_PACKET_ID_DIRECT_WIRED, 0x54]);
@@ -499,6 +545,16 @@ mod tests {
             assert_eq!(&entry[1..], &expected, "usage {:#04x}", entry[0]);
         }
         assert!(frame[3 + WIRED_2023_KEYS.len() * 4..].iter().all(|&b| b == 0));
+    }
+
+    #[test]
+    fn per_key_request_keeps_previous_colours_for_unlisted_keys() {
+        let previous = parse_last_frame(&[0x1A, 1, 2, 3, 0x04, 9, 9, 9]);
+        let requested = [(0x04, Color::RED)];
+
+        assert_eq!(per_key_color(&requested, &previous, 0x04), Color::RED);
+        assert_eq!(per_key_color(&requested, &previous, 0x1A), Color::new(1, 2, 3));
+        assert_eq!(per_key_color(&requested, &previous, 0x05), Color::BLACK);
     }
 
     #[test]

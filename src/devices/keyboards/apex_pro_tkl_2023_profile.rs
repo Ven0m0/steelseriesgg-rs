@@ -18,7 +18,11 @@ pub const PROFILE_CHECKSUM_OFFSET: usize = 12_320;
 
 /// Observed `(tenths of a mm, actuation raw, reset raw)` triples. GG wrote both bytes together and the
 /// scale is non-linear, so values in between are unknown and must not be interpolated.
-const ACTUATION_POINTS: [(u8, u8, u8); 4] = [(1, 0x05, 0x05), (10, 0x15, 0x12), (20, 0x39, 0x34), (30, 0x86, 0x7B)];
+///
+/// The 1.0mm point is a live read (owner's board, 2026-10-21, GG's UI showed 1.0mm; see
+/// `docs/development/apex-pro-tkl-2023-gg-capture.md`), overriding the earlier capture's `(0x15, 0x12)`
+/// for that point, which was never confirmed against a labelled UI value the way this one was.
+const ACTUATION_POINTS: [(u8, u8, u8); 4] = [(1, 0x05, 0x05), (10, 0x2F, 0x2A), (20, 0x39, 0x34), (30, 0x86, 0x7B)];
 
 /// Profile checksum: the STM32 hardware CRC-32 (poly 0x04C11DB7, init 0xFFFFFFFF, no reflection,
 /// no final XOR) over the data read as little-endian 32-bit words, MSB first.

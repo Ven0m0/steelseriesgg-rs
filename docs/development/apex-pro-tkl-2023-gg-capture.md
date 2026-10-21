@@ -61,8 +61,8 @@ field names come from GG's stored config (see "GG's stored config" below).
 | Blob offset | Content | Values seen |
 |-------------|---------|-------------|
 | 1080 | `08 00 00 00` | meaning unknown |
-| 1084 + slot | Actuation point (`hall_thresholds.h`) | 0.1 mm = 0x05, 1.0 = 0x15, 2.0 = 0x39, 3.0 = 0x86 |
-| 1154 + slot | Reset point (`hall_thresholds.l`) | 0.1 mm = 0x05, 1.0 = 0x12, 2.0 = 0x34, 3.0 = 0x7b |
+| 1084 + slot | Actuation point (`hall_thresholds.h`) | 0.1 mm = 0x05, 1.0 = 0x2F, 2.0 = 0x39, 3.0 = 0x86 |
+| 1154 + slot | Reset point (`hall_thresholds.l`) | 0.1 mm = 0x05, 1.0 = 0x2A, 2.0 = 0x34, 3.0 = 0x7b |
 | 1224 | `04 00 00 00` x3, then zeros | meaning unknown |
 | 1446 + slot | Release mode (`release_mode`) | 0 = off, 2 = Rapid Trigger, 3 = Key Guard |
 | 1516 + slot | Rapid Trigger sensitivity (`rapid_trigger_sensitivity`) | default 2 |
@@ -74,7 +74,11 @@ Key W is slot 16 (actuation byte at 1100, reset byte at 1170, mode byte at 1462)
 
 - The actuation encoding is non-linear (a raw sensor scale); only these four points are known.
 - Earlier versions of this note called offset 1170 a "second threshold". It is the reset point
-  (`hall_thresholds.l`) of the same setting; GG's defaults are `h` = 21 (0x15), `l` = 18 (0x12).
+  (`hall_thresholds.l`) of the same setting. An earlier capture called `h` = 21 (0x15), `l` = 18 (0x12)
+  the default; a live read of the owner's board at GG's own labelled 1.0mm (2026-10-21) instead showed
+  `h` = 47 (0x2F), `l` = 42 (0x2A), which is now the value in `ACTUATION_POINTS`. The 21/18 claim was
+  never checked against a labelled UI value and is likely wrong, but it has not been re-captured to
+  confirm what (if anything) it corresponds to.
 
 ### Slot map (slot = index, HID usage in hex)
 
@@ -130,6 +134,51 @@ offset 2700 before the first write.
 
 Meaning of `b1`, `b2`, `34` and the `38 67` payload is unknown.
 
+## Live HID trace and engine memory read (2026-10-21)
+
+Method, on the owner's machine (Windows, real `0x1628`, GG running): Frida attached read-only to
+`SteelSeriesEngine.exe`, hooking `ReadFile`/`WriteFile`/`DeviceIoControl` on kernel32 (no Ghidra needed, no
+target modification). First two attach attempts coincided with the engine restarting on its own (no crash
+report in the Windows Application event log either time); a third attach, hooking only small-buffer
+I/O, ran stably for the whole session. Separately, the engine's own heap was read (`ReadProcessMemory`).
+Over about one minute, including the owner opening the keyboard's actuation settings page in GG:
+
+- **No `GET_FEATURE` control transfer ever happened.** Only `SET_FEATURE`, every time 645 bytes, the known
+  `0x40` per-key lighting frame (GG's own ~19 fps stream). This checks every feature-report transaction
+  the process made to any HID device for the whole trace, not a sample.
+- **Output-report polling is exactly the already-listed set**: `02 01 80`, `b1`, `b2`, `34`, `90`, cycling
+  every few seconds. Opening the actuation page triggered none of these, and no new command.
+- **Conclusion: this firmware/GG version has no actuation (or lighting) read-back at all.** GG's actuation
+  UI is backed entirely by its own cached config, not a hardware query. This matches what `ssgg actuation`
+  already showed indirectly (`0x2D` has no effect on `0x1628`, confirmed by the owner 2026-10-21) and
+  explains it: there is nothing on the wire to read, not a missing `ssgg` command.
+- The engine's heap held the exact live JSON settings object GG keeps for this device (device id 242,
+  profile name `Config 5`), decoded whole via `ReadProcessMemory` + JSON parsing of the heap bytes
+  (no decryption of anything was needed or attempted; this is the engine's live, already-decoded state).
+  Confirmed field shapes, matching `src/devices/keyboards/apex_pro_tkl_2023_profile.rs` and the slot map
+  above: `hall_thresholds.keys[{h,hid,l}]` (all 68 keys), `release_mode.keys[{hid,mode}]`,
+  `rapid_trigger_sensitivity.keys[{hid,sensitivity}]`, `rapid_tap_pairs.pairs[{hid_1,hid_2,mode,report_both_keys}]`,
+  `second_actuation_thresholds.keys[{h,hid,l}]`.
+  Live values: every key at `h=47,l=42`, `release_mode` off on every key, `rapid_trigger_sensitivity=2`
+  uniformly, `rapid_tap_enable=0`, `second_actuation_thresholds` all zero.
+- **Actuation calibration conflict, resolved in favour of the live read.** The owner confirmed GG's UI
+  showed **1.0mm** at the time of this read; the board itself read `h=47(0x2F), l=42(0x2A)` for every key.
+  The code's 1.0mm point used to be `h=0x15(21), l=0x12(18)`, from an earlier capture that was never checked
+  against a labelled UI value. `ACTUATION_POINTS` now uses the live `(0x2F, 0x2A)` pair for 1.0mm (owner's
+  call, 2026-10-21: the live-captured, UI-labelled value outranks the unlabelled one). The `apex-pro-tkl-2024-cyber`
+  device file's `hall-thresholds-to-actuation-alist` (recovered from the same heap read, included via
+  `(include "apex_pro_tkl_2022")`) is a different table entirely: raw hall value &rarr; a 1-40 "actuation
+  level" index for the Prism reactive-lighting effect, not mm depth; unrelated to this point.
+- Base device file confirmed by name: a resident `apex-pro-tkl-2024-cyber`/`-steel` device definition
+  contains `(include "apex_pro_tkl_2022")`, matching the code's assumption about which `.edevice` family
+  `0x1628` belongs to. The `apex_pro_tkl_2022` file's own `api`/read-logic body was not found resident in
+  the heap during this session (the engine appears not to keep it after initial load), so this trace could
+  not confirm or rule out a read-back command by reading the spec's source; the live-traffic result above
+  (no `GET_FEATURE`, no new poll on UI actuation view) is the direct evidence instead.
+- `.edevice` decryption was not pursued: GG decrypts these into memory at its own startup, so reading the
+  engine's live, already-decoded state (as above) answered the open questions here without needing to break
+  the encryption.
+
 ## Open questions
 
 1. ~~Checksum at blob offset 12320.~~ Solved 2026-10-15 (see "Checksum").
@@ -138,8 +187,17 @@ Meaning of `b1`, `b2`, `34` and the `38 67` payload is unknown.
    `second_actuation_thresholds` is stored.
 3. ~~Whether replaying the 0x40 frames works from this project.~~ Tested once on 2026-10-14 with GG
    stopped: `ssgg rgb color FF0000` put 644 wire bytes on interface 1 (checked with USBPcap) and the
-   keyboard turned solid red (user-confirmed). Only that one colour was confirmed visually; per-key
-   patterns, other colours and Linux hidraw were not tested. The 0x4B init is skipped for this model
-   and was not needed in that test.
+   keyboard turned solid red (user-confirmed). Per-key tested 2026-10-21: `ssgg rgb perkey set-key W red`
+   lit W red and turned every other key off (by design: a per-key frame replaces all 84 keys and unlisted
+   ones send black; `ssgg` now merges onto the last frame it sent, see `apex_pro_tkl_2023.rs`). Other
+   colours and Linux hidraw were still not tested. The 0x4B init is skipped for this model and was not
+   needed in either test.
 4. The init sequence at GG startup (needs a capture that begins before GG launches).
 5. What `38 66` toggles globally and what `38 67` configures.
+6. ~~Whether an actuation/profile read-back command exists.~~ No. Live HID trace, 2026-10-21 (see "Live HID
+   trace and engine memory read"): zero `GET_FEATURE` transfers over ~1 minute including the owner viewing
+   GG's actuation page; GG's UI reads only its own cached config. Explains `ssgg actuation` having no effect
+   on `0x1628` (confirmed by the owner, 2026-10-21): there is no wire command to send.
+7. ~~Whether `ACTUATION_POINTS`' `(10, 21, 18)` (1.0mm) is correct.~~ No: live read, 2026-10-21, showed
+   `(47, 42)` on a board the owner confirmed GG reported as 1.0mm. The table now uses `(10, 47, 42)`; the
+   old `(21, 18)` was never checked against a labelled UI value in the first place.

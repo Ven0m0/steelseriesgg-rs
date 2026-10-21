@@ -15,11 +15,11 @@ Protocol work has three states. Never mix them up or upgrade a status without ha
 | Constant | Code | Status |
 |----------|------|--------|
 | `CommandCode::PerKeyRgb` | `0x23` | Placeholder — actual per-key command unknown |
-| `CommandCode::Apex2023Direct` | `0x40` | Experimental — one solid-colour frame replayed on `0x1628` (2026-10-14); per-key, other colours untested |
+| `CommandCode::Apex2023Direct` | `0x40` | Experimental — one solid-colour frame replayed on `0x1628` (2026-10-14); per-key frame confirmed on hardware 2026-10-21 (lit one key, rest went black as designed, matching ssgg's frame-replaces-all-keys behaviour); other colours and Linux untested |
 | `APEX_GEN1_PACKET_ID_DIRECT` (`apex_pro_tkl_2023.rs`) | `0x3A` | Experimental — original Apex Pro `0x1610`, from OpenRGB, untested |
 | `Apex8ZoneBrightnessCommand` | `0x23` | Experimental — Apex 3 TKL brightness, from OpenRGB, untested |
 | `CommandCode::ProfileChunk` / `ProfileChunkCommand` (Gen3 header `03 01 80`) | `0x03` | Experimental — `0x1628` profile upload chunk; checksum matches captures; never sent (no read-back) |
-| `CommandCode::ActuationControl` | `0x2D` | Experimental — firmware command unknown |
+| `CommandCode::ActuationControl` | `0x2D` | Experimental — firmware command unknown; confirmed no-op on `0x1628` wired (owner test, 2026-10-21): no feel or GG-visible change. Live HID trace the same day showed GG itself never queries or sets actuation through any HID command on this model — it rewrites the on-board profile instead (see `docs/development/apex-pro-tkl-2023-gg-capture.md`, "Live HID trace and engine memory read") |
 | `OnboardDriverModeCommand` | `0x6C` | Experimental — `6c 00 01` is `DriverModeEnable` in the engine's init-sequence descriptor and is the fourth frame of GG's opening chain (read capture, answered by nothing); `6c 00 00` closes the mode at session close (engine-side only, not in the capture). Nothing in `ssgg` sends either |
 | `OnboardFirmwareVersionCommand` | `0x90` | Confirmed — Apex 7 `0x1612`, Linux, 2026-10-20: `90 00` and `90 01` both answered |
 | `OnboardPayloadPullCommand` | `0x85` | Confirmed — Apex 7 `0x1612`, Linux, 2026-10-20: 121 pulls answered by the input report |

@@ -46,10 +46,13 @@ Lighting is the only part replayed from `ssgg` so far (one solid red, 2026-10-14
    - Capture one run with USBPcap to confirm frames still match the GG layout (filter in `AGENTS.md`).
    Fix whatever fails. If brightness sends a no-op command for `0x1628`, implement it as RGB scaling in the 2023
    direct path (matches GG behaviour).
-   Code state (2026-10-15): `rgb perkey` on `0x1628` now sends the GG-layout 84-key frame with unlisted keys black
-   (`set_key_colors` in `apex_pro_tkl_2023.rs`); `rgb brightness` still sends the generic `00 22 <level>` output
-   report. Expect per-key to light only the named keys and the rest to go dark (`set-key`, `set-keys`,
-   `set-region` and `test-matrix` all use the frame). Per-key *effects* (`set_per_key_effect`,
+   Code state (2026-10-21): `rgb perkey` on `0x1628` sends the GG-layout 84-key frame, merged onto the last frame
+   `ssgg` itself sent (`per_key_color`/`save_last_frame`/`load_last_frame` in `apex_pro_tkl_2023.rs`) so unlisted
+   keys keep their previous colour instead of going black; falls back to black with a warning when no frame was
+   saved yet. `[HW] confirmed 2026-10-21`: `rgb perkey set-key W red` lit W red, other keys unaffected by the fix
+   (prior behaviour, also confirmed same day: without a saved frame, unlisted keys went dark - this is why,
+   see `docs/development/apex-pro-tkl-2023-gg-capture.md`). `rgb brightness` still sends the generic `00 22
+   <level>` output report, still untested on `0x1628`. Per-key *effects* (`set_per_key_effect`,
    `trigger_key_reactive`, `apply_per_key_effect_with_brightness`) still reach the generic `0x23` placeholder and
    `0x09` apply on direct-protocol models; route them through the frame if the effect tests fail.
 2. **Extra output report before each frame.** The existing `initialize()` path sends `00 09 00 ..` as an output report
@@ -62,22 +65,29 @@ Lighting is the only part replayed from `ssgg` so far (one solid red, 2026-10-14
    frame on `0x1628`. If yes: update `.claude/rules/experimental-protocol.md`, the code labels and the docs in one
    commit naming "Apex Pro TKL 2023 (wired, PID 0x1628)" and the test date.
 
-## P2. Apex Pro TKL 2023 wired: actuation and profile (blocked on read-back)
+## P2. Apex Pro TKL 2023 wired: actuation and profile (blocked on read-back, now confirmed permanent)
 
-`ssgg actuation` sends the experimental `0x2D` command; GG instead rewrites the 12,500-byte on-board profile.
-Writing the profile is blocked on a read-back command: the checksum is solved, but there is no current blob to modify.
+`ssgg actuation` sends the experimental `0x2D` command; confirmed no-op on hardware (owner, 2026-10-21: no
+feel or GG-visible change). GG instead rewrites the 12,500-byte on-board profile, and a live HID trace of the
+engine (2026-10-21, see `docs/development/apex-pro-tkl-2023-gg-capture.md`, "Live HID trace and engine memory
+read") found **no `GET_FEATURE` transfer at all** over a minute that included the owner viewing GG's own
+actuation page - GG's UI reads its cached config, never the board. This is not a gap in `ssgg`'s HID coverage;
+there is nothing on the wire to read on this firmware. Writing the profile stays blocked on a read-back
+command for the same reason: the checksum is solved, but there is no way to get a current blob to modify, and
+none is expected to turn up without new firmware.
 
-1. **Partly done 2026-10-15:** `keyboards/apex_pro_tkl_2023_profile.rs` has the checksum, `set_actuation` (rejects
-   unknown mm values and keys without a slot) and the 25-chunk split, all unit-tested. Not wired to any command:
-   without a read-back (step 2) there is no current blob to modify. Original task: implement a profile read-modify-write for actuation on `0x1628` (chunk
-   header `03 01 80 | len | offset | 00 00`, 25 chunks), using `WIRED_2023_PROFILE_SLOTS` and the four known raw
-   actuation values. Unknown mm values must be rejected, not interpolated, until more points are captured. Get
-   explicit user approval before the first write to the keyboard.
-2. **Capture GG startup** (USBPcap started before launching GG) to get the init sequence and see whether GG reads
-   the profile back. A read-back command would allow safe read-modify-write and replaces the old
-   "discover an actuation read-back command" task (`src/bin/discover_actuation.rs`).
-3. **Decode remaining commands** while capturing: `b1`, `b2`, `34`, `38 66`, `38 67`; the profile tables at 1080,
-   1224, 1590; where `second_actuation_thresholds` is stored. Record findings in the capture note.
+1. **Done 2026-10-15, still blocked:** `keyboards/apex_pro_tkl_2023_profile.rs` has the checksum, `set_actuation`
+   (rejects unknown mm values and keys without a slot) and the 25-chunk split, all unit-tested. Not wired to any
+   command: no read-back exists (confirmed 2026-10-21, not just undiscovered), so there is no current blob to
+   modify and a write would overwrite the board's other on-board settings with a stale/synthetic blob. Leave
+   unwired unless a read-back command surfaces on a firmware update.
+2. ~~Actuation calibration conflict~~ resolved 2026-10-21: `ACTUATION_POINTS` 1.0mm point updated to the live
+   `(47,42)` reading (owner's board, GG UI showed 1.0mm), replacing the earlier, never-UI-verified `(21,18)`.
+3. ~~Capture GG startup to check for a read-back command~~ superseded by the 2026-10-21 live trace above: there
+   is none. **Still open, needs a capture** (USBPcap, started before launching GG): the init-sequence byte
+   meanings `b1`, `b2`, `34`, `38 66`, `38 67`; the profile tables at blob offsets 1080, 1224, 1590.
+   `second_actuation_thresholds`'s field name is now known (2026-10-21 live read, all zero on the owner's
+   board) but not its blob offset.
 
 ## P3. Apex 3 TKL (`0x1622`) RGB not applied (issues #173, #257)
 
