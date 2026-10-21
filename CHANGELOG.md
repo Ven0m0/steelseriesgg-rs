@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Releases and this changelog are generated automatically from
 [Conventional Commits](https://www.conventionalcommits.org/) by release-please.
 
+## [0.1.10](https://github.com/Ven0m0/steelseriesgg-rs/compare/v0.1.9...v0.1.10) (2026-10-21)
+
+
+### Added
+
+* **apex-2023:** improve desktop app, add generic x86-64 compiling ([#307](https://github.com/Ven0m0/steelseriesgg-rs/issues/307)) ([689322f](https://github.com/Ven0m0/steelseriesgg-rs/commit/689322fdbb7a00739f7a404f31ec8314d5827920))
+
 ## [0.1.9](https://github.com/Ven0m0/steelseriesgg-rs/compare/v0.1.8...v0.1.9) (2026-10-21)
 
 
