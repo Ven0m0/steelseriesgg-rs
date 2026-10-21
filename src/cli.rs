@@ -43,6 +43,12 @@ pub(crate) enum Commands {
         action: ActuationAction,
     },
 
+    /// Control headsets (Arctis Nova 7 family only, EXPERIMENTAL and untested on hardware)
+    Headset {
+        #[command(subcommand)]
+        action: HeadsetAction,
+    },
+
     /// Manage profiles
     Profile {
         #[command(subcommand)]
@@ -432,6 +438,30 @@ pub(crate) enum RgbAction {
     Perkey {
         #[command(subcommand)]
         action: PerKeyAction,
+    },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum HeadsetAction {
+    /// Show battery, connection, charging and ChatMix
+    Status,
+
+    /// Set sidetone (0-100, mapped onto the headset's 4 steps)
+    Sidetone {
+        /// Sidetone level
+        level: u8,
+    },
+
+    /// Set the inactivity auto-off timeout (0 = disabled)
+    AutoOff {
+        /// Timeout in minutes
+        minutes: u8,
+    },
+
+    /// Set microphone volume (0-100, mapped onto the headset's 8 steps)
+    MicVolume {
+        /// Microphone volume
+        level: u8,
     },
 }
 

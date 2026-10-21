@@ -29,6 +29,10 @@ Protocol work has three states. Never mix them up or upgrade a status without ha
 | `OnboardPayloadPushCommand` | `0x05` | Confirmed — Apex 7 `0x1612`, Linux, 2026-10-20: every push answered `05 01 …` |
 | `OnboardFileCommitCommand` | `0xEB` | Confirmed — Apex 7 `0x1612`, Linux, 2026-10-20: accepted with no write-specific answer |
 | `OnboardProfileDeployCommand` | `0x89` | Confirmed — Apex 7 `0x1612`, Linux, 2026-10-20: the keyboard runs the slot named |
+| `CommandCode::HeadsetSidetone` / `HeadsetSettingCommand` | `0x39` | Experimental — Arctis Nova 7 family sidetone `00 39 <0..=3>`, from community forks, untested |
+| `CommandCode::HeadsetMicVolume` / `HeadsetSettingCommand` | `0x37` | Experimental — Arctis Nova 7 family mic volume `00 37 <0..=7>`, from community forks, untested |
+| `CommandCode::HeadsetAutoOff` / `HeadsetSettingCommand` | `0xA3` | Experimental — Arctis Nova 7 family auto-off `00 a3 <minutes>`, from community forks, untested |
+| `CommandCode::HeadsetStatus` / `HeadsetStatusQueryCommand` | `0xB0` | Experimental — Arctis Nova 7 family status query `00 b0` and `b0 …` reply, from community forks, untested |
 
 ## Rules
 

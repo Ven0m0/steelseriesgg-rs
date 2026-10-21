@@ -9,8 +9,8 @@ mod gui;
 use clap::Parser;
 
 use crate::cli::{
-    ActuationAction, Cli, Commands, PerKeyAction, PerformanceAction, PollrateAction, ProfileAction, RgbAction,
-    parse_key_name, require_color,
+    ActuationAction, Cli, Commands, HeadsetAction, PerKeyAction, PerformanceAction, PollrateAction, ProfileAction,
+    RgbAction, parse_key_name, require_color,
 };
 use crate::daemon::{cmd_daemon, cmd_server};
 use tokio::task::yield_now;
@@ -129,6 +129,11 @@ async fn main() -> Result<()> {
         Commands::Actuation { action } => {
             let manager = new_device_manager()?;
             cmd_actuation(&manager, action).await?;
+        }
+
+        Commands::Headset { action } => {
+            let manager = new_device_manager()?;
+            cmd_headset(&manager, action)?;
         }
 
         Commands::Profile { action } => {
@@ -386,6 +391,60 @@ async fn cmd_rgb(manager: &DeviceManager, action: RgbAction) -> Result<()> {
 
         RgbAction::Perkey { action } => {
             cmd_per_key_rgb(&mut keyboard, action).await?;
+        }
+    }
+
+    Ok(())
+}
+
+fn cmd_headset(manager: &DeviceManager, action: HeadsetAction) -> Result<()> {
+    let headset_info = manager
+        .first_device_of_type(DeviceType::Headset)
+        .ok_or_else(|| Error::Other("No supported headset found".to_string()))?;
+
+    println!("Using headset: {}", headset_info.name);
+    warn_if_gg_engine_running();
+
+    let mut headset = manager.open_headset(headset_info)?;
+    headset.initialize()?;
+
+    if !matches!(action, HeadsetAction::Status) {
+        eprintln!(
+            "{}",
+            "[EXPERIMENTAL] Headset commands come from community forks and are untested on hardware.".yellow()
+        );
+    }
+
+    match action {
+        HeadsetAction::Status => {
+            let status = headset.status()?;
+            let yes_no = |v: Option<bool>| match v {
+                Some(true) => "yes".to_string(),
+                Some(false) => "no".to_string(),
+                None => "unknown".to_string(),
+            };
+            println!("Connected: {}", yes_no(status.connected));
+            println!("Charging:  {}", yes_no(status.charging));
+            match status.battery_percent {
+                Some(percent) => println!("Battery:   {}%", percent),
+                None => println!("Battery:   unknown"),
+            }
+            match status.chat_mix {
+                Some(mix) => println!("ChatMix:   {:+.2} (-1 = game, +1 = chat)", mix),
+                None => println!("ChatMix:   unsupported"),
+            }
+        }
+        HeadsetAction::Sidetone { level } => {
+            headset.set_sidetone(level)?;
+            println!("Sidetone request sent ({}).", level);
+        }
+        HeadsetAction::AutoOff { minutes } => {
+            headset.set_auto_off(minutes)?;
+            println!("Auto-off request sent ({} min).", minutes);
+        }
+        HeadsetAction::MicVolume { level } => {
+            headset.set_mic_volume(level)?;
+            println!("Microphone volume request sent ({}).", level);
         }
     }
 

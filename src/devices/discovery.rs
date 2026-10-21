@@ -5,6 +5,7 @@ use std::time::{Duration, Instant};
 use tokio::sync::{RwLock, mpsc};
 use tracing::{debug, info, warn};
 
+use super::headsets::nova7::{Nova7Headset, nova7_model};
 use super::headsets::{GenericHeadset, Headset};
 use super::hid_reports::ConnectionHealth;
 use super::keyboards::apex::Apex3Tkl;
@@ -541,7 +542,10 @@ impl DeviceManager {
         reject_detect_only(info)?;
 
         let hid_device = self.open_device(info)?;
-        Ok(Box::new(GenericHeadset::new(info.clone(), hid_device)))
+        Ok(match nova7_model(info.product_id) {
+            Some(model) => Box::new(Nova7Headset::new(info.clone(), hid_device, model)),
+            None => Box::new(GenericHeadset::new(info.clone(), hid_device)),
+        })
     }
 
     // === Hot-plug monitoring methods ===
@@ -1303,6 +1307,39 @@ mod tests {
         assert!(matches!(
             manager.open_keyboard(&info),
             Err(Error::DeviceCommunication(msg)) if msg.contains("not a keyboard")
+        ));
+    }
+
+    #[test]
+    fn nova7_pids_route_to_nova7_and_pick_the_0xffc0_collection() {
+        use super::super::headsets::nova7::NOVA7_MODELS;
+        use super::super::product_ids::{ARCTIS_NOVA_7_22A1, ARCTIS_NOVA_7_RX, ARCTIS_NOVA_PRO_OMNI};
+
+        for m in NOVA7_MODELS {
+            assert!(nova7_model(m.product_id).is_some(), "{:#06x}", m.product_id);
+            assert!(!super::super::is_detect_only(m.product_id), "{:#06x}", m.product_id);
+            let vendor = control_score(0xFFC0, 3, m.product_id, DeviceType::Headset).unwrap();
+            let other_vendor = control_score(0xFFC1, 0, m.product_id, DeviceType::Headset).unwrap();
+            let standard = control_score(0x000C, 0, m.product_id, DeviceType::Headset);
+            assert!(vendor > other_vendor);
+            assert_eq!(standard, None);
+        }
+        assert!(nova7_model(ARCTIS_NOVA_7_RX).is_none());
+        assert!(nova7_model(ARCTIS_NOVA_PRO_OMNI).is_none());
+        assert!(super::super::is_detect_only(ARCTIS_NOVA_PRO_OMNI));
+        assert!(!super::super::is_detect_only(ARCTIS_NOVA_7_22A1));
+    }
+
+    #[test]
+    fn open_headset_rejects_detect_only_omni() {
+        let Ok(manager) = DeviceManager::new() else { return };
+        let mut info = create_test_device_info(None);
+        info.device_type = DeviceType::Headset;
+        info.product_id = super::super::product_ids::ARCTIS_NOVA_PRO_OMNI;
+
+        assert!(matches!(
+            manager.open_headset(&info),
+            Err(Error::DeviceCommunication(msg)) if msg.contains("not supported yet")
         ));
     }
 

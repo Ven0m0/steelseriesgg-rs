@@ -1,5 +1,7 @@
 //! Headset device support (Arctis series).
 
+pub mod nova7;
+
 use super::{Device, DeviceInfo, DeviceType, write_padded_report};
 use crate::{Error, Result};
 use hidapi::HidDevice;
@@ -28,6 +30,28 @@ pub trait Headset: Device {
 
     /// Set auto-off timeout in minutes (0 = disabled).
     fn set_auto_off(&mut self, minutes: u8) -> Result<()>;
+
+    /// Snapshot of battery, link and ChatMix state. The default asks for the battery and ChatMix separately and
+    /// reports `connected` and `charging` as unknown.
+    fn status(&mut self) -> Result<HeadsetStatus> {
+        Ok(HeadsetStatus {
+            connected: None,
+            charging: None,
+            battery_percent: self.battery_level()?,
+            chat_mix: Some(self.chat_mix()?),
+        })
+    }
+}
+
+/// Headset state as far as the protocol reports it; `None` marks a field the headset cannot report.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct HeadsetStatus {
+    pub connected: Option<bool>,
+    pub charging: Option<bool>,
+    /// Battery charge, 0-100.
+    pub battery_percent: Option<u8>,
+    /// ChatMix balance, -1.0 = full game, 1.0 = full chat.
+    pub chat_mix: Option<f32>,
 }
 
 /// Equalizer presets.
@@ -41,6 +65,10 @@ pub enum EqPreset {
 }
 
 /// Generic SteelSeries headset implementation.
+///
+/// [EXPERIMENTAL] Every `06 xx` command below (`06 18` battery, `06 45` ChatMix, `06 35` sidetone, `06 37`
+/// mic volume, `06 39` mic mute, `06 33` EQ, `06 31` auto-off) is unconfirmed: it has not been tested on
+/// hardware and no capture backs it.
 pub struct GenericHeadset {
     info: DeviceInfo,
     device: Option<Arc<Mutex<HidDevice>>>,

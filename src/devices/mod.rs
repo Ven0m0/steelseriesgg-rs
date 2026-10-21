@@ -441,13 +441,25 @@ pub mod product_ids {
     // Arctis Nova 3 Wireless (unverified — GG firmware names only).
     pub const ARCTIS_NOVA_3_WIRELESS_RX: u16 = 0x2267;
     pub const ARCTIS_NOVA_3_WIRELESS_TX: u16 = 0x2269;
-    // Arctis Nova 7 seen as 0x22A1 (issue #276, lsusb name; variant unknown). Detect-only.
+    // Arctis Nova 7 seen as 0x22A1 (issue #276, lsusb name). [EXPERIMENTAL] protocol, see headsets::nova7.
     pub const ARCTIS_NOVA_7_22A1: u16 = 0x22A1;
+    // Arctis Nova 7 family variants. PIDs from community forks, untested; behaviour table in headsets::nova7.
+    pub const ARCTIS_NOVA_7_DIABLO_IV: u16 = 0x223A;
+    pub const ARCTIS_NOVA_7X_V2: u16 = 0x2258;
+    pub const ARCTIS_NOVA_7_WOW: u16 = 0x227A;
+    pub const ARCTIS_NOVA_7_WIRELESS_GEN2: u16 = 0x227E;
+    pub const ARCTIS_NOVA_7P_GEN2: u16 = 0x2298;
+    pub const ARCTIS_NOVA_7X_GEN2: u16 = 0x229E;
+    pub const ARCTIS_NOVA_7X_ALT: u16 = 0x22A4;
+    pub const ARCTIS_NOVA_7X_ALT_V2: u16 = 0x22A5;
+    pub const ARCTIS_NOVA_7P_V2: u16 = 0x22A7;
+    pub const ARCTIS_NOVA_7_DIABLO_IV_V2: u16 = 0x22A9;
+    pub const ARCTIS_NOVA_7X_V2_ALT: u16 = 0x22AD;
 }
 
 /// Devices registered for detection only: no protocol is known, so `ssgg` must not write to them.
 pub fn is_detect_only(product_id: u16) -> bool {
-    matches!(product_id, product_ids::APEX_M750 | product_ids::ARCTIS_NOVA_7_22A1)
+    matches!(product_id, product_ids::APEX_M750 | product_ids::ARCTIS_NOVA_PRO_OMNI)
 }
 
 /// Get device type from product ID.
@@ -506,7 +518,18 @@ pub fn device_type_from_product_id(product_id: u16) -> DeviceType {
         | ARCTIS_NOVA_PRO_OMNI
         | ARCTIS_NOVA_3_WIRELESS_RX
         | ARCTIS_NOVA_3_WIRELESS_TX
-        | ARCTIS_NOVA_7_22A1 => DeviceType::Headset,
+        | ARCTIS_NOVA_7_22A1
+        | ARCTIS_NOVA_7_DIABLO_IV
+        | ARCTIS_NOVA_7X_V2
+        | ARCTIS_NOVA_7_WOW
+        | ARCTIS_NOVA_7_WIRELESS_GEN2
+        | ARCTIS_NOVA_7P_GEN2
+        | ARCTIS_NOVA_7X_GEN2
+        | ARCTIS_NOVA_7X_ALT
+        | ARCTIS_NOVA_7X_ALT_V2
+        | ARCTIS_NOVA_7P_V2
+        | ARCTIS_NOVA_7_DIABLO_IV_V2
+        | ARCTIS_NOVA_7X_V2_ALT => DeviceType::Headset,
 
         _ => DeviceType::Unknown,
     }
@@ -565,6 +588,17 @@ pub fn device_name_from_product_id(product_id: u16) -> &'static str {
         ARCTIS_NOVA_3_WIRELESS_RX => "Arctis Nova 3 Wireless (RX)",
         ARCTIS_NOVA_3_WIRELESS_TX => "Arctis Nova 3 Wireless (TX)",
         ARCTIS_NOVA_7_22A1 => "Arctis Nova 7",
+        ARCTIS_NOVA_7_DIABLO_IV => "Arctis Nova 7 Diablo IV",
+        ARCTIS_NOVA_7X_V2 => "Arctis Nova 7X v2",
+        ARCTIS_NOVA_7_WOW => "Arctis Nova 7 World of Warcraft",
+        ARCTIS_NOVA_7_WIRELESS_GEN2 => "Arctis Nova 7 Wireless Gen 2",
+        ARCTIS_NOVA_7P_GEN2 => "Arctis Nova 7P Gen 2",
+        ARCTIS_NOVA_7X_GEN2 => "Arctis Nova 7X Gen 2",
+        ARCTIS_NOVA_7X_ALT => "Arctis Nova 7X (alt)",
+        ARCTIS_NOVA_7X_ALT_V2 => "Arctis Nova 7X (alt v2)",
+        ARCTIS_NOVA_7P_V2 => "Arctis Nova 7P v2",
+        ARCTIS_NOVA_7_DIABLO_IV_V2 => "Arctis Nova 7 Diablo IV v2",
+        ARCTIS_NOVA_7X_V2_ALT => "Arctis Nova 7X v2 (alt)",
         _ => "Unknown SteelSeries Device",
     }
 }
@@ -650,8 +684,22 @@ mod tests {
         assert_eq!(device_name_from_product_id(APEX_M750), "Apex M750");
         assert_eq!(device_type_from_product_id(ARCTIS_NOVA_7_22A1), DeviceType::Headset);
         assert_eq!(device_name_from_product_id(ARCTIS_NOVA_7_22A1), "Arctis Nova 7");
-        assert!(is_detect_only(APEX_M750) && is_detect_only(ARCTIS_NOVA_7_22A1));
+        // 0x22A1 has an [EXPERIMENTAL] protocol since the Nova 7 family landed; the Omni has none known,
+        // so it replaces it here and GenericHeadset's untested `06 xx` bytes are never sent to it.
+        assert!(is_detect_only(APEX_M750) && is_detect_only(ARCTIS_NOVA_PRO_OMNI));
+        assert!(!is_detect_only(ARCTIS_NOVA_7_22A1));
         assert!(!is_detect_only(APEX_PRO_TKL_2023));
+    }
+
+    #[test]
+    fn test_nova_7_family_pids_are_named_headsets() {
+        for entry in headsets::nova7::NOVA7_MODELS {
+            assert_eq!(device_type_from_product_id(entry.product_id), DeviceType::Headset);
+            assert_ne!(
+                device_name_from_product_id(entry.product_id),
+                "Unknown SteelSeries Device"
+            );
+        }
     }
 
     #[test]

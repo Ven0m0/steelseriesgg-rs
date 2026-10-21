@@ -125,6 +125,27 @@ GG names PID `0x1628` `apex_pro_tkl_2022` regardless of the retail year.
 | 0x230A | arctis_gamebuds_dongle |
 | 0x230C | arctis_gamebuds_case |
 
+### Arctis Nova 7 family protocol [EXPERIMENTAL]
+
+Source: two community forks. Nothing here has been run from `ssgg` on hardware, so every command is
+Experimental (see `.claude/rules/experimental-protocol.md`). Code: `src/devices/headsets/nova7.rs`
+(per-PID table `NOVA7_MODELS`) and `HeadsetSettingCommand` / `HeadsetStatusQueryCommand` in
+`src/devices/hid_reports.rs`.
+
+- Transport: 64-byte output reports `00 <opcode> <arg>` zero padded (byte 0 is the hidapi report number), on the
+  vendor control collection (usage page `0xFFC0`, interface 3 in the forks). `control_score` already ranks that
+  usage page first, so no Nova 7 specific selection is needed.
+- Commands: sidetone `00 39 <0..=3>`, microphone volume `00 37 <0..=7>`, auto-off `00 a3 <minutes>`,
+  status query `00 b0`. The save frame `00 09` persists to the headset and is never sent.
+- Status reply (no report ID): `b0 <power> <battery> <charge> <chat game> <chat chat>`. Connected only when
+  power is 3 and charge is not 0. Charge 1 or 2 is charging, 3 is not. Battery is 0-100 on percent models and 0-4
+  steps (x25) on the 4-step models. ChatMix bytes are 0-100 each.
+- No EQ preset or mic mute opcode is known; `ssgg` returns an error for both without sending anything.
+- 0x2200, 0x2204 and 0x2208 (the RX dongles) are not in the table and stay on `GenericHeadset`.
+- 7P variants (0x220A, 0x2298, 0x22A7) have neither sidetone nor ChatMix. Variants with the 4-step battery:
+  0x2202, 0x2206, 0x220A, 0x223A, 0x227A, 0x22A4. Everything else reports percent.
+- Arctis Nova Pro Omni (0x2290) has no known protocol and is detect-only.
+
 ---
 
 ## Keyboard HID protocol

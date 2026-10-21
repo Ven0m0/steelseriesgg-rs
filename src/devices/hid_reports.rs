@@ -94,6 +94,18 @@ pub enum CommandCode {
     /// `ssgg onboard write` and `ssgg onboard load` commands send it, on request only; a plain read sends
     /// nothing. See [`OnboardProfileDeployCommand`].
     OnboardProfileDeploy = 0x89,
+    /// [EXPERIMENTAL] Arctis Nova 7 family sidetone level (0x39, `00 39 <0..=3>`), see
+    /// [`HeadsetSettingCommand`]. From community forks, untested on hardware.
+    HeadsetSidetone = 0x39,
+    /// [EXPERIMENTAL] Arctis Nova 7 family microphone volume (0x37, `00 37 <0..=7>`), see
+    /// [`HeadsetSettingCommand`]. From community forks, untested on hardware.
+    HeadsetMicVolume = 0x37,
+    /// [EXPERIMENTAL] Arctis Nova 7 family inactivity auto-off in minutes (0xA3, `00 a3 <minutes>`), see
+    /// [`HeadsetSettingCommand`]. From community forks, untested on hardware.
+    HeadsetAutoOff = 0xA3,
+    /// [EXPERIMENTAL] Arctis Nova 7 family status query (0xB0, `00 b0`), answered by an input report that
+    /// starts with `b0`, see [`HeadsetStatusQueryCommand`]. From community forks, untested on hardware.
+    HeadsetStatus = 0xB0,
 }
 
 impl fmt::Display for CommandCode {
@@ -121,6 +133,10 @@ impl fmt::Display for CommandCode {
             CommandCode::OnboardFirmwareVersion => write!(f, "FIRMWARE_VERSION"),
             CommandCode::OnboardDriverMode => write!(f, "DRIVER_MODE_EXPERIMENTAL"),
             CommandCode::OnboardProfileDeploy => write!(f, "LOAD_PROFILE"),
+            CommandCode::HeadsetSidetone => write!(f, "HEADSET_SIDETONE_EXPERIMENTAL"),
+            CommandCode::HeadsetMicVolume => write!(f, "HEADSET_MIC_VOLUME_EXPERIMENTAL"),
+            CommandCode::HeadsetAutoOff => write!(f, "HEADSET_AUTO_OFF_EXPERIMENTAL"),
+            CommandCode::HeadsetStatus => write!(f, "HEADSET_STATUS_EXPERIMENTAL"),
         }
     }
 }
@@ -152,6 +168,10 @@ impl CommandCode {
             0x90 => Some(CommandCode::OnboardFirmwareVersion),
             0x6C => Some(CommandCode::OnboardDriverMode),
             0x89 => Some(CommandCode::OnboardProfileDeploy),
+            0x39 => Some(CommandCode::HeadsetSidetone),
+            0x37 => Some(CommandCode::HeadsetMicVolume),
+            0xA3 => Some(CommandCode::HeadsetAutoOff),
+            0xB0 => Some(CommandCode::HeadsetStatus),
             _ => None,
         }
     }
@@ -1188,6 +1208,94 @@ impl HidCommand for OnboardFileCommitCommand {
             self.profile.saturating_add(1),
             self.profile
         )
+    }
+}
+
+/// [EXPERIMENTAL] One-byte setting of the Arctis Nova 7 family: `00 <opcode> <value>` zero padded to
+/// [`HEADSET_REPORT_SIZE`], byte 0 being the hidapi report number. `code` selects the setting and fixes the
+/// accepted range of `value`: sidetone `0..=3`, microphone volume `0..=7`, auto-off any minute count.
+/// Source: community forks, never sent from `ssgg` on hardware. Never followed by the save frame `00 09`,
+/// which would persist the setting on the headset.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct HeadsetSettingCommand {
+    /// [`CommandCode::HeadsetSidetone`], [`CommandCode::HeadsetMicVolume`] or [`CommandCode::HeadsetAutoOff`].
+    pub code: CommandCode,
+    /// Wire value in the range `code` allows.
+    pub value: u8,
+}
+
+impl HeadsetSettingCommand {
+    /// Highest wire sidetone level.
+    pub const MAX_SIDETONE: u8 = 3;
+    /// Highest wire microphone volume.
+    pub const MAX_MIC_VOLUME: u8 = 7;
+}
+
+impl HidCommand for HeadsetSettingCommand {
+    fn command_code(&self) -> CommandCode {
+        self.code
+    }
+
+    fn serialize(&self, buffer: &mut [u8], _device_type: HidDeviceType) -> Result<usize> {
+        self.validate()?;
+        check_report_buffer(buffer, HEADSET_REPORT_SIZE)?;
+        let report = &mut buffer[..HEADSET_REPORT_SIZE];
+        report.fill(0);
+        report[1] = self.code as u8;
+        report[2] = self.value;
+        Ok(HEADSET_REPORT_SIZE)
+    }
+
+    fn validate(&self) -> Result<()> {
+        let max = match self.code {
+            CommandCode::HeadsetSidetone => Self::MAX_SIDETONE,
+            CommandCode::HeadsetMicVolume => Self::MAX_MIC_VOLUME,
+            CommandCode::HeadsetAutoOff => u8::MAX,
+            other => {
+                return Err(Error::InvalidConfig(format!(
+                    "{other} is not a headset one-byte setting"
+                )));
+            }
+        };
+        if self.value > max {
+            return Err(Error::InvalidConfig(format!(
+                "{} value {} out of range (0..={})",
+                self.code, self.value, max
+            )));
+        }
+        Ok(())
+    }
+
+    fn description(&self) -> String {
+        format!("Headset setting {}: {}", self.code, self.value)
+    }
+}
+
+/// [EXPERIMENTAL] Arctis Nova 7 family status query: `00 b0` zero padded to [`HEADSET_REPORT_SIZE`]. The
+/// headset answers with an input report `b0 <power> <battery> <charge> <chat game> <chat chat> ...`.
+/// Source: community forks, never sent from `ssgg` on hardware.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct HeadsetStatusQueryCommand;
+
+impl HidCommand for HeadsetStatusQueryCommand {
+    fn command_code(&self) -> CommandCode {
+        CommandCode::HeadsetStatus
+    }
+
+    fn serialize(&self, buffer: &mut [u8], _device_type: HidDeviceType) -> Result<usize> {
+        check_report_buffer(buffer, HEADSET_REPORT_SIZE)?;
+        let report = &mut buffer[..HEADSET_REPORT_SIZE];
+        report.fill(0);
+        report[1] = CommandCode::HeadsetStatus as u8;
+        Ok(HEADSET_REPORT_SIZE)
+    }
+
+    fn validate(&self) -> Result<()> {
+        Ok(())
+    }
+
+    fn description(&self) -> String {
+        "Headset status query".to_string()
     }
 }
 
@@ -3128,6 +3236,79 @@ mod tests {
         ] {
             assert_eq!(CommandCode::from_report_byte(byte), Some(code));
             assert_eq!(code as u8, byte);
+        }
+    }
+
+    fn headset_report(command: &dyn HidCommand) -> Vec<u8> {
+        let mut buffer = vec![0xAAu8; HEADSET_REPORT_SIZE + 4];
+        let size = command.serialize(&mut buffer, HidDeviceType::Headset).unwrap();
+        assert_eq!(size, HEADSET_REPORT_SIZE);
+        assert!(
+            buffer[HEADSET_REPORT_SIZE..].iter().all(|&b| b == 0xAA),
+            "bytes past the report are untouched"
+        );
+        buffer.truncate(HEADSET_REPORT_SIZE);
+        buffer
+    }
+
+    #[test]
+    fn headset_setting_frames_are_64_byte_zero_padded() {
+        for (code, value, opcode) in [
+            (CommandCode::HeadsetSidetone, 0, 0x39),
+            (CommandCode::HeadsetSidetone, 3, 0x39),
+            (CommandCode::HeadsetMicVolume, 7, 0x37),
+            (CommandCode::HeadsetAutoOff, 0, 0xA3),
+            (CommandCode::HeadsetAutoOff, 255, 0xA3),
+        ] {
+            let report = headset_report(&HeadsetSettingCommand { code, value });
+            assert_eq!(&report[..3], &[0x00, opcode, value]);
+            assert!(report[3..].iter().all(|&b| b == 0));
+        }
+    }
+
+    #[test]
+    fn headset_setting_rejects_out_of_range_and_foreign_codes() {
+        let mut buffer = [0u8; HEADSET_REPORT_SIZE];
+        for (code, value) in [
+            (CommandCode::HeadsetSidetone, 4),
+            (CommandCode::HeadsetMicVolume, 8),
+            (CommandCode::Apply, 0),
+            (CommandCode::HeadsetStatus, 0),
+        ] {
+            let command = HeadsetSettingCommand { code, value };
+            assert!(command.serialize(&mut buffer, HidDeviceType::Headset).is_err());
+        }
+        let valid = HeadsetSettingCommand {
+            code: CommandCode::HeadsetSidetone,
+            value: 1,
+        };
+        assert!(valid.serialize(&mut buffer[..10], HidDeviceType::Headset).is_err());
+    }
+
+    #[test]
+    fn headset_status_query_is_00_b0_padded() {
+        let report = headset_report(&HeadsetStatusQueryCommand);
+        assert_eq!(&report[..2], &[0x00, 0xB0]);
+        assert!(report[2..].iter().all(|&b| b == 0));
+        let mut short = [0u8; 8];
+        assert!(
+            HeadsetStatusQueryCommand
+                .serialize(&mut short, HidDeviceType::Headset)
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn headset_opcodes_are_known_command_codes() {
+        for (byte, code) in [
+            (0x39, CommandCode::HeadsetSidetone),
+            (0x37, CommandCode::HeadsetMicVolume),
+            (0xA3, CommandCode::HeadsetAutoOff),
+            (0xB0, CommandCode::HeadsetStatus),
+        ] {
+            assert_eq!(CommandCode::from_report_byte(byte), Some(code));
+            assert_eq!(code as u8, byte);
+            assert!(code.to_string().ends_with("_EXPERIMENTAL"));
         }
     }
 }
