@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Releases and this changelog are generated automatically from
 [Conventional Commits](https://www.conventionalcommits.org/) by release-please.
 
+## [0.1.9](https://github.com/Ven0m0/steelseriesgg-rs/compare/v0.1.8...v0.1.9) (2026-10-21)
+
+
+### Added
+
+* **apex-2023:** keep unlisted keys on per-key frames, correct 1.0mm … ([#305](https://github.com/Ven0m0/steelseriesgg-rs/issues/305)) ([5b3bcfd](https://github.com/Ven0m0/steelseriesgg-rs/commit/5b3bcfd72086262a5bb693d49efd83a938338ecc))
+
 ## [0.1.8](https://github.com/Ven0m0/steelseriesgg-rs/compare/v0.1.7...v0.1.8) (2026-10-21)
 
 
