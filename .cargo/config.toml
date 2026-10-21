@@ -29,7 +29,8 @@ rustflags = ["-Ctarget-cpu=x86-64-v3"]
 # rustflags = ["-Ctarget-cpu=x86-64-v3", "-Clink-arg=-fuse-ld=mold"]
 
 # lld (fast): uncomment if installed, comment out mold line above
-rustflags = ["-Ctarget-cpu=x86-64-v3", "-Clink-arg=-fuse-ld=lld"]
+# rustflags = ["-Ctarget-cpu=x86-64-v3", "-Clink-arg=-fuse-ld=lld"]
+rustflags = ["-Ctarget-cpu=x86-64-v3"]
 
 # native CPU tuning — faster binary, but NOT portable across machines
 # rustflags = ["-Ctarget-cpu=native", "-Clink-arg=-fuse-ld=lld"]
@@ -57,7 +58,7 @@ linker = "x86_64-w64-mingw32-clang.exe"
 # Uses link.exe from Visual Studio Build Tools — no extra install needed.
 # rust-lld is bundled with rustc but opting in needs `-C linker-features=+lld`,
 # which is still -Z-gated (checked against rustc 1.97.1: "unstable, requires
-# -Z unstable-options" even with RUSTC_BOOTSTRAP=1) — not enabled until stable.
+# -Z unstable-options") — not enabled until stable.
 # ---------------------------------------------------------------------------
 [target.x86_64-pc-windows-msvc]
 rustflags = ["-Ctarget-cpu=x86-64-v3"]
@@ -78,9 +79,3 @@ build-sonar  = "build --release --locked --features sonar"
 
 # Build with PulseAudio/PipeWire (requires libpulse-dev)
 build-audio  = "build --release --locked --features audio"
-
-# Build experimental Apex Pro TKL 2023 per-key RGB support
-build-apex23 = "build --release --locked --features experimental-apex-2023"
-
-[env]
-RUSTC_BOOTSTRAP = "1"
