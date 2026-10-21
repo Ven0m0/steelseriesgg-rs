@@ -9,7 +9,7 @@ pkgdesc="A complete open-source SteelSeries GG replacement for Linux - RGB light
 arch=('x86_64')
 url="https://github.com/Ven0m0/steelseriesgg-rs"
 license=('MIT')
-depends=('hidapi' 'glibc' 'systemd')
+depends=('hidapi' 'glibc' 'systemd' 'gtk3' 'webkit2gtk-4.1')
 makedepends=('rust')
 install=ssgg.install
 source=(
@@ -53,7 +53,11 @@ build() {
   cd "$(_resolve_archive_dir)" || return 1
   export CARGO_HOME="$srcdir/cargo-home"
   export CARGO_TARGET_DIR="$srcdir/target"
-  cargo build -r --frozen --bin ssgg
+  # Unset: .cargo/config.toml decides (x86-64-v3). RUSTFLAGS overrides it; CI sets this for the generic x86-64 build.
+  if [[ -n "${SSGG_TARGET_CPU:-}" ]]; then
+    export RUSTFLAGS="-Ctarget-cpu=$SSGG_TARGET_CPU"
+  fi
+  cargo build -r --frozen --features desktop --bin ssgg --bin ssgg-gui
 }
 
 check() {
@@ -66,6 +70,8 @@ check() {
 package() {
   cd "$(_resolve_archive_dir)" || return 1
   install -Dm755 "$srcdir/target/release/ssgg" "$pkgdir/usr/bin/ssgg"
+  install -Dm755 "$srcdir/target/release/ssgg-gui" "$pkgdir/usr/bin/ssgg-gui"
+  install -Dm644 assets/ssgg-gui.desktop "$pkgdir/usr/share/applications/ssgg-gui.desktop"
   install -Dm644 assets/ssgg.service "$pkgdir/usr/lib/systemd/user/ssgg.service"
   install -Dm644 assets/70-steelseries.rules "$pkgdir/usr/lib/udev/rules.d/70-steelseries.rules"
   install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"

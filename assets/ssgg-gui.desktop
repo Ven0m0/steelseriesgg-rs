@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=SteelSeries GG (ssgg)
+Comment=Profile editor and lighting for SteelSeries keyboards
+Exec=ssgg-gui
+Icon=input-keyboard
+Terminal=false
+Categories=Settings;HardwareSettings;
+StartupWMClass=ssgg-gui

@@ -4,9 +4,13 @@ on:
   workflow_dispatch:
     inputs:
       features:
-        description: "Cargo feature flags (e.g. --features sonar)"
+        description: "Cargo feature flags (e.g. --features sonar; --features desktop also builds ssgg-gui.exe)"
         required: false
         default: ""
+      target_cpu:
+        description: "-Ctarget-cpu: x86-64 (runs on any x86-64 CPU) or x86-64-v3 (AVX2; Haswell / Zen 1 and newer)"
+        required: false
+        default: "x86-64"
 
 permissions:
   contents: read
@@ -35,8 +39,13 @@ jobs:
 
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ github.event.inputs.target_cpu }}
 
       - name: Build release binary
+        # RUSTFLAGS overrides the x86-64-v3 default in .cargo/config.toml.
+        env:
+          RUSTFLAGS: -Ctarget-cpu=${{ github.event.inputs.target_cpu }}
         run: cargo build -r --locked ${{ github.event.inputs.features }}
 
       - name: Verify binary exists
@@ -56,5 +65,6 @@ jobs:
           name: ssgg-windows-x86_64
           path: |
             target\release\ssgg.exe
+            target\release\ssgg-gui.exe
             sha256sums.txt
           retention-days: 30

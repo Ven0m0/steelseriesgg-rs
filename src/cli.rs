@@ -758,40 +758,7 @@ pub(crate) enum PerformanceAction {
 }
 
 pub(crate) fn parse_color(s: &str) -> Option<Color> {
-    // Try named colors - use eq_ignore_ascii_case to avoid allocations
-    if s.eq_ignore_ascii_case("red") {
-        return Some(Color::RED);
-    } else if s.eq_ignore_ascii_case("green") {
-        return Some(Color::GREEN);
-    } else if s.eq_ignore_ascii_case("blue") {
-        return Some(Color::BLUE);
-    } else if s.eq_ignore_ascii_case("white") {
-        return Some(Color::WHITE);
-    } else if s.eq_ignore_ascii_case("black") || s.eq_ignore_ascii_case("off") {
-        return Some(Color::BLACK);
-    } else if s.eq_ignore_ascii_case("cyan") {
-        return Some(Color::CYAN);
-    } else if s.eq_ignore_ascii_case("magenta") {
-        return Some(Color::MAGENTA);
-    } else if s.eq_ignore_ascii_case("yellow") {
-        return Some(Color::YELLOW);
-    } else if s.eq_ignore_ascii_case("orange") {
-        return Some(Color::ORANGE);
-    } else if s.eq_ignore_ascii_case("purple") {
-        return Some(Color::PURPLE);
-    } else if s.eq_ignore_ascii_case("pink") {
-        return Some(Color::PINK);
-    }
-
-    // Try hex
-    let hex = s.trim_start_matches('#');
-    if hex.len() == 6
-        && let Ok(val) = u32::from_str_radix(hex, 16)
-    {
-        return Some(Color::from_hex(val));
-    }
-
-    None
+    Color::parse(s)
 }
 
 pub(crate) fn require_color(s: &str) -> Result<Color> {

@@ -172,8 +172,10 @@ Still open:
 - Apex 3 (`0x161A`, tri-zone) and Old Apex (`0x1202`, `0x1206`) layouts exist in Sarhan's `protocol.rs`; not taken.
 - Nova 7 Gen 2 (`0x227e`) Save `0x09` (Jaime `nova7_gen2.rs`): Save persists to the headset; not taken.
 - Remapper gaps: no hot-plug (an unplugged keyboard ends the session), no LED capability on the virtual device.
+- Desktop window: `ssgg-gui` (feature `desktop`, wry + tao) wraps the `ssgg gui` editor. Built and started on Windows
+  only; the Linux/Wayland run, in-window save and the live panel against hardware are untested.
 - Skipped on purpose: Sarhan engine/control API (`src/engine`, good token and Host-check design to copy), PipeWire
-  mixer, wry GUI app, rebranding; Jaime Electron app, native PipeWire RPC service (unconditional `pipewire`/`libspa`
+  mixer, rebranding; Jaime Electron app, native PipeWire RPC service (unconditional `pipewire`/`libspa`
   deps), Snap/.deb, `apex_gen3.rs` (duplicates `0x1642`), branding.
 
 ## P8. Hardware checks owed by the 2026-10-21 branch

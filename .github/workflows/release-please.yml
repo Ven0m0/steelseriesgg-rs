@@ -70,13 +70,22 @@ jobs:
           fi
 
   build-linux:
-    name: Build Linux / Arch x86_64
+    name: Build Linux / Arch x86_64${{ matrix.suffix }}
     needs: [release-please, create-tag]
     if: ${{ always() && (needs.release-please.outputs.release_created == 'true' || needs.create-tag.outputs.tag_name != '') }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
       contents: write
+    # Generic x86-64 keeps the plain asset names; x86-64-v3 (AVX2, BMI2, FMA; Haswell / Zen 1 and newer) gets "-v3".
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - cpu: x86-64
+            suffix: ""
+          - cpu: x86-64-v3
+            suffix: "-v3"
     container:
       image: archlinux:base-devel
     steps:
@@ -104,32 +113,40 @@ jobs:
             --output="ssgg-${PKGVER}.tar" \
             HEAD
           gzip -n "ssgg-${PKGVER}.tar"
-          su - builder -c "cd \"$GITHUB_WORKSPACE\" && SRCDEST=\"$GITHUB_WORKSPACE\" makepkg -sCf --noconfirm"
+          su - builder -c "cd \"$GITHUB_WORKSPACE\" && SSGG_TARGET_CPU=${{ matrix.cpu }} SRCDEST=\"$GITHUB_WORKSPACE\" makepkg -sCf --noconfirm"
       - name: Rename package and clean artifacts
         run: |
           rm -f ssgg-debug-*.pkg.tar.zst
-          mv ssgg-[0-9]*-x86_64.pkg.tar.zst ssgg-linux-x86_64.pkg.tar.zst
+          mv ssgg-[0-9]*-x86_64.pkg.tar.zst "ssgg-linux-x86_64${{ matrix.suffix }}.pkg.tar.zst"
       - name: Compute SHA-256
         run: |
-          sha256sum ssgg-linux-x86_64.pkg.tar.zst > sha256sums-linux.txt
-          cat sha256sums-linux.txt
+          sha256sum "ssgg-linux-x86_64${{ matrix.suffix }}.pkg.tar.zst" > "sha256sums-linux${{ matrix.suffix }}.txt"
+          cat "sha256sums-linux${{ matrix.suffix }}.txt"
       - name: Upload to release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release upload "${{ needs.create-tag.outputs.tag_name || needs.release-please.outputs.tag_name }}" \
-            ssgg-linux-x86_64.pkg.tar.zst \
-            sha256sums-linux.txt \
+            "ssgg-linux-x86_64${{ matrix.suffix }}.pkg.tar.zst" \
+            "sha256sums-linux${{ matrix.suffix }}.txt" \
             --clobber
 
   build-windows:
-    name: Build Windows x86_64
+    name: Build Windows x86_64${{ matrix.suffix }}
     needs: [release-please, create-tag]
     if: ${{ always() && (needs.release-please.outputs.release_created == 'true' || needs.create-tag.outputs.tag_name != '') }}
     runs-on: windows-latest
     timeout-minutes: 45
     permissions:
       contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - cpu: x86-64
+            suffix: ""
+          - cpu: x86-64-v3
+            suffix: "-v3"
     steps:
       - uses: actions/checkout@v7
         with:
@@ -140,18 +157,28 @@ jobs:
           toolchain: 1.99.1
           targets: x86_64-pc-windows-msvc
       - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.cpu }}
       - name: Build release binary
-        run: cargo build --release --locked
-      - name: Copy binary and compute SHA-256
+        # RUSTFLAGS overrides the x86-64-v3 default in .cargo/config.toml.
+        env:
+          RUSTFLAGS: -Ctarget-cpu=${{ matrix.cpu }}
+        run: cargo build --release --locked --features desktop
+      - name: Copy binaries and compute SHA-256
         shell: pwsh
         run: |
-          Copy-Item target\release\ssgg.exe ssgg-windows-x86_64.exe
-          $hash = (Get-FileHash ssgg-windows-x86_64.exe -Algorithm SHA256).Hash.ToLower()
-          "$hash  ssgg-windows-x86_64.exe" | Out-File -Encoding ascii sha256sums-windows.txt
-          Get-Content sha256sums-windows.txt
+          $cli = 'ssgg-windows-x86_64${{ matrix.suffix }}.exe'
+          $gui = 'ssgg-gui-windows-x86_64${{ matrix.suffix }}.exe'
+          Copy-Item target\release\ssgg.exe $cli
+          Copy-Item target\release\ssgg-gui.exe $gui
+          foreach ($name in $cli, $gui) {
+            $hash = (Get-FileHash $name -Algorithm SHA256).Hash.ToLower()
+            "$hash  $name" | Out-File -Encoding ascii -Append 'sha256sums-windows${{ matrix.suffix }}.txt'
+          }
+          Get-Content 'sha256sums-windows${{ matrix.suffix }}.txt'
       - name: Upload to release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: pwsh
         run: |
-          gh release upload "${{ needs.create-tag.outputs.tag_name || needs.release-please.outputs.tag_name }}" ssgg-windows-x86_64.exe sha256sums-windows.txt --clobber
+          gh release upload "${{ needs.create-tag.outputs.tag_name || needs.release-please.outputs.tag_name }}" "ssgg-windows-x86_64${{ matrix.suffix }}.exe" "ssgg-gui-windows-x86_64${{ matrix.suffix }}.exe" "sha256sums-windows${{ matrix.suffix }}.txt" --clobber

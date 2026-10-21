@@ -5,7 +5,6 @@
 mod cli;
 mod commands;
 mod daemon;
-mod gui;
 
 use clap::Parser;
 
@@ -14,7 +13,7 @@ use crate::cli::{
     RemapAction, RgbAction, parse_key_name, require_color,
 };
 use crate::commands::{
-    cmd_bug_report, cmd_hid_logs, cmd_onboard, cmd_performance, cmd_status, cmd_test_device, cmd_validate,
+    cmd_bug_report, cmd_gui, cmd_hid_logs, cmd_onboard, cmd_performance, cmd_status, cmd_test_device, cmd_validate,
     cmd_verify_performance,
 };
 use crate::daemon::{cmd_daemon, cmd_server};
@@ -132,7 +131,7 @@ async fn main() -> Result<()> {
 
         Commands::Gui { port } => {
             let manager = new_device_manager()?;
-            gui::cmd_gui(&manager, port).await?;
+            cmd_gui(&manager, port).await?;
         }
 
         Commands::Server { port } => {

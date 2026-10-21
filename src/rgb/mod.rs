@@ -33,6 +33,36 @@ impl Color {
         ((self.r as u32) << 16) | ((self.g as u32) << 8) | (self.b as u32)
     }
 
+    /// Parse a colour name (`red`, `off`, ...) or a `RRGGBB` / `#RRGGBB` hex string.
+    pub fn parse(s: &str) -> Option<Color> {
+        const NAMED: [(&str, Color); 12] = [
+            ("red", Color::RED),
+            ("green", Color::GREEN),
+            ("blue", Color::BLUE),
+            ("white", Color::WHITE),
+            ("black", Color::BLACK),
+            ("off", Color::BLACK),
+            ("cyan", Color::CYAN),
+            ("magenta", Color::MAGENTA),
+            ("yellow", Color::YELLOW),
+            ("orange", Color::ORANGE),
+            ("purple", Color::PURPLE),
+            ("pink", Color::PINK),
+        ];
+        if let Some((_, color)) = NAMED.iter().find(|(name, _)| s.eq_ignore_ascii_case(name)) {
+            return Some(*color);
+        }
+
+        let hex = s.trim_start_matches('#');
+        if hex.len() == 6
+            && let Ok(val) = u32::from_str_radix(hex, 16)
+        {
+            return Some(Color::from_hex(val));
+        }
+
+        None
+    }
+
     /// Black (off).
     pub const BLACK: Color = Color::new(0, 0, 0);
     /// White.
@@ -1178,6 +1208,16 @@ mod tests {
     use super::*;
     use crate::devices::key_mapping::KeyMappingDatabase;
     use crate::devices::product_ids;
+
+    #[test]
+    fn color_parse_takes_names_and_hex() {
+        assert_eq!(Color::parse("RED"), Some(Color::RED));
+        assert_eq!(Color::parse("off"), Some(Color::BLACK));
+        assert_eq!(Color::parse("#ff8000"), Some(Color::ORANGE));
+        assert_eq!(Color::parse("ff8000"), Some(Color::ORANGE));
+        assert_eq!(Color::parse("ff80"), None);
+        assert_eq!(Color::parse("teal"), None);
+    }
 
     #[test]
     fn test_color_from_hex() {

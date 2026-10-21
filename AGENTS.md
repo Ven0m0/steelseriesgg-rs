@@ -31,7 +31,9 @@ src/devices/headsets/          generic headset + nova7.rs (Arctis Nova 7 family,
 src/devices/mice/              rivalcfg Modern family mice (modern.rs, dpi_tables.rs; experimental)
 src/gamesense/server.rs        Axum HTTP server (port 27301)
 src/audio/                     feature `audio` (pulse.rs) and `sonar` (sonar.rs)
-src/bin/                       helper binaries, not part of `ssgg` (discover_actuation probes actuation firmware)
+src/gui.rs                     editor + lighting API server, shared by `ssgg gui` and `ssgg-gui` (lib module)
+src/bin/                       helper binaries, not part of `ssgg` (discover_actuation probes actuation firmware;
+                               ssgg-gui = native window around the editor, feature `desktop`)
 examples/                      device_readback.rs (hardware read-back example)
 scripts/capture-device.ps1     Windows USBPcap capture helper for new-device reports (see docs/development/adding-hardware.md)
 assets/                        udev rules, systemd user unit
@@ -67,6 +69,8 @@ Run the smallest relevant subset for any given change.
 | Test | `cargo test --locked` |
 | Release build | `cargo build --release --locked` |
 
+`.cargo/config.toml` builds for `x86-64-v3` by default; release CI also builds generic `x86-64` by setting
+`RUSTFLAGS=-Ctarget-cpu=x86-64` (env overrides the config; `SSGG_TARGET_CPU` does the same inside the PKGBUILD).
 Add `--features <flag>` when touching feature-gated code. The CI feature matrix is in
 `.github/workflows/ci.yml`; the `ci-matrix` skill runs it locally. The `audio` feature needs `libpulse-dev` on
 Debian/Ubuntu. On Windows, `--features audio` does not link (`LNK1181: cannot open input file ':libpulse-0.dll.lib'`);
@@ -82,8 +86,9 @@ this is expected, CI builds and lints `audio` on Linux only.
 | `audio` | AudioMixer, PulseAudio/PipeWire backend | `libpulse-dev` |
 | `sonar` | SonarClient HTTP integration | — (reqwest already in tree) |
 | `remap` | `ssgg remap run`: evdev key remapper (Linux only) | `evdev` (Linux target), `rustix/event` |
+| `desktop` | `ssgg-gui`: native window around the profile editor | `wry`, `tao`; Linux needs `libwebkit2gtk-4.1-dev`, `libgtk-3-dev` |
 
-`audio`, `sonar` and `remap` are independent; do not couple them. Experimental protocol paths are not feature-gated; they carry
+`audio`, `sonar`, `remap` and `desktop` are independent; do not couple them. Experimental protocol paths are not feature-gated; they carry
 `[EXPERIMENTAL]` labels instead (see `.claude/rules/experimental-protocol.md`).
 
 ---

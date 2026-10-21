@@ -22,12 +22,10 @@ use parking_lot::Mutex;
 use serde::Deserialize;
 use tracing::{info, warn};
 
-use steelseries_gg::devices::keyboards::Keyboard;
-use steelseries_gg::devices::{DeviceManager, DeviceType};
-use steelseries_gg::rgb::Color;
-use steelseries_gg::{Error, Result};
-
-use crate::cli::require_color;
+use crate::devices::keyboards::Keyboard;
+use crate::devices::{DeviceManager, DeviceType};
+use crate::rgb::Color;
+use crate::{Error, Result};
 
 const INDEX_HTML: &str = include_str!("../tools/profile-gui/index.html");
 const APP_JS: &str = include_str!("../tools/profile-gui/app.js");
@@ -40,9 +38,15 @@ const TOKEN_HEADER: &str = "x-ssgg-token";
 const JS: &str = "text/javascript; charset=utf-8";
 
 /// The keyboard the live panel drives. One handle for the whole run: the HID collection is opened once.
-struct KeyboardHandle {
+pub struct KeyboardHandle {
     name: String,
     device: Mutex<Box<dyn Keyboard>>,
+}
+
+impl KeyboardHandle {
+    pub fn name(&self) -> &str {
+        &self.name
+    }
 }
 
 struct GuiState {
@@ -80,21 +84,9 @@ impl LightingOp {
     }
 }
 
-/// Serve the editor and the lighting API until the process is stopped.
-pub(crate) async fn cmd_gui(manager: &DeviceManager, port: u16) -> Result<()> {
-    let keyboard = open_first_keyboard(manager);
-    let listener = tokio::net::TcpListener::bind(("127.0.0.1", port)).await?;
-    println!("Profile editor: http://127.0.0.1:{}/", listener.local_addr()?.port());
-    match keyboard.as_ref() {
-        Some(k) => println!("Live lighting drives: {}", k.name),
-        None => println!("No keyboard found: the editor works, the live lighting panel stays hidden"),
-    }
-    serve(listener, keyboard).await
-}
-
-fn open_first_keyboard(manager: &DeviceManager) -> Option<KeyboardHandle> {
+/// Open the first keyboard for the live lighting panel; `None` leaves the panel hidden.
+pub fn open_first_keyboard(manager: &DeviceManager) -> Option<KeyboardHandle> {
     let info = manager.first_device_of_type(DeviceType::Keyboard)?;
-    crate::warn_if_gg_engine_running();
     let mut device = match manager.open_keyboard(info) {
         Ok(device) => device,
         Err(e) => {
@@ -112,7 +104,8 @@ fn open_first_keyboard(manager: &DeviceManager) -> Option<KeyboardHandle> {
     })
 }
 
-async fn serve(listener: tokio::net::TcpListener, keyboard: Option<KeyboardHandle>) -> Result<()> {
+/// Serve the editor and the lighting API on `listener` until the task is dropped or the process stops.
+pub async fn serve(listener: tokio::net::TcpListener, keyboard: Option<KeyboardHandle>) -> Result<()> {
     let port = listener.local_addr()?.port();
     let token = new_token();
     let meta = format!("<meta name=\"ssgg-live-token\" content=\"{token}\">\n</head>");
@@ -208,6 +201,11 @@ async fn asset(State(state): State<Arc<GuiState>>, headers: HeaderMap, uri: Uri)
         [
             (header::CONTENT_TYPE, content_type),
             (header::CACHE_CONTROL, "no-store"),
+            // The page holds the lighting token: no frames, plugins or <base> rewrites inside it.
+            (
+                header::CONTENT_SECURITY_POLICY,
+                "frame-src 'none'; object-src 'none'; base-uri 'none'",
+            ),
         ],
         body.to_owned(),
     )
@@ -225,9 +223,12 @@ async fn color(State(state): State<Arc<GuiState>>, headers: HeaderMap, Json(body
     if !authorized(&state, &headers) {
         return StatusCode::FORBIDDEN.into_response();
     }
-    match require_color(body.color.trim().trim_start_matches('#')) {
-        Ok(color) => run_lighting(state, LightingOp::Color(color)).await,
-        Err(e) => error_response(StatusCode::BAD_REQUEST, e.to_string()),
+    match Color::parse(body.color.trim().trim_start_matches('#')) {
+        Some(color) => run_lighting(state, LightingOp::Color(color)).await,
+        None => error_response(
+            StatusCode::BAD_REQUEST,
+            Error::Other(format!("Invalid color: {}", body.color)).to_string(),
+        ),
     }
 }
 

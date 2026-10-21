@@ -23,6 +23,19 @@ xdg-open tools/profile-gui/index.html          # straight from the filesystem
 python3 -m http.server -d tools/profile-gui 8080   # then http://127.0.0.1:8080
 ```
 
+### Desktop app (`ssgg-gui`)
+
+```sh
+cargo run --release --features desktop --bin ssgg-gui
+```
+
+The same editor and live lighting panel in a native window, no browser: WebView2 on Windows (ships with
+Windows 11 and current Windows 10), WebKitGTK on Linux, where GTK runs natively on Wayland. Linux build and run
+dependencies: `libwebkit2gtk-4.1-dev` and `libgtk-3-dev` (Debian/Ubuntu), `webkit2gtk-4.1` and `gtk3` (Arch).
+The window talks to the server below on a random loopback port; it only navigates to that page. "Save a copy"
+saves into the Downloads folder (the webview's default; there is no save dialog). A blank window on NVIDIA under
+Wayland is a known WebKitGTK renderer problem: start with `WEBKIT_DISABLE_DMABUF_RENDERER=1`.
+
 ### Live lighting (`ssgg gui`)
 
 ```sh
