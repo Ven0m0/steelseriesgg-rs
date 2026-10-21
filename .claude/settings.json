@@ -2,9 +2,19 @@
   "permissions": {
     "allow": [
       "Bash(git fetch origin *)",
-      "Bash(git reset --hard origin/*)",
+      "Bash(cargo fmt *)",
+      "Bash(cargo clippy *)",
+      "Bash(cargo test *)",
+      "Bash(cargo build *)",
+      "Bash(cargo check *)",
+      "Bash(cargo tree *)",
+      "Bash(cargo audit *)",
+      "Bash(rg *)",
+      "Bash(tshark *)",
       "mcp__plugin_context-mode_context-mode__ctx_batch_execute"
-    ]
+    ],
+    "ask": ["Bash(git reset --hard *)", "Bash(ssgg onboard write *)", "Bash(cargo run * onboard write *)"],
+    "deny": ["Bash(git push --force *)", "Bash(git push -f *)"]
   },
   "hooks": {
     "PreToolUse": [
@@ -21,6 +31,10 @@
       {
         "matcher": "Edit|Write",
         "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/block-generated.sh\""
+          },
           {
             "type": "command",
             "if": "Edit(*hid_reports.rs)",
@@ -50,15 +64,7 @@
         "hooks": [
           {
             "type": "command",
-            "if": "Edit(*.rs)",
-            "command": "out=$(cargo fmt --all -- --check 2>&1) || { printf '%s\n' \"$out\" | head -20; exit 2; }",
-            "async": true
-          },
-          {
-            "type": "command",
-            "if": "Write(*.rs)",
-            "command": "out=$(cargo fmt --all -- --check 2>&1) || { printf '%s\n' \"$out\" | head -20; exit 2; }",
-            "async": true
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/rs-post-edit.sh\""
           },
           {
             "type": "command",
@@ -81,16 +87,6 @@
             "if": "Write(*src/devices*.rs)",
             "command": "out=$(cargo clippy --all-targets --locked --message-format short -- -D warnings 2>&1) || { printf '%s\n' \"$out\" | tail -40; exit 2; }",
             "async": true
-          },
-          {
-            "type": "command",
-            "if": "Edit(*src*.rs)",
-            "command": "rg -n '\\.unwrap\\(\\)|\\.expect\\(' src --glob '!src/bin/**' 2>/dev/null && echo 'WARNING: unwrap()/expect() found in src/ outside src/bin — CLAUDE.md hard constraint 4 forbids these in production paths unless inside #[cfg(test)].' || exit 0"
-          },
-          {
-            "type": "command",
-            "if": "Write(*src*.rs)",
-            "command": "rg -n '\\.unwrap\\(\\)|\\.expect\\(' src --glob '!src/bin/**' 2>/dev/null && echo 'WARNING: unwrap()/expect() found in src/ outside src/bin — CLAUDE.md hard constraint 4 forbids these in production paths unless inside #[cfg(test)].' || exit 0"
           }
         ]
       }
