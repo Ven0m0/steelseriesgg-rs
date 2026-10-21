@@ -38,7 +38,10 @@ impl Device for Apex3Tkl {
     }
 
     fn initialize(&mut self) -> Result<()> {
-        self.inner.initialize()
+        // [EXPERIMENTAL] OpenRGB's 8-zone controller never sends the APPLY/save command (0x09), only
+        // `21 FF <R G B x8>` and `23 <level>`. Sending it here is the suspected reason the board
+        // ignored every colour (issues #173, #257); untested on hardware.
+        Ok(())
     }
 
     fn close(&mut self) -> Result<()> {
@@ -61,7 +64,8 @@ impl Device for Apex3Tkl {
 // Delegate Keyboard trait
 crate::impl_keyboard_with_delegation!(Apex3Tkl, {
     async fn apply(&mut self) -> Result<()> {
-        self.inner.apply().await
+        // [EXPERIMENTAL] See `initialize`: the 8-zone frame takes effect without APPLY (0x09).
+        Ok(())
     }
 
     async fn set_color(&mut self, color: Color) -> Result<()> {
