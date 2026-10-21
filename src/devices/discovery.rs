@@ -9,11 +9,13 @@ use super::headsets::nova7::{Nova7Headset, nova7_model};
 use super::headsets::{GenericHeadset, Headset};
 use super::hid_reports::ConnectionHealth;
 use super::keyboards::apex::Apex3Tkl;
+use super::keyboards::apex_m750::{ApexM750, CONTROL_INTERFACE as APEX_M750_CONTROL_INTERFACE};
 use super::keyboards::apex_pro_tkl_2023::ApexProTkl2023;
 use super::keyboards::{GenericKeyboard, Keyboard};
 use super::product_ids::{
-    APEX_3_TKL, APEX_7, APEX_PRO, APEX_PRO_TKL_2023, APEX_PRO_TKL_2023_WIRELESS, APEX_PRO_TKL_2023_WIRELESS_2,
-    APEX_PRO_TKL_2024, APEX_PRO_TKL_WIRELESS_2024, APEX_PRO_TKL_WIRELESS_2024_DONGLE,
+    APEX_3_TKL, APEX_5, APEX_7, APEX_7_TKL, APEX_9_MINI, APEX_9_TKL, APEX_M750, APEX_PRO, APEX_PRO_2024, APEX_PRO_TKL,
+    APEX_PRO_TKL_2023, APEX_PRO_TKL_2023_WIRELESS, APEX_PRO_TKL_2023_WIRELESS_2, APEX_PRO_TKL_2024,
+    APEX_PRO_TKL_WIRELESS_2024, APEX_PRO_TKL_WIRELESS_2024_DONGLE,
 };
 use super::{
     DeviceInfo, DeviceType, STEELSERIES_CONTROL_USAGE_PAGE, device_name_from_product_id, device_type_from_product_id,
@@ -34,6 +36,15 @@ use crate::{Error, Result, STEELSERIES_VENDOR_ID};
 ///    (kept as a fallback since the wireless PIDs are unverified against this ranking).
 /// 4. Standard OS-facing pages (Generic Desktop `0x0001`, Consumer `0x000C`) never qualify.
 fn control_score(usage_page: u16, interface_number: i32, product_id: u16, device_type: DeviceType) -> Option<u32> {
+    // [EXPERIMENTAL] The M750 exposes many interfaces and only interface 2 takes the lighting feature
+    // reports (community fork, untested), so no other interface qualifies, vendor page or not.
+    if product_id == APEX_M750 {
+        return (interface_number == APEX_M750_CONTROL_INTERFACE).then_some(if usage_page >= 0xFF00 {
+            3_000_000
+        } else {
+            1_000_000
+        });
+    }
     if usage_page == STEELSERIES_CONTROL_USAGE_PAGE {
         return Some(3_000_000 - interface_number.max(0) as u32);
     }
@@ -474,6 +485,7 @@ impl DeviceManager {
             KeyboardClass::Apex3Tkl => Ok(Box::new(Apex3Tkl::new(generic_keyboard))),
             KeyboardClass::ApexProTkl2023 => Ok(Box::new(ApexProTkl2023::new(generic_keyboard))),
             KeyboardClass::Apex7 => Ok(Box::new(super::keyboards::apex_7::Apex7::new(generic_keyboard))),
+            KeyboardClass::ApexM750 => Ok(Box::new(ApexM750::new(generic_keyboard))),
             KeyboardClass::Generic => Ok(Box::new(generic_keyboard)),
         }
     }
@@ -951,12 +963,14 @@ pub fn print_device_summary(manager: &DeviceManager) {
 /// keyboard only reads a profile off the board when its product ID is built as the class that speaks
 /// the protocol. `Apex7` is the on-board class, and it is built for the board the frames are known from
 /// and for nothing else - the `0x1614` / `0x1616` / `0x1618` platform siblings keep lighting only and
-/// answer no codec, because nobody has read an answer from them.
+/// answer no codec, because nobody has read an answer from them. `0x1614` and `0x1618` are built as
+/// `ApexProTkl2023` for their `[EXPERIMENTAL]` direct lighting frame, which answers no codec either.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum KeyboardClass {
     Apex3Tkl,
     ApexProTkl2023,
     Apex7,
+    ApexM750,
     Generic,
 }
 
@@ -970,8 +984,15 @@ pub fn keyboard_class(product_id: u16) -> KeyboardClass {
         | APEX_PRO_TKL_2023_WIRELESS_2
         | APEX_PRO_TKL_2024
         | APEX_PRO_TKL_WIRELESS_2024_DONGLE
-        | APEX_PRO_TKL_WIRELESS_2024 => KeyboardClass::ApexProTkl2023,
+        | APEX_PRO_TKL_WIRELESS_2024
+        | APEX_9_TKL
+        | APEX_9_MINI
+        | APEX_PRO_TKL
+        | APEX_7_TKL
+        | APEX_5
+        | APEX_PRO_2024 => KeyboardClass::ApexProTkl2023,
         APEX_7 => KeyboardClass::Apex7,
+        APEX_M750 => KeyboardClass::ApexM750,
         _ => KeyboardClass::Generic,
     }
 }
@@ -1389,13 +1410,42 @@ mod tests {
 
     #[test]
     fn keyboard_class_leaves_the_unmeasured_platform_siblings_on_lighting_only() {
-        for pid in [0x1614u16, 0x1616, 0x1618] {
+        // 0x1614 and 0x1618 moved to the direct-lighting class; 0x1616 still has no protocol of its own.
+        assert_eq!(
+            keyboard_class(0x1616),
+            KeyboardClass::Generic,
+            "0x1616 is a platform sibling nobody has read an answer from"
+        );
+    }
+
+    #[test]
+    fn keyboard_class_routes_the_experimental_direct_lighting_models() {
+        // [EXPERIMENTAL] Apex 9 pair (0x40 frame), four Gen 1 models (0x3A frame), the original Apex Pro.
+        for pid in [0x1634u16, 0x1620, 0x161C, 0x1618, 0x1614, 0x1640, 0x1610, 0x1628] {
             assert_eq!(
                 keyboard_class(pid),
-                KeyboardClass::Generic,
-                "product ID {pid:04X} is a platform sibling nobody has read an answer from"
+                KeyboardClass::ApexProTkl2023,
+                "product ID {pid:04X}"
             );
         }
+        assert_eq!(keyboard_class(0x0616), KeyboardClass::ApexM750);
+        assert_eq!(keyboard_class(0x1612), KeyboardClass::Apex7);
+    }
+
+    #[test]
+    fn apex_m750_control_is_interface_2_only() {
+        assert_eq!(APEX_M750_CONTROL_INTERFACE, 2);
+        let kb = DeviceType::Keyboard;
+        // A vendor page on another interface and a standard page on interface 2: only interface 2 qualifies,
+        // and its vendor-defined collection wins over its other collections.
+        assert_eq!(control_score(0xFFC0, 1, APEX_M750, kb), None);
+        assert_eq!(control_score(0xFF00, 0, APEX_M750, kb), None);
+        assert_eq!(control_score(0x0001, 1, APEX_M750, kb), None);
+        let vendor = control_score(0xFF00, 2, APEX_M750, kb).unwrap();
+        let standard = control_score(0x0001, 2, APEX_M750, kb).unwrap();
+        assert!(vendor > standard);
+        // Other keyboards keep the interface-1 fallback.
+        assert_eq!(control_score(0x0001, 1, APEX_PRO, kb), Some(1_000_000));
     }
 
     #[test]

@@ -46,6 +46,13 @@ pub enum CommandCode {
     Apex2023DirectWireless = 0x61,
     /// [EXPERIMENTAL] Direct-mode lighting frame of the original Apex Pro (0x3A), from OpenRGB, untested.
     ApexGen1Direct = 0x3A,
+    /// [EXPERIMENTAL] Apex M750 direct frame, from a community fork, untested. The frame has no command byte
+    /// at offset 1; `0x8E` is byte 4 of its header `00 00 00 01 8E 01 03 06 16`. See [`ApexMDirectCommand`].
+    ApexMDirect = 0x8E,
+    /// [EXPERIMENTAL] Apex M750 enable sequence, from a community fork, untested. The three reports have no
+    /// shared leading byte: `0x01` is byte 4 of the first and third, the second carries `03` there (owned
+    /// by [`CommandCode::ProfileChunk`]). See [`ApexMEnableCommand`].
+    ApexMEnable = 0x01,
     /// [EXPERIMENTAL] Gen 3 init feature report (0x4B) sent once before the first direct frame, see
     /// [`DirectInitCommand`].
     Apex2023Init = 0x4B,
@@ -122,6 +129,8 @@ impl fmt::Display for CommandCode {
             CommandCode::Apex2023Direct => write!(f, "APEX2023_DIRECT_EXPERIMENTAL"),
             CommandCode::Apex2023DirectWireless => write!(f, "APEX2023_DIRECT_WIRELESS_EXPERIMENTAL"),
             CommandCode::ApexGen1Direct => write!(f, "APEX_GEN1_DIRECT_EXPERIMENTAL"),
+            CommandCode::ApexMDirect => write!(f, "APEX_M_DIRECT_EXPERIMENTAL"),
+            CommandCode::ApexMEnable => write!(f, "APEX_M_ENABLE_EXPERIMENTAL"),
             CommandCode::Apex2023Init => write!(f, "APEX2023_INIT_EXPERIMENTAL"),
             CommandCode::ActuationControl => write!(f, "ACTUATION_CTRL_EXPERIMENTAL"),
             CommandCode::ProfileChunk => write!(f, "PROFILE_CHUNK_EXPERIMENTAL"),
@@ -157,6 +166,8 @@ impl CommandCode {
             0x40 => Some(CommandCode::Apex2023Direct),
             0x61 => Some(CommandCode::Apex2023DirectWireless),
             0x3A => Some(CommandCode::ApexGen1Direct),
+            0x8E => Some(CommandCode::ApexMDirect),
+            0x01 => Some(CommandCode::ApexMEnable),
             0x4B => Some(CommandCode::Apex2023Init),
             0x2D => Some(CommandCode::ActuationControl),
             0x03 => Some(CommandCode::ProfileChunk),
@@ -527,8 +538,9 @@ impl HidCommand for ProfileChunkCommand<'_> {
 /// [EXPERIMENTAL] Direct-mode lighting frame, a feature report:
 /// `00 | packet id | key count | (usage R G B) x count | zero padding`, `report_len` bytes in all.
 ///
-/// Packet id `0x40` (wired Apex Pro TKL 2023 and Gen 3), `0x61` (wireless Gen 3) or `0x3A` (original Apex
-/// Pro, from OpenRGB). One frame replaces every key. Hardware evidence is thin: a solid-colour and a
+/// Packet id `0x40` (wired Apex Pro TKL 2023, Gen 3 and `[EXPERIMENTAL]` the Apex 9 pair), `0x61` (wireless
+/// Gen 3) or `0x3A` (original Apex Pro and `[EXPERIMENTAL]` four more Gen 1 models, from OpenRGB and a
+/// community fork). One frame replaces every key. Hardware evidence is thin: a solid-colour and a
 /// per-key `0x40` frame were replayed on the wired Apex Pro TKL 2023 (`0x1628`, 2026-10-14 and 2026-10-21);
 /// see docs/development/apex-pro-tkl-2023-gg-capture.md.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -536,7 +548,7 @@ pub struct DirectFrameCommand<'a> {
     /// Frame packet id: [`CommandCode::Apex2023Direct`], [`CommandCode::Apex2023DirectWireless`] or
     /// [`CommandCode::ApexGen1Direct`].
     pub packet: CommandCode,
-    /// Report length including the report-ID byte (643, or 645 for the wired 2023 model).
+    /// Report length including the report-ID byte (643; 645 for the wired 2023 model; 513 for the Apex 9 pair).
     pub report_len: usize,
     /// `(HID usage, colour)` per key, in the order the board expects.
     pub entries: &'a [(u8, Color)],
@@ -627,6 +639,130 @@ impl HidCommand for DirectInitCommand {
 
     fn description(&self) -> String {
         "Direct-mode init (0x4B)".to_string()
+    }
+}
+
+/// [EXPERIMENTAL] Apex M750 feature report size, report-ID byte included.
+pub const APEX_M_REPORT_SIZE: usize = 513;
+
+/// [EXPERIMENTAL] LED slots in an Apex M750 direct frame. Which slot lights which key is unknown.
+pub const APEX_M_SLOT_COUNT: usize = 132;
+
+/// One report of the Apex M750 enable sequence.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ApexMEnableStep {
+    First,
+    Second,
+    Third,
+}
+
+impl ApexMEnableStep {
+    /// The sequence in the order it is sent.
+    pub const ALL: [Self; 3] = [Self::First, Self::Second, Self::Third];
+}
+
+/// [EXPERIMENTAL] One report of the Apex M750 enable sequence that has to precede the first
+/// [`ApexMDirectCommand`]: a 513-byte feature report, all zeros but a few bytes (indexes count the report
+/// ID as 0): first `[4]=01 [6]=85`, second `[4]=03 [5]=01 [7]=FF`, third `[4]=01 [6]=85 [7]=FF`.
+///
+/// Layout from a community fork, untested on hardware (issue #276). Nothing here saves or persists.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ApexMEnableCommand {
+    pub step: ApexMEnableStep,
+}
+
+impl HidCommand for ApexMEnableCommand {
+    fn command_code(&self) -> CommandCode {
+        CommandCode::ApexMEnable
+    }
+
+    fn serialize(&self, buffer: &mut [u8], _device_type: HidDeviceType) -> Result<usize> {
+        check_report_buffer(buffer, APEX_M_REPORT_SIZE)?;
+        let report = &mut buffer[..APEX_M_REPORT_SIZE];
+        report.fill(0);
+        match self.step {
+            ApexMEnableStep::First => {
+                report[4] = 0x01;
+                report[6] = 0x85;
+            }
+            ApexMEnableStep::Second => {
+                report[4] = 0x03;
+                report[5] = 0x01;
+                report[7] = 0xFF;
+            }
+            ApexMEnableStep::Third => {
+                report[4] = 0x01;
+                report[6] = 0x85;
+                report[7] = 0xFF;
+            }
+        }
+        Ok(APEX_M_REPORT_SIZE)
+    }
+
+    fn validate(&self) -> Result<()> {
+        Ok(())
+    }
+
+    fn description(&self) -> String {
+        format!("Apex M750 enable ({:?})", self.step)
+    }
+}
+
+/// [EXPERIMENTAL] Apex M750 direct frame, a 513-byte feature report: header `00 00 00 01 8E 01 03 06 16`,
+/// then one `R G B` triple per slot from index 9, zero padding after. A slot that maps to no LED is
+/// `FF 32 00` in the fork this comes from, but the slot-to-key map is unknown, so callers fill every slot.
+///
+/// Layout from a community fork, untested on hardware (issue #276).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ApexMDirectCommand<'a> {
+    /// Exactly [`APEX_M_SLOT_COUNT`] colours.
+    pub slots: &'a [Color],
+}
+
+impl ApexMDirectCommand<'_> {
+    const HEADER: [u8; 9] = [
+        0x00,
+        0x00,
+        0x00,
+        0x01,
+        CommandCode::ApexMDirect as u8,
+        0x01,
+        0x03,
+        0x06,
+        0x16,
+    ];
+}
+
+impl HidCommand for ApexMDirectCommand<'_> {
+    fn command_code(&self) -> CommandCode {
+        CommandCode::ApexMDirect
+    }
+
+    fn serialize(&self, buffer: &mut [u8], _device_type: HidDeviceType) -> Result<usize> {
+        self.validate()?;
+        check_report_buffer(buffer, APEX_M_REPORT_SIZE)?;
+        let report = &mut buffer[..APEX_M_REPORT_SIZE];
+        report.fill(0);
+        report[..Self::HEADER.len()].copy_from_slice(&Self::HEADER);
+        let (triples, _) = report[Self::HEADER.len()..].as_chunks_mut::<3>();
+        for (triple, color) in triples.iter_mut().zip(self.slots) {
+            *triple = [color.r, color.g, color.b];
+        }
+        Ok(APEX_M_REPORT_SIZE)
+    }
+
+    fn validate(&self) -> Result<()> {
+        if self.slots.len() != APEX_M_SLOT_COUNT {
+            return Err(Error::InvalidConfig(format!(
+                "Apex M750 frame needs {APEX_M_SLOT_COUNT} slots, got {}",
+                self.slots.len()
+            )));
+        }
+        Ok(())
+    }
+
+    fn description(&self) -> String {
+        format!("Apex M750 direct frame: {} slots", self.slots.len())
     }
 }
 
@@ -3227,12 +3363,93 @@ mod tests {
     }
 
     #[test]
+    fn direct_frame_fits_the_513_byte_apex_9_report() {
+        let entries = [(0x04, Color::new(9, 8, 7)); 112];
+        let command = DirectFrameCommand {
+            packet: CommandCode::Apex2023Direct,
+            report_len: 513,
+            entries: &entries,
+        };
+        let mut buffer = [0u8; 513];
+        assert_eq!(command.serialize(&mut buffer, HidDeviceType::Keyboard).unwrap(), 513);
+        assert_eq!(&buffer[..7], &[0x00, 0x40, 0x70, 0x04, 9, 8, 7]);
+        assert!(buffer[3 + 112 * 4..].iter().all(|&b| b == 0));
+    }
+
+    fn m750_report(command: &dyn HidCommand) -> Vec<u8> {
+        let mut buffer = vec![0xAAu8; APEX_M_REPORT_SIZE + 4];
+        let size = command.serialize(&mut buffer, HidDeviceType::Keyboard).unwrap();
+        assert_eq!(size, APEX_M_REPORT_SIZE);
+        assert!(
+            buffer[APEX_M_REPORT_SIZE..].iter().all(|&b| b == 0xAA),
+            "bytes past the report are untouched"
+        );
+        buffer.truncate(APEX_M_REPORT_SIZE);
+        buffer
+    }
+
+    #[test]
+    fn apex_m750_enable_reports_set_only_their_bytes() {
+        let expected: [(ApexMEnableStep, &[(usize, u8)]); 3] = [
+            (ApexMEnableStep::First, &[(4, 0x01), (6, 0x85)]),
+            (ApexMEnableStep::Second, &[(4, 0x03), (5, 0x01), (7, 0xFF)]),
+            (ApexMEnableStep::Third, &[(4, 0x01), (6, 0x85), (7, 0xFF)]),
+        ];
+        assert_eq!(
+            ApexMEnableStep::ALL,
+            [ApexMEnableStep::First, ApexMEnableStep::Second, ApexMEnableStep::Third]
+        );
+        for (step, set) in expected {
+            let report = m750_report(&ApexMEnableCommand { step });
+            for (i, &byte) in report.iter().enumerate() {
+                let want = set.iter().find(|(at, _)| *at == i).map_or(0, |(_, value)| *value);
+                assert_eq!(byte, want, "{step:?} byte {i}");
+            }
+        }
+    }
+
+    #[test]
+    fn apex_m750_direct_frame_header_slots_and_padding() {
+        let mut slots = [Color::new(1, 2, 3); APEX_M_SLOT_COUNT];
+        slots[APEX_M_SLOT_COUNT - 1] = Color::new(4, 5, 6);
+        let report = m750_report(&ApexMDirectCommand { slots: &slots });
+
+        assert_eq!(&report[..9], &[0x00, 0x00, 0x00, 0x01, 0x8E, 0x01, 0x03, 0x06, 0x16]);
+        assert_eq!(&report[9..15], &[1, 2, 3, 1, 2, 3]);
+        let last = 9 + (APEX_M_SLOT_COUNT - 1) * 3;
+        assert_eq!(&report[last..last + 3], &[4, 5, 6]);
+        assert!(report[last + 3..].iter().all(|&b| b == 0));
+        assert_eq!(report.len() - (last + 3), 513 - 9 - 132 * 3);
+    }
+
+    #[test]
+    fn apex_m750_direct_frame_rejects_wrong_slot_count_and_short_buffer() {
+        let mut buffer = [0u8; APEX_M_REPORT_SIZE];
+        let few = [Color::RED; APEX_M_SLOT_COUNT - 1];
+        assert!(
+            ApexMDirectCommand { slots: &few }
+                .serialize(&mut buffer, HidDeviceType::Keyboard)
+                .is_err()
+        );
+
+        let slots = [Color::RED; APEX_M_SLOT_COUNT];
+        let frame = ApexMDirectCommand { slots: &slots };
+        assert!(frame.serialize(&mut buffer[..512], HidDeviceType::Keyboard).is_err());
+        let enable = ApexMEnableCommand {
+            step: ApexMEnableStep::First,
+        };
+        assert!(enable.serialize(&mut buffer[..512], HidDeviceType::Keyboard).is_err());
+    }
+
+    #[test]
     fn direct_packet_ids_are_known_command_codes() {
         for (byte, code) in [
             (0x40, CommandCode::Apex2023Direct),
             (0x61, CommandCode::Apex2023DirectWireless),
             (0x3A, CommandCode::ApexGen1Direct),
             (0x4B, CommandCode::Apex2023Init),
+            (0x8E, CommandCode::ApexMDirect),
+            (0x01, CommandCode::ApexMEnable),
         ] {
             assert_eq!(CommandCode::from_report_byte(byte), Some(code));
             assert_eq!(code as u8, byte);

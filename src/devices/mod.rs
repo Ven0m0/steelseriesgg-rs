@@ -402,7 +402,8 @@ pub mod product_ids {
     pub const APEX_PRO_MINI_2024: u16 = 0x1648;
     pub const APEX_5_2024: u16 = 0x1650;
     pub const APEX_7_2024: u16 = 0x1652;
-    // Apex M750 (issue #276, lsusb name). Detect-only: no RGB protocol known.
+    // Apex M750 (issue #276, lsusb name). [EXPERIMENTAL] solid-colour protocol from a community fork, see
+    // keyboards::apex_m750.
     pub const APEX_M750: u16 = 0x0616;
 
     // Headsets - Arctis Series
@@ -459,7 +460,7 @@ pub mod product_ids {
 
 /// Devices registered for detection only: no protocol is known, so `ssgg` must not write to them.
 pub fn is_detect_only(product_id: u16) -> bool {
-    matches!(product_id, product_ids::APEX_M750 | product_ids::ARCTIS_NOVA_PRO_OMNI)
+    matches!(product_id, product_ids::ARCTIS_NOVA_PRO_OMNI)
 }
 
 /// Get device type from product ID.
@@ -677,7 +678,7 @@ mod tests {
     }
 
     #[test]
-    fn test_issue_276_devices_are_named_and_detect_only() {
+    fn test_issue_276_devices_are_named_and_only_the_omni_stays_detect_only() {
         use product_ids::*;
 
         assert_eq!(device_type_from_product_id(APEX_M750), DeviceType::Keyboard);
@@ -686,7 +687,10 @@ mod tests {
         assert_eq!(device_name_from_product_id(ARCTIS_NOVA_7_22A1), "Arctis Nova 7");
         // 0x22A1 has an [EXPERIMENTAL] protocol since the Nova 7 family landed; the Omni has none known,
         // so it replaces it here and GenericHeadset's untested `06 xx` bytes are never sent to it.
-        assert!(is_detect_only(APEX_M750) && is_detect_only(ARCTIS_NOVA_PRO_OMNI));
+        // The M750 has an [EXPERIMENTAL] solid-colour protocol (keyboards::apex_m750), so it is no longer
+        // detect-only; the Omni still has none known.
+        assert!(is_detect_only(ARCTIS_NOVA_PRO_OMNI));
+        assert!(!is_detect_only(APEX_M750));
         assert!(!is_detect_only(ARCTIS_NOVA_7_22A1));
         assert!(!is_detect_only(APEX_PRO_TKL_2023));
     }

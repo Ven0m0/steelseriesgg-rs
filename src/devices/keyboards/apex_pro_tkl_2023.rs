@@ -19,6 +19,10 @@ use std::ops::{Deref, DerefMut};
 /// 643-byte layout and key table, no init. Untested here (issue #283).
 const APEX_2023_PACKET_LENGTH: usize = DirectInitCommand::REPORT_SIZE;
 
+/// [EXPERIMENTAL] Report length of the Apex 9 TKL / Apex 9 Mini direct frame (OpenRGB's
+/// `direct_packet_length_map`, via a community fork). Holds `(513 - 3) / 4 = 127` entries.
+const APEX_9_PACKET_LENGTH: usize = 513;
+
 /// TKL key HID codes (from OpenRGB SteelSeriesApexController.cpp).
 const TKL_KEYS: &[u8] = &[
     0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16,
@@ -155,8 +159,31 @@ impl ApexProTkl2023 {
     }
 
     /// The original Apex Pro speaks OpenRGB's "Gen 1" direct protocol, which needs no init report.
+    /// [EXPERIMENTAL] Apex 5, Apex 7 TKL, Apex Pro TKL (original) and Apex Pro (2024) share it; those four
+    /// come from a community fork's table, unverified, and never ran on hardware here.
     fn is_gen1(&self) -> bool {
-        self.inner.info().product_id == product_ids::APEX_PRO
+        matches!(
+            self.inner.info().product_id,
+            product_ids::APEX_PRO
+                | product_ids::APEX_PRO_TKL
+                | product_ids::APEX_7_TKL
+                | product_ids::APEX_5
+                | product_ids::APEX_PRO_2024
+        )
+    }
+
+    /// [EXPERIMENTAL] The Apex 9 TKL / Apex 9 Mini take the `0x40` frame in a 513-byte report with no
+    /// init (community fork, untested).
+    fn is_apex_9(&self) -> bool {
+        matches!(
+            self.inner.info().product_id,
+            product_ids::APEX_9_TKL | product_ids::APEX_9_MINI
+        )
+    }
+
+    /// Whether the 0x4B init report has to precede the first direct frame.
+    fn needs_init(&self) -> bool {
+        !(self.is_wired_2023() || self.is_gen1() || self.is_apex_9())
     }
 
     fn direct_keys(&self) -> &'static [u8] {
@@ -170,6 +197,8 @@ impl ApexProTkl2023 {
     fn direct_packet_length(&self) -> usize {
         if self.is_wired_2023() {
             WIRED_2023_PACKET_LENGTH
+        } else if self.is_apex_9() {
+            APEX_9_PACKET_LENGTH
         } else {
             APEX_2023_PACKET_LENGTH
         }
@@ -198,15 +227,22 @@ impl ApexProTkl2023 {
             | product_ids::APEX_PRO_TKL_2023_WIRELESS_2
             | product_ids::APEX_PRO_TKL_WIRELESS_2024_DONGLE
             | product_ids::APEX_PRO_TKL_WIRELESS_2024 => CommandCode::Apex2023DirectWireless,
-            product_ids::APEX_PRO_TKL_2024 | product_ids::APEX_PRO_TKL_2023 => CommandCode::Apex2023Direct,
-            product_ids::APEX_PRO => CommandCode::ApexGen1Direct,
+            product_ids::APEX_PRO_TKL_2024
+            | product_ids::APEX_PRO_TKL_2023
+            | product_ids::APEX_9_TKL
+            | product_ids::APEX_9_MINI => CommandCode::Apex2023Direct,
+            product_ids::APEX_PRO
+            | product_ids::APEX_PRO_TKL
+            | product_ids::APEX_7_TKL
+            | product_ids::APEX_5
+            | product_ids::APEX_PRO_2024 => CommandCode::ApexGen1Direct,
             _ => return None,
         })
     }
 
     /// Send the 0x4B initialization feature report required by new protocol.
     fn ensure_new_protocol_init(&mut self) -> Result<()> {
-        if self.initialized_new_protocol || self.is_wired_2023() || self.is_gen1() {
+        if self.initialized_new_protocol || !self.needs_init() {
             return Ok(());
         }
         let mut buf = vec![0u8; DirectInitCommand::REPORT_SIZE];
@@ -354,7 +390,7 @@ impl Device for ApexProTkl2023 {
     fn initialize(&mut self) -> Result<()> {
         // Wireless variant uses feature reports for init, not output reports.
         // The 0x4B init is sent lazily in ensure_new_protocol_init().
-        if self.is_wireless() || self.is_gen1() {
+        if self.is_wireless() || self.is_gen1() || self.is_apex_9() {
             return Ok(());
         }
         self.inner.initialize()
@@ -669,6 +705,65 @@ mod tests {
         let keyboard = keyboard_for(product_ids::APEX_PRO_TKL_2024);
         assert_eq!(keyboard.direct_keys().len(), 112);
         assert_eq!(keyboard.direct_packet_length(), APEX_2023_PACKET_LENGTH);
+    }
+
+    #[test]
+    fn apex_9_pair_uses_the_0x40_frame_in_513_bytes_without_init() {
+        for pid in [product_ids::APEX_9_TKL, product_ids::APEX_9_MINI] {
+            let keyboard = keyboard_for(pid);
+            assert_eq!(
+                keyboard.direct_packet_id(),
+                Some(CommandCode::Apex2023Direct),
+                "{pid:#06x}"
+            );
+            assert_eq!(keyboard.direct_packet_length(), 513, "{pid:#06x}");
+            assert!(!keyboard.needs_init(), "{pid:#06x}");
+            assert_eq!(keyboard.direct_keys().len(), 112);
+
+            let frame = keyboard.frame_for(&keyboard.direct_entries(|_| Color::RED)).unwrap();
+            assert_eq!(frame.len(), 513);
+            assert_eq!(&frame[..7], &[0x00, 0x40, 0x70, 0x04, 0xFF, 0x00, 0x00]);
+            assert!(frame[3 + 112 * 4..].iter().all(|&b| b == 0));
+        }
+        assert!((513 - 3) / 4 >= TKL_KEYS.len());
+    }
+
+    #[test]
+    fn gen1_fork_models_use_the_0x3a_frame_without_init() {
+        for pid in [
+            product_ids::APEX_5,
+            product_ids::APEX_7_TKL,
+            product_ids::APEX_PRO_TKL,
+            product_ids::APEX_PRO_2024,
+        ] {
+            let keyboard = keyboard_for(pid);
+            assert_eq!(
+                keyboard.direct_packet_id(),
+                Some(CommandCode::ApexGen1Direct),
+                "{pid:#06x}"
+            );
+            assert_eq!(keyboard.direct_packet_length(), APEX_2023_PACKET_LENGTH, "{pid:#06x}");
+            assert!(!keyboard.needs_init(), "{pid:#06x}");
+            assert_eq!(keyboard.direct_keys().len(), 112);
+        }
+    }
+
+    #[test]
+    fn init_is_needed_only_where_it_was_before() {
+        assert!(!keyboard_for(product_ids::APEX_PRO_TKL_2023).needs_init());
+        assert!(!keyboard_for(product_ids::APEX_PRO).needs_init());
+        for pid in [
+            product_ids::APEX_PRO_TKL_2024,
+            product_ids::APEX_PRO_TKL_WIRELESS_2024_DONGLE,
+            product_ids::APEX_PRO_TKL_WIRELESS_2024,
+        ] {
+            assert!(keyboard_for(pid).needs_init(), "{pid:#06x}");
+        }
+    }
+
+    #[test]
+    fn apex_7_keeps_its_own_class_and_no_direct_frame() {
+        assert_eq!(keyboard_for(product_ids::APEX_7).direct_packet_id(), None);
     }
 
     #[test]
