@@ -2,8 +2,8 @@
 
 Status: **[EXPERIMENTAL]**. Everything below was read from USB captures of the official SteelSeries GG
 (Windows) talking to a real Apex Pro TKL (VID 0x1038, PID 0x1628, firmware reported as `1.19.7`),
-captured with USBPcap 1.5.4.0 on 2026-10-14. The bytes are observed GG traffic. Only one solid-colour
-lighting frame has been replayed from this project (see open question 3), so nothing here is "confirmed"
+captured with USBPcap 1.5.4.0 on 2026-10-14. The bytes are observed GG traffic. Only a solid-colour frame
+(2026-10-14) and per-key frames (2026-10-21) have been replayed from this project (see open question 3), so nothing here is "confirmed"
 in the sense of `.claude/rules/experimental-protocol.md`.
 
 ## Transport
@@ -42,7 +42,8 @@ wire offset  0      1      2 + 4*i ...        338 .. 643
   brightness was not distinguishable in this capture.
 - The `0x4B` init report used by the code was not seen: GG's startup precedes the capture.
 - `ssgg rgb color` and `ssgg rgb perkey` both build this frame as a feature report. Per-key sends all 84
-  entries with unlisted keys black, since no read-back of the current colours is known. The old
+  entries; unlisted keys keep the colour of the last frame `ssgg` saved (`direct-frame-1628.bin` in the config
+  directory) and are black only when none is saved, since no read-back of the current colours is known. The old
   `experimental-apex-2023` path (65-byte output report) was removed on 2026-10-15.
 
 ## On-board profile (feature report, header `03 01 80`)

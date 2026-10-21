@@ -15,8 +15,11 @@ Protocol work has three states. Never mix them up or upgrade a status without ha
 | Constant | Code | Status |
 |----------|------|--------|
 | `CommandCode::PerKeyRgb` | `0x23` | Placeholder — actual per-key command unknown |
-| `CommandCode::Apex2023Direct` | `0x40` | Experimental — one solid-colour frame replayed on `0x1628` (2026-10-14); per-key frame confirmed on hardware 2026-10-21 (lit one key, rest went black as designed, matching ssgg's frame-replaces-all-keys behaviour); other colours and Linux untested |
-| `APEX_GEN1_PACKET_ID_DIRECT` (`apex_pro_tkl_2023.rs`) | `0x3A` | Experimental — original Apex Pro `0x1610`, from OpenRGB, untested |
+| `CommandCode::Apex2023Direct` | `0x40` | Experimental — one solid-colour frame replayed on `0x1628` (2026-10-14); per-key frame confirmed on hardware 2026-10-21 (lit one key; at that time unlisted keys were sent black because a frame replaces all keys, and a later per-key request now merges onto the last frame ssgg saved, `rgb perkey set-key W red` lit W with other keys unaffected, 2026-10-21); software brightness scaling of the frame (replaces the `00 22` report on direct models) and other colours and Linux untested |
+| `CommandCode::Apex2023DirectWireless` / `DirectFrameCommand` | `0x61` | Experimental — wireless Apex Pro TKL models (`0x1630`, `0x1632`, `0x1644`, `0x1646`); a code comment reports it working on Gen 3 wireless, no test record in this repo |
+| `CommandCode::Apex2023Init` / `DirectInitCommand` | `0x4B` | Experimental — Gen 3 init feature report from OpenRGB, sent once before the first direct frame; not sent to `0x1628` (GG does not) |
+| `CommandCode::ApexGen1Direct` / `DirectFrameCommand` | `0x3A` | Experimental — original Apex Pro `0x1610`, from OpenRGB, untested |
+| Apex 3 TKL `0x1622`: no APPLY (`0x09`) from `initialize()` / `apply()` | `0x09` (not sent) | Experimental — OpenRGB's 8-zone controller never sends it; suspected cause of issues #173/#257, untested on hardware |
 | `CommandCode::Apex2023Direct` on Apex 9 TKL `0x1634` / Apex 9 Mini `0x1620` (513-byte report, no `0x4B` init) | `0x40` | Experimental - community-fork table, untested on hardware |
 | `CommandCode::ApexGen1Direct` on Apex 5 `0x161C`, Apex 7 TKL `0x1618`, Apex Pro TKL `0x1614`, Apex Pro (2024) `0x1640` | `0x3A` | Experimental - community-fork table, untested on hardware |
 | `CommandCode::ApexMDirect` / `ApexMDirectCommand` (Apex M750 `0x0616`, 513-byte feature report on interface 2) | `0x8E` (byte 4 of header `00 00 00 01 8E 01 03 06 16`) | Experimental - community fork, untested; solid colour only, the slot-to-key map is unknown |

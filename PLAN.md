@@ -1,7 +1,8 @@
 # PLAN: next steps
 
 Single backlog for steelseriesgg-rs. Replaces the old `PLAN.md`, `TODO.md` and `handoff.md`.
-Last reviewed 2026-10-15 against `main` at `a7e5915`.
+Last reviewed 2026-10-21 against branch `feat/backlog-2026-10` (software-only round: everything below marked
+"untested" has no hardware result yet).
 
 Read `AGENTS.md` (same file as `CLAUDE.md`) and `.claude/rules/experimental-protocol.md` before any code change.
 Protocol facts for the Apex Pro TKL 2023 are in `AGENTS.md` ("Protocol research notes") and
@@ -10,7 +11,8 @@ Protocol facts for the Apex Pro TKL 2023 are in `AGENTS.md` ("Protocol research 
 ## Baseline (verified 2026-10-15, Windows)
 
 - `cargo clippy-ci` (alias for `clippy --all-targets --locked -- -D warnings`): clean.
-- `cargo test --locked`: 140 passed, 2 ignored (Windows); 141 passed, 2 ignored on Linux (WSL Ubuntu, 2026-10-15).
+- `cargo test --locked`: 303 passed, 2 ignored (Windows, branch `feat/backlog-2026-10`, 2026-10-21); 311 passed, 2
+  ignored on Linux with `--features remap` (WSL Ubuntu, before the last review-fix commit).
 - Linux `cargo clippy --all-targets -- -D warnings`, also with `--features sonar`: clean (WSL, 2026-10-15).
 - `cargo report future-incompatibilities --id 1`: "no reports are currently available".
 - `cargo test --locked --features audio`: fails to link on Windows (no libpulse). Expected; not a code bug. CI covers
@@ -51,14 +53,21 @@ Lighting is the only part replayed from `ssgg` so far (one solid red, 2026-10-14
    keys keep their previous colour instead of going black; falls back to black with a warning when no frame was
    saved yet. `[HW] confirmed 2026-10-21`: `rgb perkey set-key W red` lit W red, other keys unaffected by the fix
    (prior behaviour, also confirmed same day: without a saved frame, unlisted keys went dark - this is why,
-   see `docs/development/apex-pro-tkl-2023-gg-capture.md`). `rgb brightness` still sends the generic `00 22
-   <level>` output report, still untested on `0x1628`. Per-key *effects* (`set_per_key_effect`,
-   `trigger_key_reactive`, `apply_per_key_effect_with_brightness`) still reach the generic `0x23` placeholder and
-   `0x09` apply on direct-protocol models; route them through the frame if the effect tests fail.
+   see `docs/development/apex-pro-tkl-2023-gg-capture.md`). Branch `feat/backlog-2026-10`: on direct-protocol
+   models `rgb brightness` no longer sends `00 22 <level>`; it scales the frame colours in software (as GG does) and
+   resends the last saved frame. Untested on hardware. Limit: the level lives in the running process only (see the
+   `shortcut:` note on `set_direct_brightness`), so a later `ssgg rgb color` run sends full-brightness colours;
+   persisting it needs the daemon to stop pre-scaling through `RgbController` first. Per-key *effects*
+   (`set_per_key_effect`, `trigger_key_reactive`, `apply_per_key_effect_with_brightness`) still reach the generic
+   `0x23` placeholder and `0x09` apply on direct-protocol models, but only `ssgg validate` calls them; the macro
+   `impl_keyboard_with_delegation!` generates them, so overriding needs a macro split. Daemon animation on these
+   models still collapses to the first zone colour (`set_zone_colors`); a per-key wave needs a key-position table
+   the repo does not have.
 2. **Extra output report before each frame.** The existing `initialize()` path sends `00 09 00 ..` as an output report
    before frames. Code comments say `0x09` makes the controller fall back to its stored profile. Check (by USBPcap
    during step 1) whether `0x1628` still sends it; if yes, test with it skipped for `0x1628` and keep whichever
-   variant gives a stable frame.
+   variant gives a stable frame. Code still sends it from `initialize()` for `0x1628` and `0x1642` (left alone on
+   purpose: the confirmed lighting results above were obtained with it); `apply()` already suppresses it.
 3. **[HW, Linux] hidraw path.** `send_feature` on Unix uses `info.path` for `0x1628`. Untested. Needs a Linux machine
    with the keyboard; record the result in the capture note.
 4. **Status decision (ask the user).** After steps 1-3, ask whether to drop `[EXPERIMENTAL]` for the `0x40` lighting
@@ -91,7 +100,10 @@ none is expected to turn up without new firmware.
 
 ## P3. Apex 3 TKL (`0x1622`) RGB not applied (issues #173, #257)
 
-The code already sends `0x21` with selector `0xFF` and `R G B` per zone (OpenRGB 8-zone layout). Open differences:
+The code already sends `0x21` with selector `0xFF` and `R G B` per zone (OpenRGB 8-zone layout). Changed on the
+branch (untested): `Apex3Tkl` no longer sends the APPLY `0x09` from `initialize()`/`apply()`, which OpenRGB's
+8-zone controller never sends (checked against its source 2026-10-21) and which our own notes say reverts direct
+lighting on other models. Open differences:
 
 1. **[HW, outside tester]** `yann-morin-1998` offered to test on #257. Push a branch, post exact commands
    (`ssgg -d rgb color FF0000`, `ssgg rgb off`, `ssgg rgb brightness 50`) and ask for debug logs. Confirm with the
@@ -109,8 +121,12 @@ collection Windows discovery picks for `0x1610` is unknown.
 
 ## P5. GitHub close-out (ask before any GitHub write)
 
-- #211 (Arctis Nova Pro Omni `0x2290`) and #165 (Apex Pro TKL Wireless 2023 `0x1630`): registered in code with
-  tests. Ask the reporters to confirm on hardware, then close.
+- #211 (Arctis Nova Pro Omni `0x2290`): now detect-only (its protocol is unknown; `GenericHeadset`'s guessed `06 xx`
+  bytes are no longer sent to it). Needs a capture (`scripts/capture-device.ps1`) before any support. #165 (Apex Pro
+  TKL Wireless 2023 `0x1630`): registered in code with tests. Ask the reporter to confirm on hardware, then close.
+- #276 (Aerox 9 Wireless `0x1858`, Arctis Nova 7 `0x22A1`, Apex M750 `0x0616`): all three now have `[EXPERIMENTAL]`
+  support on the branch (mouse Modern family, Nova 7 family, M750 solid colour). Ask the reporter to test with exact
+  commands; none ran on hardware.
 - #280: repo link is 404. No longer needed for the checksum; decrypted `.edevice` files would still help with P2.3.
 - #277 (Sonar deeplink config import): format researched 2026-10-15, see `database-schemas.md` ("Shared config
   links"). Link = base64 CDN URL to the config JSON. Still unknown: how to create a config in Sonar (body of
@@ -121,12 +137,10 @@ collection Windows discovery picks for `0x1610` is unknown.
 - CodeQL default setup fails on every push: its `c-cpp` job finds no sources (the only C file,
   `mock_udev/include/libudev.h`, is deleted in the pending commit). The REST API cannot set a language list that
   includes Rust, so untick C/C++ in Settings > Code security > CodeQL (manual, 2026-10-15).
-- Move the hand-built direct frame (`build_direct_frame`) and `0x4B` init buffer in `apex_pro_tkl_2023.rs` to typed
-  `HidCommand`s in `hid_reports.rs` (hard constraint 1; pre-existing, found in review 2026-10-15).
-
-- `src/main.rs` is still ~2,000 lines after `cli.rs` and `daemon.rs` were split out. Extract the remaining
-  low-churn `cmd_*` families into modules without changing clap behaviour, output or feature gating. Do this only
-  when no P1-P4 work is in flight.
+- ~~Typed `HidCommand`s for the direct frame and `0x4B` init~~ done on the branch (`DirectFrameCommand`,
+  `DirectInitCommand` in `hid_reports.rs`; bytes identical to before, covered by the existing frame tests).
+- `src/main.rs` split: see the branch history (`refactor: move onboard, performance and diagnostics commands out
+  of main.rs`); the active families (`cmd_rgb`, `cmd_profile`, `cmd_headset`, ...) stay in `main.rs`.
 
 ## P7. Fork imports not yet taken (analysed 2026-10-21)
 
@@ -139,28 +153,49 @@ and OpenRGB (GPL-2.0): take facts, write our own code and test vectors.
 - Pollrate rebind and persistence: Sarhan `src/pollrate.rs` unbinds and rebinds the SteelSeries `usbhid`
   interfaces so a changed `mousepoll`/`kbpoll` applies at once, and `--persistent` writes
   `/etc/modprobe.d/ssgg-usbhid.conf`. Ours only writes the parameter and saves to `config.toml`.
-- Input remapper: Sarhan `src/input/*` (pure clock-injected `Remapper`, 25 tests; evdev grab + uinput re-emit).
-  Needs the `evdev` crate and a uinput uaccess rule, which is new attack surface.
-- Mice: Sarhan `src/devices/mice/*` (data-driven, from rivalcfg, WTFPL; byte-checked against rivalcfg's tests, never
-  run on hardware). Upstream has no mouse support. Its onboard-save action is ungated.
-- Headset model table: Sarhan `src/devices/headsets/models.rs`. Its `with_save` appends the save sequence to every
-  setting write; remove that before using the data.
-- OpenRGB family commands for PIDs upstream does not cover (Apex 3 TKL 8-zone, Apex M, Apex 9): Sarhan
-  `src/devices/keyboards/protocol.rs` and the 19 `HidCommand` impls in its `hid_reports.rs`. Do not take its PID
-  routing: it sends `0x1612` down the OpenRGB `0x3A` path (upstream's Apex 7 onboard class is hardware-confirmed)
-  and labels `0x1628` hardware-verified on the legacy zone path.
-- Nova 7 Gen 2 (`0x227e`) writes (sidetone, auto-off, Save `0x09`): Jaime `src/devices/headsets/nova7_gen2.rs`.
-  Untested, and Save persists to the headset.
+Taken on the branch (all `[EXPERIMENTAL]`, none run on hardware):
+- Input remapper: feature `remap` (`src/input/`, `ssgg remap run|list`). Only key-to-key and key-to-combo, no
+  macros/text/launch; escape chord LCtrl+RCtrl+LShift+RShift held 2 s. Never run against a real keyboard.
+- Mice, rivalcfg "Modern" family only (24 PIDs: Aerox 3/5/9, Prime Mini/Wireless, Rival 3 Gen 2, Rival 5): DPI, poll
+  rate, colour, battery via `ssgg mouse`. No save command anywhere.
+- Headsets: Arctis Nova 7 family (15 PIDs) with sidetone, auto-off, mic volume, status via `ssgg headset`. No save
+  `00 09` is ever sent, so sidetone may not stick on Gen 2.
+- OpenRGB / fork keyboard families: Apex 9 TKL/Mini (`0x40`, 513 bytes, no init), Gen 1 `0x3A` models (Apex 5,
+  Apex 7 TKL, Apex Pro TKL, Apex Pro 2024) on the direct path, Apex M750 solid colour (slot-to-key map unknown).
+
+Still open:
+- Other mice families (Prime/Prime+, Old, Rival 3, 310/TEN, wireless-old) and the rest of Sarhan's mouse table.
+- Other headset families from Sarhan's `models.rs` (Arctis 1/7/9, Pro Wireless, Nova Pro Wireless, 7+, Nova 3/5):
+  its `with_save` appends the save sequence to every write; strip that before using the data.
+- Firmware probe: OpenRGB says Apex Pro TKL / Apex 9 switch to the Gen 3 protocol from firmware 1.19.7; ssgg does
+  not probe firmware to choose the packet.
+- Apex 3 (`0x161A`, tri-zone) and Old Apex (`0x1202`, `0x1206`) layouts exist in Sarhan's `protocol.rs`; not taken.
+- Nova 7 Gen 2 (`0x227e`) Save `0x09` (Jaime `nova7_gen2.rs`): Save persists to the headset; not taken.
+- Remapper gaps: no hot-plug (an unplugged keyboard ends the session), no LED capability on the virtual device.
 - Skipped on purpose: Sarhan engine/control API (`src/engine`, good token and Host-check design to copy), PipeWire
   mixer, wry GUI app, rebranding; Jaime Electron app, native PipeWire RPC service (unconditional `pipewire`/`libspa`
   deps), Snap/.deb, `apex_gen3.rs` (duplicates `0x1642`), branding.
+
+## P8. Hardware checks owed by the 2026-10-21 branch
+
+Nothing below has run on a device. Ask whoever owns the device; record device, firmware and date; promote a status
+only per `.claude/rules/experimental-protocol.md`.
+
+- **[HW, owner, GG stopped]** Apex Pro TKL 2023 `0x1628`: `rgb color 00FF00`, `rgb brightness 50` then `100` (frame
+  dims and restores?), then `rgb color` again in a new run (full brightness: known limit).
+- **[HW, outside]** Apex 3 TKL `0x1622` (#173/#257): `ssgg -d rgb color FF0000`, `rgb off`, `rgb brightness 50` with the
+  new no-APPLY behaviour.
+- **[HW, outside]** #283 `0x1610`, #276 (`0x1858` `ssgg mouse`, `0x22A1` `ssgg headset`, `0x0616` `rgb color`),
+  Apex 9 (`0x1634`, `0x1620`), Apex 5 / Apex 7 TKL / Apex Pro TKL / Apex Pro 2024 (`0x161C`, `0x1618`, `0x1614`,
+  `0x1640`), other Nova 7 PIDs, other Modern-family mice.
+- **[HW, Linux]** `ssgg remap run` on a real keyboard, including the escape chord and unplug behaviour.
 
 ---
 
 ## Done or dropped (do not redo)
 
-- Device registration (#276): `0x22A1` and `0x0616` are detect-only (`is_detect_only`); Aerox 9 mouse skipped by user
-  decision.
+- Device registration (#276): superseded on `feat/backlog-2026-10`, which implements all three devices as
+  `[EXPERIMENTAL]` (the Aerox 9 skip is lifted by user decision 2026-10-21). `0x2290` is now the detect-only one.
 - Issue #120 audio hang (5 s timeout in `src/audio/pulse.rs`).
 - Protocol-docs reconciliation, capability-label cleanup, Windows pollrate "unsupported on this driver" notice,
   SignalRGB research (it drives devices directly via its own plugins; no SteelSeries bytes in public docs).

@@ -18,13 +18,17 @@ Open-source SteelSeries GG replacement for Linux. Controls SteelSeries keyboards
 Use `rg --files src/` for the full tree. Non-obvious entry points:
 
 ```
-src/main.rs                    main() and most cmd_* handlers
+src/main.rs                    main() and the active cmd_* handlers (rgb, profile, headset, mouse, remap, ...)
+src/commands/                  moved cmd_* families: onboard.rs, performance.rs, diagnostics.rs
+src/input/                     feature `remap`: key remapper (remapper.rs pure core, linux.rs evdev/uinput)
 src/cli.rs                     clap types (Cli, Commands, *Action) and argument parse helpers
 src/daemon.rs                  daemon loop, hot-plug monitoring, GameSense startup
 src/error.rs                   crate::error::Error (thiserror) + Result alias
 src/devices/hid_reports.rs     HidReportBuilder and typed HID commands - use this, not raw bytes
 src/devices/discovery.rs       DeviceManager: enumeration, hot-plug, fingerprinting
-src/devices/keyboards/         Keyboard impls (apex.rs, apex_pro_tkl_2023.rs = experimental)
+src/devices/keyboards/         Keyboard impls (apex.rs, apex_7.rs, apex_pro_tkl_2023.rs = experimental, apex_m750.rs)
+src/devices/headsets/          generic headset + nova7.rs (Arctis Nova 7 family, experimental)
+src/devices/mice/              rivalcfg Modern family mice (modern.rs, dpi_tables.rs; experimental)
 src/gamesense/server.rs        Axum HTTP server (port 27301)
 src/audio/                     feature `audio` (pulse.rs) and `sonar` (sonar.rs)
 src/bin/                       helper binaries, not part of `ssgg` (discover_actuation probes actuation firmware)
@@ -77,8 +81,9 @@ this is expected, CI builds and lints `audio` on Linux only.
 | *(none)* | Core RGB, GameSense, profiles | — |
 | `audio` | AudioMixer, PulseAudio/PipeWire backend | `libpulse-dev` |
 | `sonar` | SonarClient HTTP integration | — (reqwest already in tree) |
+| `remap` | `ssgg remap run`: evdev key remapper (Linux only) | `evdev` (Linux target), `rustix/event` |
 
-`audio` and `sonar` are independent; do not couple them. Experimental protocol paths are not feature-gated; they carry
+`audio`, `sonar` and `remap` are independent; do not couple them. Experimental protocol paths are not feature-gated; they carry
 `[EXPERIMENTAL]` labels instead (see `.claude/rules/experimental-protocol.md`).
 
 ---
@@ -90,7 +95,7 @@ this is expected, CI builds and lints `audio` on Linux only.
 3. **GameSense CORS**: enforce localhost-only origin; the policy may only be tightened, never relaxed.
 4. **Propagate errors**: use `?` or return an explicit `Err` value — no `unwrap` or `expect` in production paths.
 5. **Error types**: `crate::error::Error` with `thiserror` at library boundaries; `anyhow` with `context()` in `src/main.rs` and binaries.
-6. **Protocol accuracy**: the direct-mode frames (`0x40`, `0x61`, `0x3A`), the profile blob and `PerKeyRgb (0x23)` are reverse-engineered; only one solid-colour `0x40` frame was replayed on hardware. Label new protocol work clearly; never state it as confirmed unless tested on hardware.
+6. **Protocol accuracy**: the direct-mode frames (`0x40`, `0x61`, `0x3A`), the profile blob and `PerKeyRgb (0x23)` are reverse-engineered; only a solid-colour and per-key `0x40` frame were replayed on hardware (wired `0x1628`). Label new protocol work clearly; never state it as confirmed unless tested on hardware.
 7. **Minimal scope**: fix what the task asks, nothing more. No opportunistic refactors.
 8. **No mutable global state**, no panics in non-test code (unless explicitly fatal and documented), no ignored `Result`s.
 9. **`unsafe` blocks** must document the safety invariant inline.
