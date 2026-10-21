@@ -1840,6 +1840,39 @@ ok('the bottom row draws LWin between LCtrl and LAlt, and the drawing order leav
     && app.LAYOUT.filter((key) => key.y === 5.3).length === bottom.length;
 }, () => [app.LAYOUT.filter((k) => k.y === 5.3).map((k) => k.hid), app.LAYOUT.filter((k) => k.y === 5.3).map((k) => [k.hid, k.x])]);
 
+// --- live lighting (live.js) ------------------------------------------------
+console.log('live lighting panel, served only by ssgg gui');
+const liveSandbox = {};
+vm.runInNewContext(read('tools/profile-gui/live.js'), liveSandbox, { filename: 'live.js' });
+const live = liveSandbox.SsggLive;
+ok('hex colours normalise to six upper-case digits and anything else is refused',
+  () => live.normalizeHex('#ff8800') === 'FF8800' && live.normalizeHex(' 00ff00 ') === '00FF00'
+    && live.normalizeHex('red') === null && live.normalizeHex('FF88') === null && live.normalizeHex('') === null);
+ok('without the token meta tag the page has no live lighting',
+  () => live.tokenFrom({ querySelector: () => null }) === null
+    && live.tokenFrom({ querySelector: () => ({ getAttribute: () => 'abc' }) }) === 'abc');
+ok('a call sends the token header and a JSON body, and an error answer throws its message', async () => {
+  const seen = [];
+  let n = 0;
+  liveSandbox.fetch = async (path, init) => {
+    const first = n++ === 0;
+    seen.push({ path, init });
+    return { ok: first, status: first ? 200 : 400, json: async () => (first ? { ok: true } : { error: 'bad colour' }) };
+  };
+  await live.call('tok', '/api/rgb/color', { color: 'FF0000' });
+  let message = '';
+  try { await live.call('tok', '/api/rgb/off', {}); } catch (e) { message = e.message; }
+  const sent = seen[0];
+  return sent.path === '/api/rgb/color' && sent.init.method === 'POST' && sent.init.headers['X-Ssgg-Token'] === 'tok'
+    && sent.init.headers['Content-Type'] === 'application/json' && sent.init.body === '{"color":"FF0000"}'
+    && message === 'bad colour';
+});
+ok('index.html loads live.js after app.js with a hidden panel, and app.js itself makes no requests', () => {
+  const html = read('tools/profile-gui/index.html');
+  return html.indexOf('src="app.js"') > 0 && html.indexOf('src="app.js"') < html.indexOf('src="live.js"')
+    && /id="liveBox"[^>]*hidden/.test(html) && !/\bfetch\s*\(/.test(app.source) && /\.live\[hidden\]/.test(style);
+});
+
 await Promise.all(pending);
 
 console.log('');

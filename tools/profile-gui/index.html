@@ -8,13 +8,14 @@
 <script src="products.generated.js" defer></script>
 <script src="app.js" defer></script>
 <script src="main.js" defer></script>
+<script src="live.js" defer></script>
 </head>
 <body>
 <header class="bar">
   <div class="brand">
     <h1>ssgg on-board profile editor</h1>
     <p class="mono">edits the JSON of <code>ssgg onboard read --json</code> / <code>ssgg onboard decode --json</code> &middot;
-      files only, no device &middot; read, write and deploy are hardware-tested on an Apex 7 (`0x1612`)
+      files only, no device (live lighting only under <code>ssgg gui</code>) &middot; read, write and deploy are hardware-tested on an Apex 7 (`0x1612`)
       <span class="tag">reverse-engineered protocol</span></p>
   </div>
   <div class="toolbar">
@@ -28,6 +29,7 @@
   <div id="tabs" class="tabs"></div>
 </header>
 <p id="status" class="status mono"></p>
+<section id="liveBox" class="panel live" hidden></section>
 <main>
   <section id="boardBox" class="board-box">
     <div id="nameBar" class="name-bar"></div>
@@ -58,7 +60,7 @@
   (<span class="mono">device-offset-lookup-table</span> inverted, as GG's
   <span class="mono">onboard-to-config-button-mapping</span> uses it). Function names mirror
   <span class="mono">function_name</span> in <span class="mono">src/devices/keyboards/apex_7_profile.rs</span>.
-  Nothing here is written to a keyboard by this page, and <span class="mono">crc_*</span> is never recomputed.
+  Nothing in app.js writes to a keyboard (only live.js, served by <span class="mono">ssgg gui</span>, sends lighting calls), and <span class="mono">crc_*</span> is never recomputed.
 </footer>
 </body>
 </html>

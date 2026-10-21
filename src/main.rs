@@ -4,6 +4,7 @@
 
 mod cli;
 mod daemon;
+mod gui;
 
 use clap::Parser;
 
@@ -158,6 +159,11 @@ async fn main() -> Result<()> {
             } else {
                 cmd_onboard(None, action).await?;
             }
+        }
+
+        Commands::Gui { port } => {
+            let manager = new_device_manager()?;
+            gui::cmd_gui(&manager, port).await?;
         }
 
         Commands::Server { port } => {

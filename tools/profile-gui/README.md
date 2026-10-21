@@ -3,15 +3,16 @@
 A browser page that reads the JSON dumps `ssgg onboard read` and
 `ssgg onboard decode` write (by default into a file named from the profile name in the
 image: `Config 1` -> `config_1.json`), edits them on a drawn keyboard, and saves
-the JSON back. No build step, no dependencies, no network: four plain files
-(`index.html`, `style.css`, `app.js`, `main.js`).
+the JSON back. No build step, no dependencies: plain files
+(`index.html`, `style.css`, `app.js`, `main.js`, `live.js`, the generated `products.generated.js`).
 
 `read` writes that report directly: it decodes the image it pulled. The per-pull read
 record (`read --report FILE` - chunk headers, framing stats, image hash) is capture telemetry, not a
 profile, and this page does not open it.
 
-It is a **file editor only**. It never opens a device node and writes nothing to
-a keyboard - the bytes it saves are what `ssgg onboard write` sends. The protocol behind them is
+The editor (`app.js`) is a **file editor only**. It never opens a device node and writes nothing to
+a keyboard - the bytes it saves are what `ssgg onboard write` sends. The one exception is the live
+lighting panel (`live.js`), which appears only when the page is served by `ssgg gui` (below). The protocol behind them is
 reverse-engineered from GG captures of one Apex 7 (`0x1612`) and from GG's own device specifications. Its read, write and deploy are confirmed on
 that board, and decode and encode match GG for clean and modified profiles.
 
@@ -21,6 +22,24 @@ that board, and decode and encode match GG for clean and modified profiles.
 xdg-open tools/profile-gui/index.html          # straight from the filesystem
 python3 -m http.server -d tools/profile-gui 8080   # then http://127.0.0.1:8080
 ```
+
+### Live lighting (`ssgg gui`)
+
+```sh
+ssgg gui            # http://127.0.0.1:8765/, then Ctrl+C
+```
+
+`ssgg gui` serves these files and a small lighting API on 127.0.0.1 only, and opens the first keyboard
+(as `ssgg rgb` does). The page shows a **Live lighting** panel (colour, brightness, off) when that keyboard
+opened; opened from a file or any other server there is no panel. **`[EXPERIMENTAL]`**: the calls are the ones
+`ssgg rgb color|brightness|off` sends, and only a solid colour on the wired Apex Pro TKL 2023 (`0x1628`) is
+confirmed on hardware - a board that ignores a call still answers success. Close GG first, it overwrites other
+programs. Stop `ssgg daemon` first too: two programs should not hold one keyboard.
+
+The API is not CORS-enabled (the page is same-origin). Each run has a random token the page receives only by
+being served here; a request needs that token, a `Host` of `127.0.0.1:<port>` or `localhost:<port>`, and no
+foreign `Origin`. Any local process can still fetch the page and the token, as with the GameSense server.
+Colour and brightness are not saved to the device state store, unlike `ssgg rgb`.
 
 `app.js` and `main.js` are **plain scripts**, not ES modules: a page opened from
 the filesystem has origin `null`, and browsers refuse module scripts there, so

@@ -77,6 +77,15 @@ pub(crate) enum Commands {
         action: OnboardAction,
     },
 
+    /// Serve the on-board profile editor (tools/profile-gui) on 127.0.0.1, with a live lighting panel that
+    /// drives the first keyboard. `[EXPERIMENTAL]` lighting; only a solid colour on the wired Apex Pro TKL 2023
+    /// is hardware-confirmed
+    Gui {
+        /// Port to listen on (0 picks a free one)
+        #[arg(short, long, default_value = "8765")]
+        port: u16,
+    },
+
     /// Start the GameSense server
     Server {
         /// Port to listen on

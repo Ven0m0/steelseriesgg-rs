@@ -244,3 +244,8 @@ ul.changes li { margin: 2px 0; }
 /* custom-binding list rows jump to the key panel */
 table.grid tr.clickable { cursor: pointer; }
 table.grid tr.clickable:hover td { background: #20262f; }
+
+/* live lighting panel (live.js), shown only under `ssgg gui` */
+.live { margin: 12px 16px; }
+.live[hidden] { display: none; }
+.live-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 6px 0; }
