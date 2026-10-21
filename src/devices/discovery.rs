@@ -483,7 +483,8 @@ impl DeviceManager {
     /// answers the same vendor ID, so the product ID identifies it). With it, only keyboards carrying that
     /// product ID are candidates. Without it, every keyboard that answers [`Keyboard::onboard_codec`] is a
     /// candidate, and the read runs on it when exactly one keyboard - not a mouse, not a headset - qualifies;
-    /// more than one answers [`OnboardKeyboard::Ambiguous`], which is what asks the caller for `--device`.
+    /// more than one answers [`OnboardKeyboard::Ambiguous`], which is what asks the caller for `--device` (and,
+    /// for two keyboards of one model, to disconnect one).
     ///
     /// Candidates are opened to ask them, which sends nothing: answering the protocol is a product-ID check
     /// on the keyboard class discovery built. The read runs on the handle returned here, which is what
@@ -519,7 +520,7 @@ impl DeviceManager {
             .iter()
             .map(|(product_id, name, _)| (*product_id, name.clone()))
             .collect();
-        match onboard_choice(&listed, product_id) {
+        match onboard_choice(&listed) {
             OnboardChoice::NotFound => Ok(OnboardKeyboard::NotFound { product_id }),
             OnboardChoice::Ambiguous => Ok(OnboardKeyboard::Ambiguous { keyboards: listed }),
             OnboardChoice::Use(index) => {
@@ -979,29 +980,22 @@ pub enum OnboardChoice {
     Use(usize),
     /// No candidate: no keyboard of the selection answers the on-board profile protocol.
     NotFound,
-    /// No product ID was given and more than one keyboard answers the protocol: the caller has to name one.
+    /// More than one keyboard answers the protocol: the caller has to name one by product ID, or, when they
+    /// share a product ID, disconnect all but one.
     Ambiguous,
 }
 
-/// The selection rule, over the candidate list in the order the manager lists it. Several collections of
-/// the same keyboard (same product ID) are one keyboard, so they are not ambiguous; distinct product IDs
-/// are distinct keyboards, and only a product ID picks between them.
+/// The selection rule, over the candidate list in the order the manager lists it. The list is already one entry
+/// per physical keyboard (`DeviceManager::keyboards` dedupes the collections of a device), so more than one
+/// entry is more than one keyboard and the write must not pick between them. `--device` narrows the list by
+/// product ID before it gets here; two keyboards of one model survive that and stay ambiguous, because the
+/// manager opens a model's control collection by product ID and cannot tell them apart.
 #[must_use]
-pub fn onboard_choice(candidates: &[(u16, String)], product_id: Option<u16>) -> OnboardChoice {
+pub fn onboard_choice(candidates: &[(u16, String)]) -> OnboardChoice {
     match candidates {
         [] => OnboardChoice::NotFound,
         [_] => OnboardChoice::Use(0),
-        many => {
-            let distinct: std::collections::HashSet<u16> = many.iter().map(|(pid, _)| *pid).collect();
-            if product_id.is_some() {
-                // The selection already filtered by product ID: the first collection of it is the keyboard.
-                OnboardChoice::Use(0)
-            } else if distinct.len() > 1 {
-                OnboardChoice::Ambiguous
-            } else {
-                OnboardChoice::Use(0)
-            }
-        }
+        _ => OnboardChoice::Ambiguous,
     }
 }
 
@@ -1013,8 +1007,8 @@ pub enum OnboardKeyboard {
     /// No keyboard of the selection answers the on-board profile protocol. `product_id` is what was asked
     /// for; `None` when the caller asked for "the connected on-board keyboard".
     NotFound { product_id: Option<u16> },
-    /// No product ID was given and more than one keyboard answers the protocol: `keyboards` lists them
-    /// (`product_id`, name) and the caller has to name one.
+    /// More than one keyboard answers the protocol: `keyboards` lists them (`product_id`, name) and the
+    /// caller has to name one, which only a product ID can do between different models.
     Ambiguous { keyboards: Vec<(u16, String)> },
 }
 
@@ -1325,31 +1319,27 @@ mod tests {
 
     #[test]
     fn onboard_choice_needs_a_candidate() {
-        assert_eq!(onboard_choice(&[], Some(0x1612)), OnboardChoice::NotFound);
-        assert_eq!(onboard_choice(&[], None), OnboardChoice::NotFound);
+        assert_eq!(onboard_choice(&[]), OnboardChoice::NotFound);
     }
 
     #[test]
-    fn onboard_choice_accepts_the_only_keyboard_without_a_product_id() {
+    fn onboard_choice_accepts_the_only_keyboard() {
         let listed = vec![(0x1612, "Apex 7".to_string())];
-        assert_eq!(onboard_choice(&listed, None), OnboardChoice::Use(0));
+        assert_eq!(onboard_choice(&listed), OnboardChoice::Use(0));
+    }
+
+    /// The candidate list is one entry per physical keyboard, so two entries of one model are two keyboards
+    /// and a write must not pick one of them.
+    #[test]
+    fn onboard_choice_refuses_two_keyboards_of_one_model() {
+        let listed = vec![(0x1612, "Apex 7".to_string()), (0x1612, "Apex 7".to_string())];
+        assert_eq!(onboard_choice(&listed), OnboardChoice::Ambiguous);
     }
 
     #[test]
-    fn onboard_choice_reads_several_collections_of_one_keyboard_as_one_keyboard() {
-        let listed = vec![
-            (0x1612, "Apex 7".to_string()),
-            (0x1612, "Apex 7".to_string()),
-            (0x1612, "Apex 7".to_string()),
-        ];
-        assert_eq!(onboard_choice(&listed, None), OnboardChoice::Use(0));
-    }
-
-    #[test]
-    fn onboard_choice_asks_for_a_product_id_between_two_keyboards() {
+    fn onboard_choice_asks_for_a_product_id_between_two_models() {
         let listed = vec![(0x1612, "Apex 7".to_string()), (0x1616, "Apex 7 TKL".to_string())];
-        assert_eq!(onboard_choice(&listed, None), OnboardChoice::Ambiguous);
-        assert_eq!(onboard_choice(&listed, Some(0x1616)), OnboardChoice::Use(0));
+        assert_eq!(onboard_choice(&listed), OnboardChoice::Ambiguous);
     }
 
     #[test]

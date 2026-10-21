@@ -45,9 +45,10 @@ use crate::rgb::{Color, PerKeyEffect};
 /// in the reference capture. The kernel writes the device's own report-ID byte into byte 0, so the reply's
 /// leading `03` arrives there whatever we ask for. Confirmed on hardware on an Apex 7 (`0x1612`).
 const READ_REPLY_ID: u8 = 0x00;
-/// Buffer size to ask the transport for when reading a payload read back: [`READ_REPORT_LEN`] (642), the
-/// `wLength` the capture shows, forwarded verbatim - a 643-byte ask never completes. The report-ID byte
-/// lands in buffer[0], so a full answer is `[report ID][641 bytes]`.
+/// Buffer size to hand the transport when reading a payload read back: [`READ_REPORT_LEN`] + 1 (643). The
+/// buffer carries the report-number byte (0) in front of the data, and with report number 0 the kernel drops
+/// that byte from the request, so the wire `wLength` is [`READ_REPORT_LEN`] (642), the value the capture shows.
+/// It is the `wLength` that must not be 643: a 643-byte `GET_REPORT` never completes.
 const READ_REPLY_BUFFER_LEN: usize = READ_REPORT_LEN + 1;
 /// Poll acknowledges and status reports the reply collector skips.
 const ACK_REPORT_IDS: [u8; 2] = [0x0B, 0x12];
@@ -137,7 +138,7 @@ impl Apex7 {
         // The geometry this platform's read always has; `ssgg --debug onboard read ...` shows it before
         // the first byte moves.
         tracing::info!(
-            "onboard read geometry: profile slot {profile} = GG config {} (file {fs_id:04X}) is              {PULLS_PER_FILE} pulls of \
+            "onboard read geometry: profile slot {profile} = GG config {} (file {fs_id:04X}) is {PULLS_PER_FILE} pulls of \
              {DEVICE_RESOURCE_BUFFER_LEN} bytes, {} payload reads of {PAYLOAD_READ_LEN} bytes, {} of the {} \
              payload bytes covered",
             profile + 1,
@@ -664,6 +665,56 @@ crate::impl_keyboard_with_delegation!(Apex7, {
 
     async fn load_onboard_profile(&self, profile: u8) -> Result<()> {
         self.deploy_profile(profile)
+    }
+
+    // Lighting is the generic keyboard's. The macro delegates only the query methods, so without these
+    // the trait defaults answer: `set_color` errors and the rest silently do nothing.
+    async fn apply(&mut self) -> Result<()> {
+        self.inner.apply().await
+    }
+
+    async fn set_color(&mut self, color: Color) -> Result<()> {
+        self.inner.set_color(color).await
+    }
+
+    async fn set_zone_colors(&mut self, colors: &[Color]) -> Result<()> {
+        self.inner.set_zone_colors(colors).await
+    }
+
+    async fn set_brightness(&mut self, brightness: u8) -> Result<()> {
+        self.inner.set_brightness(brightness).await
+    }
+
+    async fn set_key_color(&mut self, key_id: KeyId, color: Color) -> Result<()> {
+        self.inner.set_key_color(key_id, color).await
+    }
+
+    async fn set_key_colors(&mut self, key_colors: &[(KeyId, Color)]) -> Result<()> {
+        self.inner.set_key_colors(key_colors).await
+    }
+
+    async fn set_key_color_direct(&mut self, address: crate::devices::KeyAddress, color: Color) -> Result<()> {
+        self.inner.set_key_color_direct(address, color).await
+    }
+
+    async fn set_key_colors_direct(&mut self, key_colors: &[(crate::devices::KeyAddress, Color)]) -> Result<()> {
+        self.inner.set_key_colors_direct(key_colors).await
+    }
+
+    async fn set_key_region(&mut self, start_hid: u8, count: u8, color: Color) -> Result<()> {
+        self.inner.set_key_region(start_hid, count, color).await
+    }
+
+    fn read_actuation_point(&mut self) -> Result<u8> {
+        self.inner.read_actuation_point()
+    }
+
+    fn set_actuation_point(&mut self, value: u8) -> Result<()> {
+        self.inner.set_actuation_point(value)
+    }
+
+    fn set_actuation_point_mm(&mut self, mm: f32) -> Result<()> {
+        self.inner.set_actuation_point_mm(mm)
     }
 });
 
