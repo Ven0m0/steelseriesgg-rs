@@ -619,8 +619,8 @@ pub(crate) enum StreamerAction {
 pub(crate) enum PollrateAction {
     /// Set mouse polling rate
     Mouse {
-        /// Polling rate in Hz (125, 500, 1000, 2000, 4000)
-        /// Note: Rates above 1000Hz require hardware support
+        /// Polling rate in Hz (125, 250, 500, 1000, 2000, 4000)
+        /// Note: Rates above 1000Hz cannot be set through the Linux kernel parameter
         rate: u32,
 
         /// Save to config and apply on daemon startup
@@ -630,8 +630,8 @@ pub(crate) enum PollrateAction {
 
     /// Set keyboard polling rate
     Keyboard {
-        /// Polling rate in Hz (125, 500, 1000, 2000, 4000)
-        /// Note: Rates above 1000Hz require hardware support
+        /// Polling rate in Hz (125, 250, 500, 1000, 2000, 4000)
+        /// Note: Rates above 1000Hz cannot be set through the Linux kernel parameter
         rate: u32,
 
         /// Save to config and apply on daemon startup

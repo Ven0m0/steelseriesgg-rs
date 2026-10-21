@@ -2,6 +2,9 @@
 //!
 //! This module allows changing the USB HID polling rate via sysfs kernel parameters.
 //! Requires root/sudo privileges to modify system files.
+//!
+//! The `usbhid` parameters (`mousepoll`, `kbpoll`) hold an interval in whole **milliseconds**
+//! (`0` = use the device's own interval), so the kernel route tops out at 1000 Hz.
 
 use crate::{Error, Result};
 #[cfg(target_os = "linux")]
@@ -12,6 +15,8 @@ use rustix::process::geteuid;
 pub enum PollRate {
     /// 125 Hz (8ms interval)
     Hz125,
+    /// 250 Hz (4ms interval)
+    Hz250,
     /// 500 Hz (2ms interval)
     Hz500,
     /// 1000 Hz (1ms interval)
@@ -23,27 +28,31 @@ pub enum PollRate {
 }
 
 impl PollRate {
-    /// Convert poll rate to sysfs parameter value.
-    pub fn to_sysfs_value(&self) -> u8 {
+    /// Convert poll rate to the `usbhid` parameter value (an interval in milliseconds).
+    ///
+    /// Rates above 1000 Hz need a sub-millisecond interval the kernel parameter cannot express.
+    pub fn to_sysfs_value(&self) -> Result<u8> {
         match self {
-            PollRate::Hz125 => 0,
-            PollRate::Hz500 => 1,
-            PollRate::Hz1000 => 2,
-            PollRate::Hz2000 => 3,
-            PollRate::Hz4000 => 4,
+            PollRate::Hz125 => Ok(8),
+            PollRate::Hz250 => Ok(4),
+            PollRate::Hz500 => Ok(2),
+            PollRate::Hz1000 => Ok(1),
+            PollRate::Hz2000 | PollRate::Hz4000 => Err(Error::InvalidConfig(format!(
+                "{} Hz cannot be set through usbhid: its interval is in whole milliseconds, so 1000 Hz is the maximum",
+                self.to_hz()
+            ))),
         }
     }
 
-    /// Convert from sysfs parameter value to poll rate.
+    /// Convert a `usbhid` parameter value (interval in milliseconds) to a poll rate.
     pub fn from_sysfs_value(value: u8) -> Result<Self> {
         match value {
-            0 => Ok(PollRate::Hz125),
-            1 => Ok(PollRate::Hz500),
-            2 => Ok(PollRate::Hz1000),
-            3 => Ok(PollRate::Hz2000),
-            4 => Ok(PollRate::Hz4000),
+            8 => Ok(PollRate::Hz125),
+            4 => Ok(PollRate::Hz250),
+            2 => Ok(PollRate::Hz500),
+            1 => Ok(PollRate::Hz1000),
             _ => Err(Error::InvalidConfig(format!(
-                "Invalid poll rate value: {} (valid range: 0-4)",
+                "Unsupported usbhid poll interval: {} ms (supported: 1, 2, 4, 8)",
                 value
             ))),
         }
@@ -53,12 +62,13 @@ impl PollRate {
     pub fn from_hz(hz: u32) -> Result<Self> {
         match hz {
             125 => Ok(PollRate::Hz125),
+            250 => Ok(PollRate::Hz250),
             500 => Ok(PollRate::Hz500),
             1000 => Ok(PollRate::Hz1000),
             2000 => Ok(PollRate::Hz2000),
             4000 => Ok(PollRate::Hz4000),
             _ => Err(Error::InvalidConfig(format!(
-                "Unsupported poll rate: {} Hz (supported: 125, 500, 1000, 2000, 4000)",
+                "Unsupported poll rate: {} Hz (supported: 125, 250, 500, 1000, 2000, 4000)",
                 hz
             ))),
         }
@@ -68,6 +78,7 @@ impl PollRate {
     pub fn to_hz(&self) -> u32 {
         match self {
             PollRate::Hz125 => 125,
+            PollRate::Hz250 => 250,
             PollRate::Hz500 => 500,
             PollRate::Hz1000 => 1000,
             PollRate::Hz2000 => 2000,
@@ -84,6 +95,7 @@ impl PollRate {
     pub fn description(&self) -> String {
         match self {
             PollRate::Hz125 => "125 Hz (8ms) - Power saving".to_string(),
+            PollRate::Hz250 => "250 Hz (4ms) - Office".to_string(),
             PollRate::Hz500 => "500 Hz (2ms) - Standard".to_string(),
             PollRate::Hz1000 => "1000 Hz (1ms) - Gaming".to_string(),
             PollRate::Hz2000 => "2000 Hz (0.5ms) - High-end gaming (requires hardware support)".to_string(),
@@ -131,6 +143,9 @@ fn is_root() -> bool {
 /// On other platforms this operation is not supported.
 #[cfg(target_os = "linux")]
 pub async fn set_poll_rate(device_type: DeviceType, rate: PollRate) -> Result<()> {
+    // Validate first so an unsettable rate fails before asking for root.
+    let value = rate.to_sysfs_value()?.to_string();
+
     if !is_root() {
         let bin_name = match std::env::current_exe() {
             Ok(path) => path
@@ -149,7 +164,6 @@ pub async fn set_poll_rate(device_type: DeviceType, rate: PollRate) -> Result<()
     }
 
     let path = device_type.sysfs_path();
-    let value = rate.to_sysfs_value().to_string();
 
     tokio::fs::write(path, &value).await.map_err(|e| {
         Error::Io(std::io::Error::new(
@@ -377,31 +391,44 @@ mod tests {
 
     #[test]
     fn test_poll_rate_conversion() {
-        assert_eq!(PollRate::Hz125.to_sysfs_value(), 0);
-        assert_eq!(PollRate::Hz500.to_sysfs_value(), 1);
-        assert_eq!(PollRate::Hz1000.to_sysfs_value(), 2);
-        assert_eq!(PollRate::Hz2000.to_sysfs_value(), 3);
-        assert_eq!(PollRate::Hz4000.to_sysfs_value(), 4);
+        // usbhid takes an interval in milliseconds: Hz = 1000 / value.
+        assert_eq!(PollRate::Hz125.to_sysfs_value().unwrap(), 8);
+        assert_eq!(PollRate::Hz250.to_sysfs_value().unwrap(), 4);
+        assert_eq!(PollRate::Hz500.to_sysfs_value().unwrap(), 2);
+        assert_eq!(PollRate::Hz1000.to_sysfs_value().unwrap(), 1);
+        assert!(PollRate::Hz2000.to_sysfs_value().is_err());
+        assert!(PollRate::Hz4000.to_sysfs_value().is_err());
 
-        assert_eq!(PollRate::from_sysfs_value(0).unwrap(), PollRate::Hz125);
-        assert_eq!(PollRate::from_sysfs_value(1).unwrap(), PollRate::Hz500);
-        assert_eq!(PollRate::from_sysfs_value(2).unwrap(), PollRate::Hz1000);
-        assert_eq!(PollRate::from_sysfs_value(3).unwrap(), PollRate::Hz2000);
-        assert_eq!(PollRate::from_sysfs_value(4).unwrap(), PollRate::Hz4000);
-        assert!(PollRate::from_sysfs_value(5).is_err());
+        assert_eq!(PollRate::from_sysfs_value(8).unwrap(), PollRate::Hz125);
+        assert_eq!(PollRate::from_sysfs_value(4).unwrap(), PollRate::Hz250);
+        assert_eq!(PollRate::from_sysfs_value(2).unwrap(), PollRate::Hz500);
+        assert_eq!(PollRate::from_sysfs_value(1).unwrap(), PollRate::Hz1000);
+        assert!(PollRate::from_sysfs_value(0).is_err());
+        assert!(PollRate::from_sysfs_value(3).is_err());
+    }
+
+    #[test]
+    fn test_sysfs_roundtrip_matches_hz() {
+        for rate in [PollRate::Hz125, PollRate::Hz250, PollRate::Hz500, PollRate::Hz1000] {
+            let ms = rate.to_sysfs_value().unwrap();
+            assert_eq!(1000 / u32::from(ms), rate.to_hz());
+            assert_eq!(PollRate::from_sysfs_value(ms).unwrap(), rate);
+        }
     }
 
     #[test]
     fn test_hz_conversion() {
         assert_eq!(PollRate::from_hz(125).unwrap(), PollRate::Hz125);
+        assert_eq!(PollRate::from_hz(250).unwrap(), PollRate::Hz250);
         assert_eq!(PollRate::from_hz(500).unwrap(), PollRate::Hz500);
         assert_eq!(PollRate::from_hz(1000).unwrap(), PollRate::Hz1000);
         assert_eq!(PollRate::from_hz(2000).unwrap(), PollRate::Hz2000);
         assert_eq!(PollRate::from_hz(4000).unwrap(), PollRate::Hz4000);
         assert!(PollRate::from_hz(8000).is_err());
-        assert!(PollRate::from_hz(250).is_err());
+        assert!(PollRate::from_hz(333).is_err());
 
         assert_eq!(PollRate::Hz125.to_hz(), 125);
+        assert_eq!(PollRate::Hz250.to_hz(), 250);
         assert_eq!(PollRate::Hz500.to_hz(), 500);
         assert_eq!(PollRate::Hz1000.to_hz(), 1000);
         assert_eq!(PollRate::Hz2000.to_hz(), 2000);
@@ -411,6 +438,7 @@ mod tests {
     #[test]
     fn test_hardware_support_check() {
         assert!(!PollRate::Hz125.requires_hardware_support());
+        assert!(!PollRate::Hz250.requires_hardware_support());
         assert!(!PollRate::Hz500.requires_hardware_support());
         assert!(!PollRate::Hz1000.requires_hardware_support());
         assert!(PollRate::Hz2000.requires_hardware_support());
