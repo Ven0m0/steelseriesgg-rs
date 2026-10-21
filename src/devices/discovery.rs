@@ -12,6 +12,8 @@ use super::keyboards::apex::Apex3Tkl;
 use super::keyboards::apex_m750::{ApexM750, CONTROL_INTERFACE as APEX_M750_CONTROL_INTERFACE};
 use super::keyboards::apex_pro_tkl_2023::ApexProTkl2023;
 use super::keyboards::{GenericKeyboard, Keyboard};
+use super::mice::Mouse;
+use super::mice::modern::{ModernMouse, model_for as mouse_model};
 use super::product_ids::{
     APEX_3_TKL, APEX_5, APEX_7, APEX_7_TKL, APEX_9_MINI, APEX_9_TKL, APEX_M750, APEX_PRO, APEX_PRO_2024, APEX_PRO_TKL,
     APEX_PRO_TKL_2023, APEX_PRO_TKL_2023_WIRELESS, APEX_PRO_TKL_2023_WIRELESS_2, APEX_PRO_TKL_2024,
@@ -45,6 +47,13 @@ fn control_score(usage_page: u16, interface_number: i32, product_id: u16, device
             1_000_000
         });
     }
+    // [EXPERIMENTAL] Modern-family mice take their commands on one interface per model (community fork,
+    // untested), so no other interface qualifies, vendor page or not.
+    if device_type == DeviceType::Mouse {
+        return mouse_model(product_id)
+            .filter(|model| model.interface_number == interface_number)
+            .map(|_| if usage_page >= 0xFF00 { 3_000_000 } else { 1_000_000 });
+    }
     if usage_page == STEELSERIES_CONTROL_USAGE_PAGE {
         return Some(3_000_000 - interface_number.max(0) as u32);
     }
@@ -60,7 +69,7 @@ fn control_score(usage_page: u16, interface_number: i32, product_id: u16, device
         }
         DeviceType::Keyboard => 1,
         DeviceType::Headset => 3,
-        DeviceType::Unknown => return None,
+        DeviceType::Mouse | DeviceType::Unknown => return None,
     };
     if interface_number == fallback_interface {
         Some(1_000_000)
@@ -558,6 +567,24 @@ impl DeviceManager {
             Some(model) => Box::new(Nova7Headset::new(info.clone(), hid_device, model)),
             None => Box::new(GenericHeadset::new(info.clone(), hid_device)),
         })
+    }
+
+    /// Open a mouse device and return a boxed Mouse trait object. [EXPERIMENTAL] Modern family only.
+    pub fn open_mouse(&self, info: &DeviceInfo) -> Result<Box<dyn Mouse>> {
+        if info.device_type != DeviceType::Mouse {
+            return Err(Error::DeviceCommunication(format!(
+                "Device {} is not a mouse",
+                info.name
+            )));
+        }
+        reject_detect_only(info)?;
+        let model = mouse_model(info.product_id).ok_or(Error::UnsupportedDevice {
+            vendor_id: info.vendor_id,
+            product_id: info.product_id,
+        })?;
+
+        let hid_device = self.open_device(info)?;
+        Ok(Box::new(ModernMouse::new(info.clone(), hid_device, model)))
     }
 
     // === Hot-plug monitoring methods ===
@@ -1460,5 +1487,76 @@ mod tests {
             }
             Err(e) => panic!("selection should answer NotFound, not an error: {e}"),
         }
+    }
+
+    fn mouse_collection(product_id: u16, interface_number: i32, usage_page: u16, path: &str) -> DeviceInfo {
+        DeviceInfo {
+            name: std::borrow::Cow::Borrowed("Aerox 9 Wireless (2.4 GHz)"),
+            device_type: DeviceType::Mouse,
+            vendor_id: crate::STEELSERIES_VENDOR_ID,
+            product_id,
+            interface_number,
+            usage_page,
+            usage: 0x01,
+            serial_number: None,
+            manufacturer: Some("SteelSeries".to_string()),
+            path: path.to_string(),
+        }
+    }
+
+    #[test]
+    fn mouse_control_endpoint_is_the_models_interface_and_nothing_else() {
+        use super::super::product_ids::{AEROX_9_WIRELESS_DONGLE, RIVAL_5};
+
+        let vendor = control_score(0xFF00, 3, AEROX_9_WIRELESS_DONGLE, DeviceType::Mouse).unwrap();
+        let plain = control_score(0x0001, 3, AEROX_9_WIRELESS_DONGLE, DeviceType::Mouse).unwrap();
+        assert!(vendor > plain);
+        assert_eq!(
+            control_score(0xFF00, 0, AEROX_9_WIRELESS_DONGLE, DeviceType::Mouse),
+            None
+        );
+        assert_eq!(
+            control_score(0xFFC0, 1, AEROX_9_WIRELESS_DONGLE, DeviceType::Mouse),
+            None
+        );
+        assert!(control_score(0x0001, 0, RIVAL_5, DeviceType::Mouse).is_some());
+        assert_eq!(control_score(0xFF00, 3, RIVAL_5, DeviceType::Mouse), None);
+        assert_eq!(control_score(0xFF00, 3, 0xFFFF, DeviceType::Mouse), None);
+    }
+
+    #[test]
+    fn mice_are_listed_once_and_never_as_keyboards_or_headsets() {
+        use super::super::product_ids::AEROX_9_WIRELESS_DONGLE;
+
+        let mut devices = HashMap::new();
+        for (path, interface, page) in [("mi_00", 0, 0x0001), ("mi_03", 3, 0xFF00)] {
+            let info = mouse_collection(AEROX_9_WIRELESS_DONGLE, interface, page, path);
+            devices.insert(path.to_string(), info);
+        }
+        let mut control_cache = HashMap::new();
+        let control = devices["mi_03"].clone();
+        control_cache.insert((control.vendor_id, control.product_id), control);
+
+        assert!(pick_representatives(&devices, &control_cache, DeviceType::Keyboard).is_empty());
+        assert!(pick_representatives(&devices, &control_cache, DeviceType::Headset).is_empty());
+        let mice = pick_representatives(&devices, &control_cache, DeviceType::Mouse);
+        assert_eq!(mice.len(), 1);
+        assert_eq!(mice[0].path, "mi_03");
+    }
+
+    #[test]
+    fn open_mouse_rejects_non_mouse_and_unlisted_mouse_devices() {
+        let Ok(manager) = DeviceManager::new() else { return };
+        let info = create_test_device_info(None);
+        assert!(matches!(
+            manager.open_mouse(&info),
+            Err(Error::DeviceCommunication(msg)) if msg.contains("not a mouse")
+        ));
+
+        let unlisted = mouse_collection(0x182E, 0, 0x0001, "prime");
+        assert!(matches!(
+            manager.open_mouse(&unlisted),
+            Err(Error::UnsupportedDevice { product_id: 0x182E, .. })
+        ));
     }
 }

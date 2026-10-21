@@ -33,6 +33,11 @@ Protocol work has three states. Never mix them up or upgrade a status without ha
 | `OnboardPayloadPushCommand` | `0x05` | Confirmed — Apex 7 `0x1612`, Linux, 2026-10-20: every push answered `05 01 …` |
 | `OnboardFileCommitCommand` | `0xEB` | Confirmed — Apex 7 `0x1612`, Linux, 2026-10-20: accepted with no write-specific answer |
 | `OnboardProfileDeployCommand` | `0x89` | Confirmed — Apex 7 `0x1612`, Linux, 2026-10-20: the keyboard runs the slot named |
+| `MouseDpiCommand` / `CommandCode::MouseDpi` (tag `0xF2`, wire `0x2D`, `0x34` on Rival 3 Gen 2) | `0x2D` | Experimental — Modern-family mice, community rivalcfg-derived fork, untested. The wire byte clashes with `ActuationControl`, hence the tag |
+| `MouseColorCommand` / `CommandCode::MouseColor` (tag `0xF3`, wire `0x21`, `0x61` on a 2.4 GHz receiver PID) | `0x21` | Experimental — Modern-family mice, community rivalcfg-derived fork, untested. The wire bytes clash with `RgbControl` and `Apex2023DirectWireless`, hence the tag |
+| `CommandCode::MousePollRate` / `MousePollRateCommand` | `0x2B` | Experimental — Modern-family mice, community rivalcfg-derived fork, untested (`0x6B` on a receiver PID) |
+| `CommandCode::MouseBattery` / `MouseBatteryQueryCommand` | `0x92` | Experimental — wireless Modern-family mice, community rivalcfg-derived fork, untested (`0xD2` on a receiver PID) |
+| Mouse save to on-board memory (`11 00`) | `0x11` | Not implemented — persistent write, no hardware-confirmed family; `ssgg mouse` has no save action |
 | `CommandCode::HeadsetSidetone` / `HeadsetSettingCommand` | `0x39` | Experimental — Arctis Nova 7 family sidetone `00 39 <0..=3>`, from community forks, untested |
 | `CommandCode::HeadsetMicVolume` / `HeadsetSettingCommand` | `0x37` | Experimental — Arctis Nova 7 family mic volume `00 37 <0..=7>`, from community forks, untested |
 | `CommandCode::HeadsetAutoOff` / `HeadsetSettingCommand` | `0xA3` | Experimental — Arctis Nova 7 family auto-off `00 a3 <minutes>`, from community forks, untested |

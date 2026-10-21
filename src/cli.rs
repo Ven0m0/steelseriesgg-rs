@@ -49,6 +49,12 @@ pub(crate) enum Commands {
         action: HeadsetAction,
     },
 
+    /// Control Modern-family mice: Aerox, Prime Mini/Wireless, Rival 3 Gen 2, Rival 5 (EXPERIMENTAL and untested on hardware)
+    Mouse {
+        #[command(subcommand)]
+        action: MouseAction,
+    },
+
     /// Manage profiles
     Profile {
         #[command(subcommand)]
@@ -462,6 +468,30 @@ pub(crate) enum HeadsetAction {
     MicVolume {
         /// Microphone volume
         level: u8,
+    },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum MouseAction {
+    /// Show the battery level of a wireless model
+    Status,
+
+    /// Set the DPI (range and step depend on the model, e.g. 100 to 18000 in steps of 100)
+    Dpi {
+        /// DPI value
+        value: u16,
+    },
+
+    /// Set the USB polling rate of the mouse itself (not the OS-level `pollrate` command)
+    PollRate {
+        /// Rate in Hz: 125, 250, 500 or 1000
+        hz: u16,
+    },
+
+    /// Set every LED zone to one colour
+    Color {
+        /// Colour name or hex (e.g. red, FF8800)
+        color: String,
     },
 }
 
@@ -994,5 +1024,25 @@ mod tests {
             !OnboardAction::Encode(encode_args()).needs_keyboard(),
             "encode writes bytes and sends nothing"
         );
+    }
+
+    #[test]
+    fn mouse_poll_rate_is_a_separate_command_from_the_os_pollrate() {
+        let parsed = Cli::try_parse_from(["ssgg", "mouse", "poll-rate", "1000"]).unwrap();
+        assert!(matches!(
+            parsed.command,
+            Commands::Mouse {
+                action: MouseAction::PollRate { hz: 1000 }
+            }
+        ));
+        let parsed = Cli::try_parse_from(["ssgg", "mouse", "dpi", "800"]).unwrap();
+        assert!(matches!(
+            parsed.command,
+            Commands::Mouse {
+                action: MouseAction::Dpi { value: 800 }
+            }
+        ));
+        assert!(Cli::try_parse_from(["ssgg", "mouse", "save"]).is_err());
+        assert!(Cli::try_parse_from(["ssgg", "pollrate", "mouse", "1000"]).is_ok());
     }
 }

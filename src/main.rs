@@ -9,8 +9,8 @@ mod gui;
 use clap::Parser;
 
 use crate::cli::{
-    ActuationAction, Cli, Commands, HeadsetAction, PerKeyAction, PerformanceAction, PollrateAction, ProfileAction,
-    RgbAction, parse_key_name, require_color,
+    ActuationAction, Cli, Commands, HeadsetAction, MouseAction, PerKeyAction, PerformanceAction, PollrateAction,
+    ProfileAction, RgbAction, parse_key_name, require_color,
 };
 use crate::daemon::{cmd_daemon, cmd_server};
 use tokio::task::yield_now;
@@ -134,6 +134,11 @@ async fn main() -> Result<()> {
         Commands::Headset { action } => {
             let manager = new_device_manager()?;
             cmd_headset(&manager, action)?;
+        }
+
+        Commands::Mouse { action } => {
+            let manager = new_device_manager()?;
+            cmd_mouse(&manager, action)?;
         }
 
         Commands::Profile { action } => {
@@ -274,6 +279,7 @@ fn new_device_manager() -> Result<DeviceManager> {
 pub(crate) fn deduped_devices(manager: &DeviceManager) -> Vec<&DeviceInfo> {
     let mut all = manager.devices_by_type(DeviceType::Keyboard);
     all.extend(manager.devices_by_type(DeviceType::Headset));
+    all.extend(manager.devices_by_type(DeviceType::Mouse));
     all.extend(manager.devices_by_type(DeviceType::Unknown));
     all
 }
@@ -445,6 +451,44 @@ fn cmd_headset(manager: &DeviceManager, action: HeadsetAction) -> Result<()> {
         HeadsetAction::MicVolume { level } => {
             headset.set_mic_volume(level)?;
             println!("Microphone volume request sent ({}).", level);
+        }
+    }
+
+    Ok(())
+}
+
+fn cmd_mouse(manager: &DeviceManager, action: MouseAction) -> Result<()> {
+    let mouse_info = manager
+        .first_device_of_type(DeviceType::Mouse)
+        .ok_or_else(|| Error::Other("No supported mouse found".to_string()))?;
+
+    println!("Using mouse: {}", mouse_info.name);
+    eprintln!(
+        "{}",
+        "[EXPERIMENTAL] Mouse commands come from a community rivalcfg-derived fork and are untested on hardware.          Settings apply to the running mouse and are not saved to its memory."
+            .yellow()
+    );
+    warn_if_gg_engine_running();
+
+    let mut mouse = manager.open_mouse(mouse_info)?;
+    mouse.initialize()?;
+
+    match action {
+        MouseAction::Status => match mouse.battery_level()? {
+            Some(percent) => println!("Battery: {}%", percent),
+            None => println!("Battery: unknown or not a wireless model"),
+        },
+        MouseAction::Dpi { value } => {
+            mouse.set_dpi(value)?;
+            println!("DPI request sent ({}).", value);
+        }
+        MouseAction::PollRate { hz } => {
+            mouse.set_poll_rate(hz)?;
+            println!("Polling rate request sent ({} Hz).", hz);
+        }
+        MouseAction::Color { color } => {
+            mouse.set_color(require_color(&color)?)?;
+            println!("Colour request sent ({}).", color);
         }
     }
 
@@ -2009,10 +2053,11 @@ async fn cmd_status(_initial_manager: &DeviceManager, device_filter: &str, refre
     let filter_type = match device_filter.to_lowercase().as_str() {
         "keyboard" => Some(DeviceType::Keyboard),
         "headset" => Some(DeviceType::Headset),
+        "mouse" => Some(DeviceType::Mouse),
         "all" => None,
         _ => {
             return Err(Error::Other(format!(
-                "Invalid device filter: {}. Use 'keyboard', 'headset', or 'all'",
+                "Invalid device filter: {}. Use 'keyboard', 'headset', 'mouse', or 'all'",
                 device_filter
             )));
         }
@@ -2041,6 +2086,7 @@ async fn cmd_status(_initial_manager: &DeviceManager, device_filter: &str, refre
             let device_type_str = match device_info.device_type {
                 DeviceType::Keyboard => "Keyboard",
                 DeviceType::Headset => "Headset",
+                DeviceType::Mouse => "Mouse",
                 DeviceType::Unknown => "Unknown",
             };
 
@@ -2070,6 +2116,7 @@ async fn cmd_status(_initial_manager: &DeviceManager, device_filter: &str, refre
                         let device_type_str = match device_info.device_type {
                             DeviceType::Keyboard => "Keyboard",
                             DeviceType::Headset => "Headset",
+                            DeviceType::Mouse => "Mouse",
                             DeviceType::Unknown => "Unknown",
                         };
 
@@ -2116,6 +2163,7 @@ async fn cmd_status(_initial_manager: &DeviceManager, device_filter: &str, refre
             let device_type_str = match device_info.device_type {
                 DeviceType::Keyboard => "Keyboard",
                 DeviceType::Headset => "Headset",
+                DeviceType::Mouse => "Mouse",
                 DeviceType::Unknown => "Unknown",
             };
 

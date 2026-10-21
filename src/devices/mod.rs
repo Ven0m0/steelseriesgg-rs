@@ -7,6 +7,7 @@ pub mod headsets;
 pub mod hid_reports;
 pub mod key_mapping;
 pub mod keyboards;
+pub mod mice;
 pub mod zone_mapping;
 
 use parking_lot::Mutex;
@@ -31,6 +32,7 @@ pub use zone_mapping::{ZoneEffect, ZoneFallback, ZoneInfo, ZoneMapping, ZonePosi
 pub enum DeviceType {
     Keyboard,
     Headset,
+    Mouse,
     Unknown,
 }
 
@@ -39,6 +41,7 @@ impl fmt::Display for DeviceType {
         match self {
             DeviceType::Keyboard => write!(f, "Keyboard"),
             DeviceType::Headset => write!(f, "Headset"),
+            DeviceType::Mouse => write!(f, "Mouse"),
             DeviceType::Unknown => write!(f, "Unknown"),
         }
     }
@@ -456,6 +459,31 @@ pub mod product_ids {
     pub const ARCTIS_NOVA_7P_V2: u16 = 0x22A7;
     pub const ARCTIS_NOVA_7_DIABLO_IV_V2: u16 = 0x22A9;
     pub const ARCTIS_NOVA_7X_V2_ALT: u16 = 0x22AD;
+    // Mice, Modern family. PIDs from a community rivalcfg-derived fork, untested; behaviour table in mice::modern.
+    pub const AEROX_3: u16 = 0x1836;
+    pub const AEROX_3_WIRELESS: u16 = 0x183A;
+    pub const AEROX_3_WIRELESS_DONGLE: u16 = 0x1838;
+    pub const AEROX_3_WIRELESS_CS2: u16 = 0x187A;
+    pub const AEROX_3_WIRELESS_CS2_DONGLE: u16 = 0x1878;
+    pub const AEROX_5: u16 = 0x1850;
+    pub const AEROX_5_WIRELESS: u16 = 0x1854;
+    pub const AEROX_5_WIRELESS_DONGLE: u16 = 0x1852;
+    pub const AEROX_5_WIRELESS_DESTINY_2: u16 = 0x185E;
+    pub const AEROX_5_WIRELESS_DESTINY_2_DONGLE: u16 = 0x185C;
+    pub const AEROX_5_WIRELESS_DIABLO_IV: u16 = 0x1862;
+    pub const AEROX_5_WIRELESS_DIABLO_IV_DONGLE: u16 = 0x1860;
+    pub const AEROX_9_WIRELESS: u16 = 0x185A;
+    pub const AEROX_9_WIRELESS_DONGLE: u16 = 0x1858;
+    pub const AEROX_9_WIRELESS_WOW: u16 = 0x1876;
+    pub const AEROX_9_WIRELESS_WOW_DONGLE: u16 = 0x1874;
+    pub const PRIME_MINI: u16 = 0x184D;
+    pub const PRIME_MINI_WIRELESS: u16 = 0x184A;
+    pub const PRIME_MINI_WIRELESS_DONGLE: u16 = 0x1848;
+    pub const PRIME_WIRELESS: u16 = 0x1842;
+    pub const PRIME_WIRELESS_DONGLE: u16 = 0x1840;
+    pub const RIVAL_3_GEN_2: u16 = 0x1870;
+    pub const RIVAL_5: u16 = 0x183C;
+    pub const RIVAL_5_DESTINY: u16 = 0x183E;
 }
 
 /// Devices registered for detection only: no protocol is known, so `ssgg` must not write to them.
@@ -532,6 +560,32 @@ pub fn device_type_from_product_id(product_id: u16) -> DeviceType {
         | ARCTIS_NOVA_7_DIABLO_IV_V2
         | ARCTIS_NOVA_7X_V2_ALT => DeviceType::Headset,
 
+        // Mice (Modern family)
+        AEROX_3
+        | AEROX_3_WIRELESS
+        | AEROX_3_WIRELESS_DONGLE
+        | AEROX_3_WIRELESS_CS2
+        | AEROX_3_WIRELESS_CS2_DONGLE
+        | AEROX_5
+        | AEROX_5_WIRELESS
+        | AEROX_5_WIRELESS_DONGLE
+        | AEROX_5_WIRELESS_DESTINY_2
+        | AEROX_5_WIRELESS_DESTINY_2_DONGLE
+        | AEROX_5_WIRELESS_DIABLO_IV
+        | AEROX_5_WIRELESS_DIABLO_IV_DONGLE
+        | AEROX_9_WIRELESS
+        | AEROX_9_WIRELESS_DONGLE
+        | AEROX_9_WIRELESS_WOW
+        | AEROX_9_WIRELESS_WOW_DONGLE
+        | PRIME_MINI
+        | PRIME_MINI_WIRELESS
+        | PRIME_MINI_WIRELESS_DONGLE
+        | PRIME_WIRELESS
+        | PRIME_WIRELESS_DONGLE
+        | RIVAL_3_GEN_2
+        | RIVAL_5
+        | RIVAL_5_DESTINY => DeviceType::Mouse,
+
         _ => DeviceType::Unknown,
     }
 }
@@ -600,6 +654,30 @@ pub fn device_name_from_product_id(product_id: u16) -> &'static str {
         ARCTIS_NOVA_7P_V2 => "Arctis Nova 7P v2",
         ARCTIS_NOVA_7_DIABLO_IV_V2 => "Arctis Nova 7 Diablo IV v2",
         ARCTIS_NOVA_7X_V2_ALT => "Arctis Nova 7X v2 (alt)",
+        AEROX_3 => "Aerox 3",
+        AEROX_3_WIRELESS => "Aerox 3 Wireless (wired)",
+        AEROX_3_WIRELESS_DONGLE => "Aerox 3 Wireless (2.4 GHz)",
+        AEROX_3_WIRELESS_CS2 => "Aerox 3 Wireless CS2 Dragon Lore Edition (wired)",
+        AEROX_3_WIRELESS_CS2_DONGLE => "Aerox 3 Wireless CS2 Dragon Lore Edition (2.4 GHz)",
+        AEROX_5 => "Aerox 5",
+        AEROX_5_WIRELESS => "Aerox 5 Wireless (wired)",
+        AEROX_5_WIRELESS_DONGLE => "Aerox 5 Wireless (2.4 GHz)",
+        AEROX_5_WIRELESS_DESTINY_2 => "Aerox 5 Wireless Destiny 2 Edition (wired)",
+        AEROX_5_WIRELESS_DESTINY_2_DONGLE => "Aerox 5 Wireless Destiny 2 Edition (2.4 GHz)",
+        AEROX_5_WIRELESS_DIABLO_IV => "Aerox 5 Wireless Diablo IV Edition (wired)",
+        AEROX_5_WIRELESS_DIABLO_IV_DONGLE => "Aerox 5 Wireless Diablo IV Edition (2.4 GHz)",
+        AEROX_9_WIRELESS => "Aerox 9 Wireless (wired)",
+        AEROX_9_WIRELESS_DONGLE => "Aerox 9 Wireless (2.4 GHz)",
+        AEROX_9_WIRELESS_WOW => "Aerox 9 Wireless WOW Edition (wired)",
+        AEROX_9_WIRELESS_WOW_DONGLE => "Aerox 9 Wireless WOW Edition (2.4 GHz)",
+        PRIME_MINI => "Prime Mini",
+        PRIME_MINI_WIRELESS => "Prime Mini Wireless (wired)",
+        PRIME_MINI_WIRELESS_DONGLE => "Prime Mini Wireless (2.4 GHz)",
+        PRIME_WIRELESS => "Prime Wireless (wired)",
+        PRIME_WIRELESS_DONGLE => "Prime Wireless (2.4 GHz)",
+        RIVAL_3_GEN_2 => "Rival 3 Gen 2",
+        RIVAL_5 => "Rival 5",
+        RIVAL_5_DESTINY => "Rival 5 Destiny Edition",
         _ => "Unknown SteelSeries Device",
     }
 }

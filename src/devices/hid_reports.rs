@@ -17,6 +17,13 @@ pub const KEYBOARD_REPORT_SIZE: usize = 65;
 /// Standard HID report size for SteelSeries headsets (no report ID).
 pub const HEADSET_REPORT_SIZE: usize = 64;
 
+/// Buffer a Modern-family mouse command is serialized into. The reports themselves are shorter and variable
+/// in length (the longest, a Rival 5 logo colour, is 34 bytes), so `serialize` returns the used length.
+pub const MOUSE_REPORT_BUFFER_SIZE: usize = 65;
+
+/// Bit set on the first byte of every command sent to the 2.4 GHz receiver PID of a Modern-family mouse.
+pub const MOUSE_DONGLE_FLAG: u8 = 0x40;
+
 /// Maximum number of RGB zones supported by keyboards.
 pub const MAX_RGB_ZONES: usize = 12;
 
@@ -113,6 +120,21 @@ pub enum CommandCode {
     /// [EXPERIMENTAL] Arctis Nova 7 family status query (0xB0, `00 b0`), answered by an input report that
     /// starts with `b0`, see [`HeadsetStatusQueryCommand`]. From community forks, untested on hardware.
     HeadsetStatus = 0xB0,
+    /// [EXPERIMENTAL] Modern-family mouse polling rate (0x2B, `00 2b <code>`; 0x6B on a 2.4 GHz receiver PID),
+    /// see [`MousePollRateCommand`]. From a community rivalcfg-derived fork, untested on hardware.
+    MousePollRate = 0x2B,
+    /// [EXPERIMENTAL] Modern-family mouse battery query (0x92, `00 92`; 0xD2 on a 2.4 GHz receiver PID), see
+    /// [`MouseBatteryQueryCommand`]. From a community rivalcfg-derived fork, untested on hardware.
+    MouseBattery = 0x92,
+    /// [EXPERIMENTAL] Modern-family mouse DPI, see [`MouseDpiCommand`]. A tag, never a wire byte: the wire opcode
+    /// is 0x2D on every model but the Rival 3 Gen 2 (0x34), and 0x2D already belongs to
+    /// [`CommandCode::ActuationControl`]. From a community rivalcfg-derived fork, untested on hardware.
+    MouseDpi = 0xF2,
+    /// [EXPERIMENTAL] Modern-family mouse LED colour, see [`MouseColorCommand`]. A tag, never a wire byte: the
+    /// wire opcode is 0x21 (0x61 on a 2.4 GHz receiver PID), which belong to
+    /// [`CommandCode::RgbControl`] and [`CommandCode::Apex2023DirectWireless`]. From a community
+    /// rivalcfg-derived fork, untested on hardware.
+    MouseColor = 0xF3,
 }
 
 impl fmt::Display for CommandCode {
@@ -146,6 +168,10 @@ impl fmt::Display for CommandCode {
             CommandCode::HeadsetMicVolume => write!(f, "HEADSET_MIC_VOLUME_EXPERIMENTAL"),
             CommandCode::HeadsetAutoOff => write!(f, "HEADSET_AUTO_OFF_EXPERIMENTAL"),
             CommandCode::HeadsetStatus => write!(f, "HEADSET_STATUS_EXPERIMENTAL"),
+            CommandCode::MousePollRate => write!(f, "MOUSE_POLL_RATE_EXPERIMENTAL"),
+            CommandCode::MouseBattery => write!(f, "MOUSE_BATTERY_EXPERIMENTAL"),
+            CommandCode::MouseDpi => write!(f, "MOUSE_DPI_EXPERIMENTAL"),
+            CommandCode::MouseColor => write!(f, "MOUSE_COLOR_EXPERIMENTAL"),
         }
     }
 }
@@ -183,6 +209,8 @@ impl CommandCode {
             0x37 => Some(CommandCode::HeadsetMicVolume),
             0xA3 => Some(CommandCode::HeadsetAutoOff),
             0xB0 => Some(CommandCode::HeadsetStatus),
+            0x2B => Some(CommandCode::MousePollRate),
+            0x92 => Some(CommandCode::MouseBattery),
             _ => None,
         }
     }
@@ -195,6 +223,8 @@ pub enum HidDeviceType {
     Keyboard,
     /// Headset (64-byte reports without report ID)
     Headset,
+    /// Mouse (variable-length reports that start with the report ID, at most [`MOUSE_REPORT_BUFFER_SIZE`])
+    Mouse,
 }
 
 impl HidDeviceType {
@@ -203,12 +233,13 @@ impl HidDeviceType {
         match self {
             HidDeviceType::Keyboard => KEYBOARD_REPORT_SIZE,
             HidDeviceType::Headset => HEADSET_REPORT_SIZE,
+            HidDeviceType::Mouse => MOUSE_REPORT_BUFFER_SIZE,
         }
     }
 
     /// Whether this device type includes a report ID byte.
     pub fn includes_report_id(self) -> bool {
-        matches!(self, HidDeviceType::Keyboard)
+        matches!(self, HidDeviceType::Keyboard | HidDeviceType::Mouse)
     }
 }
 
@@ -1432,6 +1463,235 @@ impl HidCommand for HeadsetStatusQueryCommand {
 
     fn description(&self) -> String {
         "Headset status query".to_string()
+    }
+}
+
+/// First byte of a Modern-family mouse command: `base`, with [`MOUSE_DONGLE_FLAG`] set for a 2.4 GHz receiver PID.
+const fn mouse_opcode(base: u8, dongle: bool) -> u8 {
+    if dongle { base | MOUSE_DONGLE_FLAG } else { base }
+}
+
+/// [EXPERIMENTAL] Modern-family mouse polling rate: `00 <0x2B> <code>`, 0x6B on a 2.4 GHz receiver PID. `code`
+/// is 4 to 1 for 125 to 1000 Hz on most models and 3 to 0 on the wireless ones, so the model table picks it.
+/// Source: community rivalcfg-derived fork, never sent from `ssgg` on hardware.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MousePollRateCommand {
+    pub dongle: bool,
+    pub code: u8,
+}
+
+impl MousePollRateCommand {
+    /// Highest polling-rate code any Modern-family model uses.
+    pub const MAX_CODE: u8 = 4;
+    const LEN: usize = 3;
+}
+
+impl HidCommand for MousePollRateCommand {
+    fn command_code(&self) -> CommandCode {
+        CommandCode::MousePollRate
+    }
+
+    fn serialize(&self, buffer: &mut [u8], _device_type: HidDeviceType) -> Result<usize> {
+        self.validate()?;
+        check_report_buffer(buffer, Self::LEN)?;
+        buffer[..Self::LEN].copy_from_slice(&[
+            0x00,
+            mouse_opcode(CommandCode::MousePollRate as u8, self.dongle),
+            self.code,
+        ]);
+        Ok(Self::LEN)
+    }
+
+    fn validate(&self) -> Result<()> {
+        if self.code > Self::MAX_CODE {
+            return Err(Error::InvalidConfig(format!(
+                "mouse polling-rate code {} out of range (0..={})",
+                self.code,
+                Self::MAX_CODE
+            )));
+        }
+        Ok(())
+    }
+
+    fn description(&self) -> String {
+        format!("Mouse polling rate code {}", self.code)
+    }
+}
+
+/// [EXPERIMENTAL] Modern-family mouse battery query: `00 <0x92>`, 0xD2 on a 2.4 GHz receiver PID. The reply is
+/// decoded by `mice::modern::decode_battery`. Source: community rivalcfg-derived fork, never sent from `ssgg`
+/// on hardware.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MouseBatteryQueryCommand {
+    pub dongle: bool,
+}
+
+impl MouseBatteryQueryCommand {
+    const LEN: usize = 2;
+}
+
+impl HidCommand for MouseBatteryQueryCommand {
+    fn command_code(&self) -> CommandCode {
+        CommandCode::MouseBattery
+    }
+
+    fn serialize(&self, buffer: &mut [u8], _device_type: HidDeviceType) -> Result<usize> {
+        check_report_buffer(buffer, Self::LEN)?;
+        buffer[..Self::LEN].copy_from_slice(&[0x00, mouse_opcode(CommandCode::MouseBattery as u8, self.dongle)]);
+        Ok(Self::LEN)
+    }
+
+    fn validate(&self) -> Result<()> {
+        Ok(())
+    }
+
+    fn description(&self) -> String {
+        "Mouse battery query".to_string()
+    }
+}
+
+/// [EXPERIMENTAL] Modern-family mouse DPI, one stage: `00 <opcode> 01 <selected> <code>`. `code` is one byte, or
+/// two little-endian bytes when `wide`, and is repeated for the Y axis when `per_axis`. The opcode is 0x2D, or
+/// 0x34 on the Rival 3 Gen 2; a 2.4 GHz receiver PID sets [`MOUSE_DONGLE_FLAG`] on it. Source: community
+/// rivalcfg-derived fork, never sent from `ssgg` on hardware.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MouseDpiCommand {
+    pub opcode: u8,
+    pub dongle: bool,
+    /// Stage the mouse switches to; the model's first preset index.
+    pub selected: u8,
+    pub code: u16,
+    pub wide: bool,
+    pub per_axis: bool,
+}
+
+impl MouseDpiCommand {
+    /// DPI opcode of every Modern-family model but the Rival 3 Gen 2.
+    pub const OPCODE: u8 = 0x2D;
+    /// DPI opcode of the Rival 3 Gen 2.
+    pub const OPCODE_RIVAL_3_GEN_2: u8 = 0x34;
+}
+
+impl HidCommand for MouseDpiCommand {
+    fn command_code(&self) -> CommandCode {
+        CommandCode::MouseDpi
+    }
+
+    fn serialize(&self, buffer: &mut [u8], _device_type: HidDeviceType) -> Result<usize> {
+        self.validate()?;
+        let code = self.code.to_le_bytes();
+        let code = if self.wide { &code[..] } else { &code[..1] };
+        let axes = if self.per_axis { 2 } else { 1 };
+        let len = 4 + code.len() * axes;
+        check_report_buffer(buffer, len)?;
+        buffer[..4].copy_from_slice(&[0x00, mouse_opcode(self.opcode, self.dongle), 0x01, self.selected]);
+        for axis in 0..axes {
+            let start = 4 + axis * code.len();
+            buffer[start..start + code.len()].copy_from_slice(code);
+        }
+        Ok(len)
+    }
+
+    fn validate(&self) -> Result<()> {
+        if !matches!(self.opcode, Self::OPCODE | Self::OPCODE_RIVAL_3_GEN_2) {
+            return Err(Error::InvalidConfig(format!(
+                "{:#04x} is not a mouse DPI opcode",
+                self.opcode
+            )));
+        }
+        if !self.wide && self.code > u16::from(u8::MAX) {
+            return Err(Error::InvalidConfig(format!(
+                "DPI code {} does not fit in one byte",
+                self.code
+            )));
+        }
+        Ok(())
+    }
+
+    fn description(&self) -> String {
+        format!("Mouse DPI code {}", self.code)
+    }
+}
+
+/// Where a Modern-family mouse takes the colour of one LED zone. Every layout is `<0x21> <selector> <RGB>`
+/// (0x61 on a 2.4 GHz receiver PID); they differ in the selector and in how far into the frame the RGB triple
+/// sits.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MouseColorLayout {
+    /// Aerox 3, Aerox 5 and Rival 3 Gen 2: one mask byte with bit `zone` set, then three zero bytes per
+    /// earlier zone.
+    Mask8,
+    /// Rival 5: a 16-bit little-endian mask with bit `zone` set, then three zero bytes per earlier zone.
+    Mask16,
+    /// The wireless Aerox, Prime Wireless and Prime Mini Wireless: `01 <zone>`.
+    Indexed,
+    /// Prime Mini, one LED: `00`.
+    Single,
+}
+
+/// [EXPERIMENTAL] Modern-family mouse LED colour for one zone, in the [`MouseColorLayout`] of the model. A
+/// 2.4 GHz receiver PID sets [`MOUSE_DONGLE_FLAG`] on the opcode. Source: community rivalcfg-derived fork,
+/// never sent from `ssgg` on hardware.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MouseColorCommand {
+    pub layout: MouseColorLayout,
+    pub dongle: bool,
+    pub zone: u8,
+    pub color: Color,
+}
+
+impl MouseColorCommand {
+    /// Opcode of every colour frame; also [`CommandCode::RgbControl`]'s byte.
+    pub const OPCODE: u8 = 0x21;
+
+    fn max_zone(&self) -> u8 {
+        match self.layout {
+            MouseColorLayout::Mask8 => 7,
+            MouseColorLayout::Mask16 => 15,
+            MouseColorLayout::Indexed => u8::MAX,
+            MouseColorLayout::Single => 0,
+        }
+    }
+}
+
+impl HidCommand for MouseColorCommand {
+    fn command_code(&self) -> CommandCode {
+        CommandCode::MouseColor
+    }
+
+    fn serialize(&self, buffer: &mut [u8], _device_type: HidDeviceType) -> Result<usize> {
+        self.validate()?;
+        let zone = usize::from(self.zone);
+        let mut report = vec![0x00, mouse_opcode(Self::OPCODE, self.dongle)];
+        match self.layout {
+            MouseColorLayout::Mask8 => report.push(1u8 << self.zone),
+            MouseColorLayout::Mask16 => report.extend((1u16 << self.zone).to_le_bytes()),
+            MouseColorLayout::Indexed => report.extend([0x01, self.zone]),
+            MouseColorLayout::Single => report.push(0x00),
+        }
+        if matches!(self.layout, MouseColorLayout::Mask8 | MouseColorLayout::Mask16) {
+            report.resize(report.len() + 3 * zone, 0x00);
+        }
+        report.extend([self.color.r, self.color.g, self.color.b]);
+        check_report_buffer(buffer, report.len())?;
+        buffer[..report.len()].copy_from_slice(&report);
+        Ok(report.len())
+    }
+
+    fn validate(&self) -> Result<()> {
+        if self.zone > self.max_zone() {
+            return Err(Error::InvalidConfig(format!(
+                "LED zone {} out of range for layout {:?} (0..={})",
+                self.zone,
+                self.layout,
+                self.max_zone()
+            )));
+        }
+        Ok(())
+    }
+
+    fn description(&self) -> String {
+        format!("Mouse LED zone {} colour {:?}", self.zone, self.color)
     }
 }
 
@@ -3527,5 +3787,101 @@ mod tests {
             assert_eq!(code as u8, byte);
             assert!(code.to_string().ends_with("_EXPERIMENTAL"));
         }
+    }
+
+    fn mouse_report(command: &dyn HidCommand) -> Vec<u8> {
+        let mut buffer = vec![0xAAu8; MOUSE_REPORT_BUFFER_SIZE];
+        let size = command.serialize(&mut buffer, HidDeviceType::Mouse).unwrap();
+        assert!(
+            buffer[size..].iter().all(|&b| b == 0xAA),
+            "bytes past the report are untouched"
+        );
+        buffer.truncate(size);
+        buffer
+    }
+
+    #[test]
+    fn mouse_reports_are_unpadded_and_start_with_the_report_id() {
+        assert_eq!(
+            mouse_report(&MousePollRateCommand { dongle: false, code: 2 }),
+            [0x00, 0x2B, 0x02]
+        );
+        assert_eq!(mouse_report(&MouseBatteryQueryCommand { dongle: false }), [0x00, 0x92]);
+        let dpi = MouseDpiCommand {
+            opcode: MouseDpiCommand::OPCODE,
+            dongle: false,
+            selected: 0,
+            code: 0x0168,
+            wide: true,
+            per_axis: false,
+        };
+        assert_eq!(mouse_report(&dpi), [0x00, 0x2D, 0x01, 0x00, 0x68, 0x01]);
+        let color = MouseColorCommand {
+            layout: MouseColorLayout::Mask16,
+            dongle: true,
+            zone: 9,
+            color: Color::new(1, 2, 3),
+        };
+        let report = mouse_report(&color);
+        assert_eq!(report.len(), 34);
+        assert_eq!(report[..4], [0x00, 0x61, 0x00, 0x02]);
+        assert_eq!(report[31..], [1, 2, 3]);
+        assert!(HidDeviceType::Mouse.includes_report_id());
+    }
+
+    #[test]
+    fn mouse_commands_reject_bad_arguments_and_small_buffers() {
+        let mut buffer = [0u8; MOUSE_REPORT_BUFFER_SIZE];
+        let poll = MousePollRateCommand { dongle: false, code: 5 };
+        assert!(poll.serialize(&mut buffer, HidDeviceType::Mouse).is_err());
+        for opcode in [0x11, 0x2B, 0x00] {
+            let dpi = MouseDpiCommand {
+                opcode,
+                dongle: false,
+                selected: 0,
+                code: 1,
+                wide: false,
+                per_axis: false,
+            };
+            assert!(
+                dpi.serialize(&mut buffer, HidDeviceType::Mouse).is_err(),
+                "{opcode:#04x}"
+            );
+        }
+        let narrow = MouseDpiCommand {
+            opcode: MouseDpiCommand::OPCODE,
+            dongle: false,
+            selected: 0,
+            code: 0x100,
+            wide: false,
+            per_axis: false,
+        };
+        assert!(narrow.serialize(&mut buffer, HidDeviceType::Mouse).is_err());
+        for (layout, zone) in [
+            (MouseColorLayout::Mask8, 8),
+            (MouseColorLayout::Mask16, 16),
+            (MouseColorLayout::Single, 1),
+        ] {
+            let color = MouseColorCommand {
+                layout,
+                dongle: false,
+                zone,
+                color: Color::BLACK,
+            };
+            assert!(color.serialize(&mut buffer, HidDeviceType::Mouse).is_err());
+        }
+        assert!(
+            MouseBatteryQueryCommand { dongle: false }
+                .serialize(&mut buffer[..1], HidDeviceType::Mouse)
+                .is_err()
+        );
+        let last_zone = MouseColorCommand {
+            layout: MouseColorLayout::Mask16,
+            dongle: false,
+            zone: 15,
+            color: Color::BLACK,
+        };
+        assert!(last_zone.serialize(&mut buffer[..20], HidDeviceType::Mouse).is_err());
+        assert!(last_zone.serialize(&mut buffer, HidDeviceType::Mouse).is_ok());
     }
 }

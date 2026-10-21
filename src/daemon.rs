@@ -162,6 +162,9 @@ impl DaemonState {
                     }
                 }
             }
+            DeviceType::Mouse => {
+                debug!("Hot-plug: Ignoring mouse (not managed by the daemon): {}", info.name);
+            }
             DeviceType::Unknown => {
                 debug!("Hot-plug: Ignoring unknown device: {}", info.name);
             }

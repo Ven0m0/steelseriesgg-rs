@@ -146,6 +146,43 @@ Experimental (see `.claude/rules/experimental-protocol.md`). Code: `src/devices/
   0x2202, 0x2206, 0x220A, 0x223A, 0x227A, 0x22A4. Everything else reports percent.
 - Arctis Nova Pro Omni (0x2290) has no known protocol and is detect-only.
 
+### Mice: Modern family [EXPERIMENTAL]
+
+Source: a community fork derived from rivalcfg (data licensed WTFPL/GPL, reimplemented here from the facts, with
+our own test vectors). Nothing here has been run from `ssgg` on hardware, so every command is Experimental (see
+`.claude/rules/experimental-protocol.md`). Code: `src/devices/mice/` (`modern.rs` holds the per-PID table
+`MOUSE_MODELS`, `dpi_tables.rs` the sensor code tables) and the `Mouse*Command` types in
+`src/devices/hid_reports.rs`. CLI: `ssgg mouse status | dpi <value> | poll-rate <hz> | color <name|hex>`.
+
+Supported (24 PIDs): Aerox 3 `0x1836`; Aerox 3 Wireless `0x1838` (2.4 GHz), `0x183A`, `0x1878`, `0x187A`;
+Aerox 5 `0x1850`; Aerox 5 Wireless `0x1852`, `0x1854`, `0x185C`, `0x185E`, `0x1860`, `0x1862`; Aerox 9 Wireless
+`0x1858`, `0x185A`, `0x1874`, `0x1876`; Prime Mini `0x184D`; Prime Mini Wireless `0x1848`, `0x184A`; Prime
+Wireless `0x1840`, `0x1842`; Rival 3 Gen 2 `0x1870`; Rival 5 `0x183C`, `0x183E`. Every PID in the requested
+scope belongs to this family in the fork; none was dropped.
+
+- Transport: output reports `00 <opcode> <args>`, variable length and not padded by `ssgg` (hidapi pads on
+  Windows). Commands go to one interface per model: 3 for everything but the Rival 5, which uses 0. A 2.4 GHz
+  receiver PID sets bit `0x40` on every opcode and answers each setting with a 64-byte report that is read and
+  dropped. Commands are spaced 50 ms apart.
+- DPI: `00 2D 01 <preset> <code>`; the Rival 3 Gen 2 uses opcode `34` and sends the code once per axis. Preset
+  index is 1 on Aerox 3 and Rival 3 Gen 2, 0 elsewhere. Ranges: 200-8500 (Aerox 3, Rival 3 Gen 2, TrueMove Core
+  table), 100-18000 in steps of 100 (all others, TrueMove Air table), Prime Mini 50-18000 in steps of 50 with a
+  16-bit little-endian code `dpi / 50`. Off-step and out-of-range values are rejected.
+- Polling rate: `00 2B <code>`; 125/250/500/1000 Hz is `04 03 02 01` on wired-only models and Rival 5 / Prime
+  Mini, `03 02 01 00` on the wireless models.
+- Colour: `00 21 <selector> ... <r g b>` once per LED zone. Aerox 3/5 and Rival 3 Gen 2 (3 zones): selector is a
+  mask byte with the zone bit, then 3 zero bytes per earlier zone. Rival 5 (10 zones): 16-bit little-endian mask,
+  same padding. Wireless Aerox and Prime Wireless: `01 <zone>`. Prime Mini: `00`. A receiver PID sends `61`.
+- Battery: `00 92` (`D2` on a receiver PID) on wireless models; reply byte 1 is bit 7 charging, low bits charge
+  in 5 percent steps plus one. Levels outside 0-100 decode as unknown.
+- Never implemented: the save command `11 00` (writes to the mouse's on-board memory). `ssgg` sends no
+  save, so whether a setting survives a power cycle is unknown.
+
+Skipped on purpose: reactive and rainbow effects, button mapping, multi-stage sensitivity presets, brightness,
+sleep and dim timers, firmware queries. Not covered, other command sets: Prime and Prime+ (`0x182E`, `0x182C`,
+`0x182A`, `0x1856`), Rival 3 / Rival 3 Wireless, the older Rival (95-710), Sensei (310, TEN, [RAW]), Kana v2 and
+Kinzu v2.
+
 ---
 
 ## Keyboard HID protocol
