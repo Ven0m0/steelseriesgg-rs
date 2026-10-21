@@ -386,7 +386,7 @@ impl OnboardWritePlan {
 ///
 /// Returns [`crate::error::Error::InvalidConfig`] for a slot outside the five the engine accepts, an empty
 /// payload, a payload longer than the region, a payload of an unknown schema or with a wrong stored checksum,
-/// a payload with no room for its checksum word, a region that is not a whole number of push windows, or a
+/// a region that is not a whole number of push windows, or a
 /// chunk pair that does not fill a window.
 pub fn write_plan(profile: u8, payload: &[u8]) -> Result<OnboardWritePlan> {
     if profile > MAX_PROFILE_INDEX {
@@ -402,7 +402,8 @@ pub fn write_plan(profile: u8, payload: &[u8]) -> Result<OnboardWritePlan> {
     }
     // A `--bin` payload is raw file bytes: refuse anything that is not a known-schema payload whose stored
     // checksum matches, before it is framed for the board.
-    if !decode(payload)?.crc_ok {
+    let decoded = decode(payload)?;
+    if !decoded.crc_ok {
         return Err(Error::InvalidConfig(
             "payload checksum word does not match its bytes: refusing to write it".to_string(),
         ));
@@ -410,12 +411,6 @@ pub fn write_plan(profile: u8, payload: &[u8]) -> Result<OnboardWritePlan> {
     if payload.len() > PROFILE_REGION_BYTES {
         return Err(Error::InvalidConfig(format!(
             "payload is {} bytes, the profile region holds {PROFILE_REGION_BYTES}",
-            payload.len()
-        )));
-    }
-    if payload.len() <= checksum_offset(payload.len()) {
-        return Err(Error::InvalidConfig(format!(
-            "payload of {} bytes has no room for the 4-byte checksum word at its end",
             payload.len()
         )));
     }
@@ -438,11 +433,9 @@ pub fn write_plan(profile: u8, payload: &[u8]) -> Result<OnboardWritePlan> {
             PROFILE_FS_BASE
         ))
     })?;
-    let checksum = u32::from_le_bytes(
-        payload[payload.len() - 4..]
-            .try_into()
-            .map_err(|e| Error::InvalidConfig(format!("checksum word: {e}")))?,
-    );
+    // The schema's own checksum word: a read image is longer than its payload, so the last four bytes of
+    // `payload` are not it.
+    let checksum = decoded.crc_stored;
     let mut image = payload.to_vec();
     image.resize(PROFILE_REGION_BYTES, 0);
 
@@ -527,11 +520,7 @@ pub fn write_plan_lines(plan: &OnboardWritePlan) -> Vec<String> {
             "write plan for slot {} (profile file {:04X}): {} payload bytes padded to the {}-byte profile region",
             plan.profile, plan.fs_id, plan.payload_len, plan.region_bytes
         ),
-        format!(
-            "payload checksum word at byte {}: {:08X}",
-            checksum_offset(plan.payload_len),
-            plan.checksum
-        ),
+        format!("payload checksum word: {:08X}", plan.checksum),
         format!(
             "{} frames: 1 open, {} windows of 2 writes + 1 push, 1 commit",
             plan.frames.len(),
@@ -604,9 +593,8 @@ pub struct ReadReply {
 
 /// Parse a payload-read reply (`reply` starts with the report ID byte) and extract its payload.
 ///
-/// `size` is the size that was requested; the payload is taken from the reply at
-/// [`READ_REPLY_HEADER_LEN`] and truncated to the requested size when the report carries more.
-/// Parse a payload-read reply (`reply` starts with the report ID byte) and extract its payload.
+/// `requested_size` is the size that was requested; the payload is truncated to it when the report
+/// carries more.
 ///
 /// The reference capture shows the keyboard answering a payload read in two shapes, both accepted
 /// here. On the interrupt endpoint the reply echoes the request header and the payload starts at

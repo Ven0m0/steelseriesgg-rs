@@ -1119,16 +1119,14 @@ fn select_onboard_keyboard(
                 "no keyboard with product ID {pid:04X} answers the on-board profile protocol: the {what} runs \
                  on a keyboard's own handle, only keyboards are candidates, and the only keyboard that answers \
                  the protocol is the Apex 7 (0x1612), the board it was measured on. `ssgg devices` lists what \
-                 was found; a keyboard listed there with no collection opened is a keyboard whose control \
-                 interface another program holds (see the line below)"
+                 was found; a keyboard listed there that cannot be opened is one whose control interface \
+                 another program holds"
             ),
             None => format!(
                 "no connected keyboard answers the on-board profile protocol: the {what} runs on a keyboard's \
                  own handle, and only keyboards are candidates (a mouse or a headset is not). A keyboard whose \
-                 control interface is taken is not a candidate either: `ssgg devices -v` prints the claim probe \
-                 - interface 0 is the one the on-board protocol needs, and GG's wingine (Windows), this crate's \
-                 daemon, or an `onboard read` running elsewhere all hold it. Stop what holds it, or read on the \
-                 device path: SSGG_APEX7_DEVICE_PATH=1 ssgg onboard read"
+                 control interface is taken is not a candidate either: GG's engine (Windows), this crate's \
+                 daemon, or an `onboard read` running elsewhere can hold it. Stop what holds it and retry"
             ),
         })),
         OnboardKeyboard::Ambiguous { keyboards } => {

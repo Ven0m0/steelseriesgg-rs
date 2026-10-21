@@ -138,7 +138,7 @@ impl Apex7 {
         // The geometry this platform's read always has; `ssgg --debug onboard read ...` shows it before
         // the first byte moves.
         tracing::info!(
-            "onboard read geometry: profile slot {profile} = GG config {} (file {fs_id:04X}) is              {PULLS_PER_FILE} pulls of \
+            "onboard read geometry: profile slot {profile} = GG config {} (file {fs_id:04X}) is {PULLS_PER_FILE} pulls of \
              {DEVICE_RESOURCE_BUFFER_LEN} bytes, {} payload reads of {PAYLOAD_READ_LEN} bytes, {} of the {} \
              payload bytes covered",
             profile + 1,
@@ -665,6 +665,56 @@ crate::impl_keyboard_with_delegation!(Apex7, {
 
     async fn load_onboard_profile(&self, profile: u8) -> Result<()> {
         self.deploy_profile(profile)
+    }
+
+    // Lighting is the generic keyboard's. The macro delegates only the query methods, so without these
+    // the trait defaults answer: `set_color` errors and the rest silently do nothing.
+    async fn apply(&mut self) -> Result<()> {
+        self.inner.apply().await
+    }
+
+    async fn set_color(&mut self, color: Color) -> Result<()> {
+        self.inner.set_color(color).await
+    }
+
+    async fn set_zone_colors(&mut self, colors: &[Color]) -> Result<()> {
+        self.inner.set_zone_colors(colors).await
+    }
+
+    async fn set_brightness(&mut self, brightness: u8) -> Result<()> {
+        self.inner.set_brightness(brightness).await
+    }
+
+    async fn set_key_color(&mut self, key_id: KeyId, color: Color) -> Result<()> {
+        self.inner.set_key_color(key_id, color).await
+    }
+
+    async fn set_key_colors(&mut self, key_colors: &[(KeyId, Color)]) -> Result<()> {
+        self.inner.set_key_colors(key_colors).await
+    }
+
+    async fn set_key_color_direct(&mut self, address: crate::devices::KeyAddress, color: Color) -> Result<()> {
+        self.inner.set_key_color_direct(address, color).await
+    }
+
+    async fn set_key_colors_direct(&mut self, key_colors: &[(crate::devices::KeyAddress, Color)]) -> Result<()> {
+        self.inner.set_key_colors_direct(key_colors).await
+    }
+
+    async fn set_key_region(&mut self, start_hid: u8, count: u8, color: Color) -> Result<()> {
+        self.inner.set_key_region(start_hid, count, color).await
+    }
+
+    fn read_actuation_point(&mut self) -> Result<u8> {
+        self.inner.read_actuation_point()
+    }
+
+    fn set_actuation_point(&mut self, value: u8) -> Result<()> {
+        self.inner.set_actuation_point(value)
+    }
+
+    fn set_actuation_point_mm(&mut self, mm: f32) -> Result<()> {
+        self.inner.set_actuation_point_mm(mm)
     }
 });
 

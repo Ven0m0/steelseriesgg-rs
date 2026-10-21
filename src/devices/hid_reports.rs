@@ -1071,9 +1071,6 @@ impl HidCommand for OnboardFileCommitCommand {
     }
 }
 
-/// Serialize a command into `buffer` for plan reporting. A command that does not validate serializes
-/// to zeros: plan builders validate the read configuration first, so the zeros are a report artifact,
-/// never bytes that reach the keyboard.
 /// Reject a buffer that cannot hold a report of `report_size` bytes.
 fn check_report_buffer(buffer: &[u8], report_size: usize) -> Result<()> {
     if buffer.len() < report_size {
