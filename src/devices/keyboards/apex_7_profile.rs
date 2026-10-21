@@ -624,10 +624,13 @@ pub fn parse_read_reply(reply: &[u8], requested_size: u16) -> Result<ReadReply> 
 ///
 /// # Errors
 ///
-/// Returns [`Error::Profile`] when the reply is empty.
+/// Returns [`Error::Profile`] when the reply is shorter than its report-ID and reserved bytes.
 pub fn parse_read_reply_at(reply: &[u8], requested_size: u16, framing_len: usize) -> Result<ReadReply> {
-    if reply.is_empty() {
-        return Err(Error::Profile("payload-read reply is empty".to_string()));
+    if reply.len() < 2 {
+        return Err(Error::Profile(format!(
+            "payload-read reply is {} byte(s), shorter than its report-ID and reserved bytes",
+            reply.len()
+        )));
     }
     let header = reply.len() > READ_REPLY_HEADER_LEN && reply[0] == READ_REPLY_REPORT_ID && reply[1] == 0;
     let (offset, size, payload) = if header {
@@ -813,11 +816,12 @@ impl ProfileImage {
                 let end = cursor + reply.data.len();
                 if reply.all_ff {
                     // A page whose first four bytes are FF is garbage from the device's point of view; the
-                    // reference implementation replaces it with zeroes and so do we.
+                    // reference implementation replaces it with zeroes and so do we. Only this page: the
+                    // next read of the pull is a page of its own and still lands at its own offset.
                     garbage_reads += 1;
-                    let room = PROFILE_FILE_BYTES.saturating_sub(cursor);
-                    data[cursor..cursor + room].fill(0);
-                    cursor += room;
+                    let page = reply.data.len().min(PROFILE_FILE_BYTES - cursor);
+                    data[cursor..cursor + page].fill(0);
+                    cursor += page;
                 } else if end > PROFILE_FILE_BYTES {
                     let room = PROFILE_FILE_BYTES.saturating_sub(cursor);
                     data[cursor..cursor + room].copy_from_slice(&reply.data[..room]);
@@ -2868,6 +2872,34 @@ mod tests {
         assert_eq!(&parsed.data[2..10], b"Config 1");
         assert_eq!(parsed.data.len(), 512);
         assert!(!parsed.all_zero);
+    }
+
+    #[test]
+    fn a_reply_too_short_for_its_reserved_byte_is_an_error_not_a_panic() {
+        assert!(parse_read_reply(&[], 512).is_err());
+        assert!(parse_read_reply(&[0x03], 512).is_err());
+        assert!(parse_read_reply(&[0x03, 0x00], 512).is_ok());
+    }
+
+    #[test]
+    fn a_garbage_page_zeroes_only_itself_and_the_next_read_of_the_pull_still_lands() {
+        let record = record(0, |read| {
+            if read == 0 {
+                vec![0xFFu8; PAYLOAD_READ_LEN]
+            } else {
+                vec![0x5Au8; PAYLOAD_READ_LEN]
+            }
+        });
+        let image = ProfileImage::assemble(0, vec![record]).unwrap();
+        assert!(
+            image.data[..PAYLOAD_READ_LEN].iter().all(|b| *b == 0),
+            "the garbage page is zeroed"
+        );
+        assert_eq!(
+            image.data[PAYLOAD_READ_LEN], 0x5A,
+            "the valid page behind it is kept at its own offset"
+        );
+        assert_eq!(image.stats.garbage_reads, 1);
     }
 
     #[test]

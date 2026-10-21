@@ -1137,9 +1137,13 @@ fn select_onboard_keyboard(
                 .map(|(pid, name)| format!("{name} ({pid:04X})"))
                 .collect::<Vec<_>>()
                 .join(", ");
+            let advice = if keyboards.windows(2).all(|pair| pair[0].0 == pair[1].0) {
+                "they share one product ID, which --device cannot tell apart: disconnect all but one"
+            } else {
+                "name one with --device <pid>"
+            };
             Err(Error::InvalidConfig(format!(
-                "more than one connected keyboard answers the on-board profile protocol: {listed} - name one \
-                 with --device <pid>"
+                "more than one connected keyboard answers the on-board profile protocol: {listed} - {advice}"
             )))
         }
     }

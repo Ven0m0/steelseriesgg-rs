@@ -45,9 +45,10 @@ use crate::rgb::{Color, PerKeyEffect};
 /// in the reference capture. The kernel writes the device's own report-ID byte into byte 0, so the reply's
 /// leading `03` arrives there whatever we ask for. Confirmed on hardware on an Apex 7 (`0x1612`).
 const READ_REPLY_ID: u8 = 0x00;
-/// Buffer size to ask the transport for when reading a payload read back: [`READ_REPORT_LEN`] (642), the
-/// `wLength` the capture shows, forwarded verbatim - a 643-byte ask never completes. The report-ID byte
-/// lands in buffer[0], so a full answer is `[report ID][641 bytes]`.
+/// Buffer size to hand the transport when reading a payload read back: [`READ_REPORT_LEN`] + 1 (643). The
+/// buffer carries the report-number byte (0) in front of the data, and with report number 0 the kernel drops
+/// that byte from the request, so the wire `wLength` is [`READ_REPORT_LEN`] (642), the value the capture shows.
+/// It is the `wLength` that must not be 643: a 643-byte `GET_REPORT` never completes.
 const READ_REPLY_BUFFER_LEN: usize = READ_REPORT_LEN + 1;
 /// Poll acknowledges and status reports the reply collector skips.
 const ACK_REPORT_IDS: [u8; 2] = [0x0B, 0x12];
