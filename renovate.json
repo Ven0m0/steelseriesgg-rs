@@ -22,7 +22,6 @@
   "automerge": true,
   "forkProcessing": "enabled",
   "ignoreTests": true,
-  "abandonmentThreshold": "2 years",
   "labels": ["dependencies"],
   "timezone": "Europe/Berlin",
   "cargo": {
@@ -30,6 +29,11 @@
   },
   "postUpdateOptions": ["yarnDedupeHighest", "gomodTidy", "pnpmDedupe"],
   "packageRules": [
+    {
+      "description": "Top-level abandonmentThreshold is overridden by inherited rules; a package rule applies it reliably",
+      "matchPackageNames": ["*"],
+      "abandonmentThreshold": "2 years"
+    },
     {
       "description": "Require dashboard approval for 0.x major bumps",
       "matchCurrentVersion": "/^0/",
