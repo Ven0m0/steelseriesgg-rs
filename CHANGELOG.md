@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Releases and this changelog are generated automatically from
 [Conventional Commits](https://www.conventionalcommits.org/) by release-please.
 
+## [0.1.8](https://github.com/Ven0m0/steelseriesgg-rs/compare/v0.1.7...v0.1.8) (2026-10-21)
+
+
+### Added
+
+* **gui:** live lighting panel served by ssgg gui ([#303](https://github.com/Ven0m0/steelseriesgg-rs/issues/303)) ([a23bed4](https://github.com/Ven0m0/steelseriesgg-rs/commit/a23bed40be78223aa3df9c00fcf4e0734c058743))
+* onboard profile support for Apex 7 (supersedes [#301](https://github.com/Ven0m0/steelseriesgg-rs/issues/301)) ([#302](https://github.com/Ven0m0/steelseriesgg-rs/issues/302)) ([3d2ae40](https://github.com/Ven0m0/steelseriesgg-rs/commit/3d2ae40b00a717df960bd58656edb031fff50404))
+
 ## [0.1.7](https://github.com/Ven0m0/steelseriesgg-rs/compare/v0.1.6...v0.1.7) (2026-10-17)
 
 
