@@ -385,8 +385,9 @@ impl OnboardWritePlan {
 /// # Errors
 ///
 /// Returns [`crate::error::Error::InvalidConfig`] for a slot outside the five the engine accepts, an empty
-/// payload, a payload longer than the region, a payload with no room for its checksum word, a region that
-/// is not a whole number of push windows, or a chunk pair that does not fill a window.
+/// payload, a payload longer than the region, a payload of an unknown schema or with a wrong stored checksum,
+/// a payload with no room for its checksum word, a region that is not a whole number of push windows, or a
+/// chunk pair that does not fill a window.
 pub fn write_plan(profile: u8, payload: &[u8]) -> Result<OnboardWritePlan> {
     if profile > MAX_PROFILE_INDEX {
         return Err(Error::InvalidConfig(format!(
@@ -397,6 +398,13 @@ pub fn write_plan(profile: u8, payload: &[u8]) -> Result<OnboardWritePlan> {
     if payload.is_empty() {
         return Err(Error::InvalidConfig(
             "an on-board profile write carries a payload: encode a profile first".to_string(),
+        ));
+    }
+    // A `--bin` payload is raw file bytes: refuse anything that is not a known-schema payload whose stored
+    // checksum matches, before it is framed for the board.
+    if !decode(payload)?.crc_ok {
+        return Err(Error::InvalidConfig(
+            "payload checksum word does not match its bytes: refusing to write it".to_string(),
         ));
     }
     if payload.len() > PROFILE_REGION_BYTES {
@@ -2697,6 +2705,22 @@ mod tests {
         assert!(decode(&encoded).expect("re-decode").crc_ok);
     }
 
+    /// A write is framed only for a payload whose stored checksum matches its bytes and whose schema is known.
+    #[test]
+    fn write_plan_refuses_a_payload_with_a_wrong_checksum_or_unknown_schema() {
+        let good = synthetic_payload(SCHEMA_B);
+        assert!(write_plan(0, &good).is_ok());
+
+        let mut bad_crc = good.clone();
+        let crc_offset = checksum_offset(bad_crc.len());
+        bad_crc[crc_offset] ^= 0xFF;
+        assert!(write_plan(0, &bad_crc).is_err());
+
+        let mut bogus = good;
+        bogus[..2].copy_from_slice(&0x0009u16.to_le_bytes());
+        assert!(write_plan(0, &bogus).is_err());
+    }
+
     /// The decoder reports the macro block as a summary plus the records it could walk. A block it
     /// could not walk has bytes behind that note, and writing the records alone would silently drop
     /// them, so the encoder refuses the JSON.
@@ -3766,7 +3790,7 @@ mod tests {
             DEPLOY_SETTLE_MS, 250,
             "250 ms is load-profile-with-pause's own pause (base_apex_legacy.lisp:2039-2045)"
         );
-        let payload = vec![0u8; PAYLOAD_LEN_B];
+        let payload = synthetic_payload(SCHEMA_B);
         let plan = write_plan(0, &payload).expect("a payload-length image plans a write");
         assert_eq!(
             plan.frames

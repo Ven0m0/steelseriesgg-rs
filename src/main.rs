@@ -981,6 +981,14 @@ async fn cmd_onboard(mut manager: Option<&mut DeviceManager>, action: OnboardAct
                 return Ok(());
             }
 
+            if !args.yes {
+                return Err(Error::InvalidConfig(
+                    "an on-board profile write rewrites the slot's stored profile: pass --yes to send it, or \
+                     --dry-run to print the plan"
+                        .to_string(),
+                ));
+            }
+
             let Some(manager) = manager.as_mut() else {
                 return Err(Error::Other(
                     "an on-board profile write needs a keyboard: --dry-run prints the plan without one".to_string(),

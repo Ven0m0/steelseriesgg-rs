@@ -276,7 +276,7 @@ fn interface_from_phys_reads_the_trailing_interface() {
 }
 
 #[cfg(unix)]
-/// Find the hidraw node of one USB interface of a device: scans `the device sysfs path` for the node whose
+/// Find the hidraw node of one USB interface of a device: scans `/sys/class/hidraw` for the node whose
 /// `device/uevent` carries this vendor/product pair in `HID_ID` and a `HID_PHYS` whose interface number
 /// ([`interface_from_phys`]) is `interface`.
 pub fn find_hidraw_for_interface(vendor_id: u16, product_id: u16, interface: usize) -> Option<String> {
@@ -285,7 +285,7 @@ pub fn find_hidraw_for_interface(vendor_id: u16, product_id: u16, interface: usi
     let interface = u32::try_from(interface).ok()?;
     let target_hid_id = format!("0003:{:08X}:{:08X}", vendor_id as u32, product_id as u32);
 
-    for entry in fs::read_dir("the device sysfs path").ok()? {
+    for entry in fs::read_dir("/sys/class/hidraw").ok()? {
         let Ok(entry) = entry else { continue };
         let Ok(content) = fs::read_to_string(entry.path().join("device/uevent")) else {
             continue;

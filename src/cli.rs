@@ -372,6 +372,11 @@ pub(crate) struct OnboardWriteArgs {
     /// sent
     #[arg(long)]
     pub(crate) dry_run: bool,
+
+    /// Confirm the write. Without it (and without `--dry-run`) nothing is sent: a write rewrites the slot's
+    /// stored profile and makes the keyboard run it
+    #[arg(long)]
+    pub(crate) yes: bool,
 }
 
 /// One on-board profile deploy: make the keyboard run the slot GG's config number names.
@@ -914,6 +919,7 @@ mod tests {
             profile: 1,
             device: None,
             dry_run,
+            yes: false,
         }
     }
 

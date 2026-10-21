@@ -138,7 +138,7 @@ was replayed from `ssgg` (one solid colour, see below).
   GG brightness is software scaling of the RGB values (brightness 0 = all-black frame).
 - **Code state**: `0x1628` uses the direct path with GG's 84-key table `WIRED_2023_KEYS`, a 645-byte buffer
   (report-ID byte + 644 wire bytes) and skips the `0x4B` init (`apex_pro_tkl_2023.rs`). Gen3 models keep `TKL_KEYS`
-  (112) and 643. Unix `send_feature` uses `info.path` (interface 1) for this model only (`keyboards/mod.rs`).
+  (112) and 643. Unix `send_feature` is hidapi `send_feature_report` on the handle discovery opened (`keyboards/mod.rs`); untested on `0x1628` under Linux.
   Per-key (`rgb perkey`) sends the same 84-key frame with unlisted keys black (no read-back exists).
   `ssgg rgb` warns on Windows when `SteelSeriesEngine.exe` runs (`warn_if_gg_engine_running`, `src/main.rs`).
 - **Hardware evidence**: on 2026-10-14, with GG stopped, `ssgg rgb color FF0000` turned the keyboard solid red
