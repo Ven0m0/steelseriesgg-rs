@@ -1,10 +1,13 @@
-# /etc/udev/rules.d/99-steelseries.rules
+# /etc/udev/rules.d/70-steelseries.rules
 # SteelSeries device permissions for user access
 # Sources: apex-tux, apex7tkl_linux, steelseries-linux
 
 # SteelSeries-specific USB and HID access
-SUBSYSTEM=="usb", ATTRS{idVendor}=="1038", GROUP="input", MODE="0660"
-SUBSYSTEM=="hidraw", ATTRS{idVendor}=="1038", GROUP="input", MODE="0660"
+# The 70- prefix matters: logind turns TAG "uaccess" into a per-seat ACL in 73-seat-late.rules,
+# so a later prefix (the old 99-) never got a seat ACL and needed the `input` group instead.
+# Not tagged on SUBSYSTEM=="input": that would expose keystroke nodes to every seat process.
+SUBSYSTEM=="usb", ATTRS{idVendor}=="1038", TAG+="uaccess", GROUP="input", MODE="0660"
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="1038", TAG+="uaccess", GROUP="input", MODE="0660"
 SUBSYSTEM=="input", ATTRS{idVendor}=="1038", GROUP="input", MODE="0660"
 
 # External script hook (requires steelseries-perms.py in same dir)

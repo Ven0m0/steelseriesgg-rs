@@ -120,12 +120,14 @@ sudo pacman -S lld
 ### Device permissions (udev)
 
 ```bash
-sudo cp assets/99-steelseries.rules /etc/udev/rules.d/
+sudo rm -f /etc/udev/rules.d/99-steelseries.rules   # old name, if you installed it before
+sudo cp assets/70-steelseries.rules /etc/udev/rules.d/
 sudo udevadm control --reload-rules
 sudo udevadm trigger
 sudo usermod -aG input $USER
 ```
-Log out/in to apply the group change.
+Logged-in desktop users get access through `uaccess` without the group. The `input` group is still
+needed for the daemon running outside a login session; log out/in to apply the group change.
 
 ### Windows
 

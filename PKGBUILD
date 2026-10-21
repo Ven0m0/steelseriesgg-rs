@@ -67,7 +67,7 @@ package() {
   cd "$(_resolve_archive_dir)" || return 1
   install -Dm755 "$srcdir/target/release/ssgg" "$pkgdir/usr/bin/ssgg"
   install -Dm644 assets/ssgg.service "$pkgdir/usr/lib/systemd/user/ssgg.service"
-  install -Dm644 assets/99-steelseries.rules "$pkgdir/usr/lib/udev/rules.d/99-steelseries.rules"
+  install -Dm644 assets/70-steelseries.rules "$pkgdir/usr/lib/udev/rules.d/70-steelseries.rules"
   install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
   install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
 }
