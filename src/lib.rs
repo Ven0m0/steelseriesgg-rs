@@ -21,6 +21,7 @@ pub mod diagnostics_export;
 pub mod error;
 pub mod fs_utils;
 pub mod gamesense;
+pub mod input;
 pub mod performance;
 pub mod pollrate;
 pub mod profiles;

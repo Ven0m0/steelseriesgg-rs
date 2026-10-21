@@ -30,6 +30,12 @@ cargo clippy --all-targets --locked --features audio -- -D warnings
 ```
 Skip and note as skipped if `libpulse-dev` is not installed (the error will mention `libpulse-binding`).
 
+**4b. Clippy — remap feature** (Linux only; the evdev layer compiles out elsewhere)
+
+```
+cargo clippy --all-targets --locked --features remap -- -D warnings
+```
+
 **5. Tests — default features**
 ```
 cargo test --locked
@@ -38,6 +44,12 @@ cargo test --locked
 **6. Tests — sonar feature**
 ```
 cargo test --locked --features sonar
+```
+
+**6b. Tests — remap feature**
+
+```
+cargo test --locked --features remap
 ```
 
 **7. Build — default features**
@@ -55,6 +67,12 @@ cargo build --release --locked --features sonar
 cargo build --release --locked --features audio
 ```
 Skip and note as skipped if `libpulse-dev` is not installed (same condition as step 4).
+
+**10. Build — remap feature**
+
+```
+cargo build --release --locked --features remap
+```
 
 ## Report format
 

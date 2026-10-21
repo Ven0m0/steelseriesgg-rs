@@ -129,6 +129,32 @@ sudo usermod -aG input $USER
 Logged-in desktop users get access through `uaccess` without the group. The `input` group is still
 needed for the daemon running outside a login session; log out/in to apply the group change.
 
+### Key remapper (optional, EXPERIMENTAL)
+
+`ssgg remap run` grabs a SteelSeries keyboard, rewrites key events and re-emits them through uinput. It is
+Linux-only, needs `cargo build --features remap`, and has not been run against real hardware yet. It can only
+remap one key to another key or to a chord (up to 4 keys); there are no macros, text typing or commands.
+
+```bash
+sudo cp assets/70-steelseries.rules /etc/udev/rules.d/   # includes the /dev/uinput rule (group `input`)
+sudo cp assets/ssgg-uinput.conf /etc/modules-load.d/     # load uinput at boot
+sudo modprobe uinput
+sudo udevadm control --reload-rules && sudo udevadm trigger
+```
+
+```toml
+[remap]
+device = "0x1628"        # optional USB product id filter; omit to use every SteelSeries keyboard
+
+[remap.bindings]
+caps_lock = "esc"
+f13 = ["left_ctrl", "left_shift", "t"]   # chord: pressed in order, released in reverse
+```
+
+`ssgg remap list` validates and prints the bindings. Stop a running remapper with Ctrl-C, or hold left Ctrl +
+right Ctrl + left Shift + right Shift for 2 seconds.
+The keyboard is grabbed exclusively while `remap run` is active.
+
 ### Windows
 
 Windows builds work but are not the primary target. No udev rules or driver changes are needed.

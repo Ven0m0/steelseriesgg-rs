@@ -32,6 +32,8 @@ required-features = ["sonar"]
 default = []
 audio = ["dep:libpulse-binding"]
 sonar = ["dep:reqwest"]
+# Linux-only evdev key remapper (grab + uinput); independent of audio and sonar
+remap = ["dep:evdev", "rustix/event"]
 
 [dependencies]
 anyhow = "1.0.104"
@@ -80,6 +82,8 @@ tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 hidapi = { version = "=2.6.7", default-features = false, features = ["linux-native-basic-udev"] }
+# evdev grab + uinput for the optional `remap` feature
+evdev = { version = "0.13.2", optional = true }
 
 [target.'cfg(not(target_os = "linux"))'.dependencies]
 hidapi = { version = "=2.6.7" }

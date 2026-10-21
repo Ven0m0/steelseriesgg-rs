@@ -55,6 +55,12 @@ pub(crate) enum Commands {
         action: MouseAction,
     },
 
+    /// Remap keys on a SteelSeries keyboard (Linux, needs the `remap` feature; EXPERIMENTAL and never run on hardware)
+    Remap {
+        #[command(subcommand)]
+        action: RemapAction,
+    },
+
     /// Manage profiles
     Profile {
         #[command(subcommand)]
@@ -582,6 +588,16 @@ pub(crate) enum ProfileAction {
         /// Profile name
         name: String,
     },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum RemapAction {
+    /// Grab the keyboard and apply the `[remap]` bindings from config.toml until Ctrl-C or the escape chord
+    /// (hold both Ctrl and both Shift keys for 2 seconds)
+    Run,
+
+    /// Print the configured bindings after validating them
+    List,
 }
 
 #[cfg(feature = "audio")]

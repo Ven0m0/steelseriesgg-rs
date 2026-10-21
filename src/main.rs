@@ -10,7 +10,7 @@ use clap::Parser;
 
 use crate::cli::{
     ActuationAction, Cli, Commands, HeadsetAction, MouseAction, PerKeyAction, PerformanceAction, PollrateAction,
-    ProfileAction, RgbAction, parse_key_name, require_color,
+    ProfileAction, RemapAction, RgbAction, parse_key_name, require_color,
 };
 use crate::daemon::{cmd_daemon, cmd_server};
 use tokio::task::yield_now;
@@ -139,6 +139,10 @@ async fn main() -> Result<()> {
         Commands::Mouse { action } => {
             let manager = new_device_manager()?;
             cmd_mouse(&manager, action)?;
+        }
+
+        Commands::Remap { action } => {
+            cmd_remap(action).await?;
         }
 
         Commands::Profile { action } => {
@@ -493,6 +497,80 @@ fn cmd_mouse(manager: &DeviceManager, action: MouseAction) -> Result<()> {
     }
 
     Ok(())
+}
+
+async fn cmd_remap(action: RemapAction) -> Result<()> {
+    let config = Config::load_async().await?;
+    let bindings = config.remap.bindings()?;
+    let product_id = config.remap.product_id()?;
+
+    match action {
+        RemapAction::List => {
+            if bindings.is_empty() {
+                println!("No bindings configured. Add a [remap.bindings] table to config.toml.");
+            }
+            print_remap_bindings(&bindings);
+            Ok(())
+        }
+        RemapAction::Run => {
+            if bindings.is_empty() {
+                return Err(Error::InvalidConfig(
+                    "no key bindings configured; add a [remap.bindings] table to config.toml".to_string(),
+                ));
+            }
+            run_remap(bindings, product_id).await
+        }
+    }
+}
+
+fn print_remap_bindings(bindings: &steelseries_gg::input::BindingSet) {
+    use steelseries_gg::input::Action;
+
+    for (source, action) in bindings.sorted() {
+        let target = match action {
+            Action::Key(key) => key.to_string(),
+            Action::Combo(keys) => keys.iter().map(|k| k.to_string()).collect::<Vec<_>>().join(" + "),
+        };
+        println!("  {source} -> {target}");
+    }
+}
+
+#[cfg(not(all(feature = "remap", target_os = "linux")))]
+async fn run_remap(_bindings: steelseries_gg::input::BindingSet, _product_id: Option<u16>) -> Result<()> {
+    Err(Error::Other(
+        "the key remapper is not available in this build (it needs Linux and the `remap` cargo feature)".to_string(),
+    ))
+}
+
+#[cfg(all(feature = "remap", target_os = "linux"))]
+async fn run_remap(bindings: steelseries_gg::input::BindingSet, product_id: Option<u16>) -> Result<()> {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use tokio::signal::unix::{SignalKind, signal};
+
+    eprintln!(
+        "{}",
+        "[EXPERIMENTAL] The key remapper has not been run against real hardware.".yellow()
+    );
+    println!("Active bindings:");
+    print_remap_bindings(&bindings);
+    println!("Escape chord: hold left Ctrl + right Ctrl + left Shift + right Shift for 2 seconds to stop.");
+    println!("Press Ctrl-C to stop.");
+
+    let stop = Arc::new(AtomicBool::new(false));
+    let worker_stop = Arc::clone(&stop);
+    let mut worker =
+        tokio::task::spawn_blocking(move || steelseries_gg::input::linux::run(&bindings, product_id, &worker_stop));
+    let mut terminate = signal(SignalKind::terminate())?;
+
+    tokio::select! {
+        result = &mut worker => return result.map_err(|e| Error::Other(e.to_string()))?,
+        _ = tokio::signal::ctrl_c() => {}
+        _ = terminate.recv() => {}
+    }
+
+    stop.store(true, Ordering::SeqCst);
+    worker.await.map_err(|e| Error::Other(e.to_string()))?
 }
 
 async fn cmd_actuation(manager: &DeviceManager, action: ActuationAction) -> Result<()> {

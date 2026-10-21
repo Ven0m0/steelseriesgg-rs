@@ -45,6 +45,7 @@ jobs:
           - ""
           - "--features sonar"
           - "--features audio"
+          - "--features remap"
     steps:
       - uses: actions/checkout@v7
         with:
@@ -79,6 +80,7 @@ jobs:
         features:
           - ""
           - "--features sonar"
+          - "--features remap"
     steps:
       - uses: actions/checkout@v7
         with:
@@ -107,6 +109,7 @@ jobs:
           - ""
           - "--features sonar"
           - "--features audio"
+          - "--features remap"
     steps:
       - uses: actions/checkout@v7
         with:

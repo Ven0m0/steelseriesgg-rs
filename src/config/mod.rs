@@ -2,9 +2,11 @@
 
 use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-use crate::Result;
+use crate::input::{Action, BindingSet, InputKey};
+use crate::{Error, Result};
 
 /// USB polling rate configuration.
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
@@ -32,6 +34,75 @@ pub struct DeviceConfig {
     pub control_usage_page: Option<u16>,
 }
 
+/// A binding target in `[remap.bindings]`: one key name, or an array of key names for a chord.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(untagged)]
+pub enum BindingTarget {
+    Key(String),
+    Combo(Vec<String>),
+}
+
+/// USB product id as written in the config: an integer or a hex string such as `"0x1628"`.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(untagged)]
+pub enum ProductIdSetting {
+    Number(u16),
+    Hex(String),
+}
+
+/// Key remapper settings. Only remapping one key to another and one key to a chord exist.
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(default)]
+pub struct RemapConfig {
+    /// Only grab keyboards with this USB product id; all SteelSeries keyboards when unset.
+    pub device: Option<ProductIdSetting>,
+
+    /// Source key name to target key name, or to an array of key names (a chord, at most
+    /// `input::MAX_COMBO_LEN` keys).
+    pub bindings: BTreeMap<String, BindingTarget>,
+}
+
+impl RemapConfig {
+    /// Parse and check the product id filter.
+    pub fn product_id(&self) -> Result<Option<u16>> {
+        match &self.device {
+            None => Ok(None),
+            Some(ProductIdSetting::Number(id)) => Ok(Some(*id)),
+            Some(ProductIdSetting::Hex(text)) => {
+                let digits = text.trim();
+                let digits = digits
+                    .strip_prefix("0x")
+                    .or_else(|| digits.strip_prefix("0X"))
+                    .unwrap_or(digits);
+                u16::from_str_radix(digits, 16)
+                    .map(Some)
+                    .map_err(|_| Error::InvalidConfig(format!("remap.device '{text}' is not a hex USB product id")))
+            }
+        }
+    }
+
+    /// Resolve every key name and validate the bindings.
+    pub fn bindings(&self) -> Result<BindingSet> {
+        let mut pairs = Vec::with_capacity(self.bindings.len());
+        for (source, target) in &self.bindings {
+            let action = match target {
+                BindingTarget::Key(name) => Action::Key(InputKey::parse(name)?),
+                BindingTarget::Combo(names) => {
+                    Action::Combo(names.iter().map(|n| InputKey::parse(n)).collect::<Result<_>>()?)
+                }
+            };
+            pairs.push((InputKey::parse(source)?, action));
+        }
+        BindingSet::from_pairs(pairs)
+    }
+
+    /// Check everything a load can reject: the product id and the bindings.
+    pub fn validate(&self) -> Result<()> {
+        self.product_id()?;
+        self.bindings().map(|_| ())
+    }
+}
+
 /// Application configuration.
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct Config {
@@ -53,6 +124,10 @@ pub struct Config {
 
     /// Manual HID device selection override
     pub device: DeviceConfig,
+
+    /// Key remapper settings (`ssgg remap`, needs the `remap` feature to run)
+    #[serde(default)]
+    pub remap: RemapConfig,
 }
 
 /// GameSense server configuration.
@@ -148,6 +223,7 @@ impl Config {
         match tokio::fs::read_to_string(&path).await {
             Ok(content) => {
                 let config: Config = toml::from_str(&content)?;
+                config.remap.validate()?;
                 Ok(config)
             }
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Self::default()),
@@ -168,6 +244,7 @@ impl Config {
 
         let content = std::fs::read_to_string(&path)?;
         let config: Config = toml::from_str(&content)?;
+        config.remap.validate()?;
         Ok(config)
     }
 
@@ -266,5 +343,88 @@ impl Config {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn remap_from(toml_text: &str) -> RemapConfig {
+        toml::from_str::<RemapConfig>(toml_text).unwrap()
+    }
+
+    #[test]
+    fn config_without_remap_section_defaults_to_empty() {
+        let full = toml::to_string_pretty(&Config::default()).unwrap();
+        let without = full.split("[remap").next().unwrap();
+        assert!(!without.contains("remap"));
+        let parsed: Config = toml::from_str(without).unwrap();
+        assert_eq!(parsed.remap, RemapConfig::default());
+        assert!(parsed.remap.bindings.is_empty());
+        assert!(parsed.remap.validate().is_ok());
+    }
+
+    #[test]
+    fn remap_section_round_trips_through_config() {
+        let config = Config {
+            remap: remap_from(
+                r#"
+            device = "0x1628"
+            [bindings]
+            caps_lock = "esc"
+            f13 = ["left_ctrl", "c"]
+            "#,
+            ),
+            ..Config::default()
+        };
+        let text = toml::to_string_pretty(&config).unwrap();
+        let back: Config = toml::from_str(&text).unwrap();
+        assert_eq!(back.remap, config.remap);
+        assert_eq!(back.remap.product_id().unwrap(), Some(0x1628));
+        assert_eq!(back.remap.bindings().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn product_id_accepts_integer_and_hex_forms() {
+        assert_eq!(remap_from("device = 5672").product_id().unwrap(), Some(5672));
+        assert_eq!(remap_from("device = \"1628\"").product_id().unwrap(), Some(0x1628));
+        assert_eq!(remap_from("device = \"0X1612\"").product_id().unwrap(), Some(0x1612));
+        assert_eq!(remap_from("").product_id().unwrap(), None);
+        assert!(remap_from("device = \"zz\"").product_id().is_err());
+        assert!(remap_from("device = \"0x12345\"").product_id().is_err());
+    }
+
+    #[test]
+    fn validation_rejects_bad_bindings() {
+        let bad = [
+            "[bindings]\nnot_a_key = \"esc\"",
+            "[bindings]\ncaps_lock = \"nope\"",
+            "[bindings]\ncaps_lock = \"caps_lock\"",
+            "[bindings]\ncaps_lock = []",
+            "[bindings]\ncaps_lock = [\"a\", \"b\", \"c\", \"d\", \"e\"]",
+            "[bindings]\nesc = \"a\"\nescape = \"b\"",
+        ];
+        for text in bad {
+            assert!(remap_from(text).validate().is_err(), "{text}");
+        }
+    }
+
+    #[test]
+    fn validation_error_names_the_offender() {
+        let err = remap_from("[bindings]\ncapslokc = \"esc\"")
+            .validate()
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("capslokc"), "{err}");
+    }
+
+    #[test]
+    fn valid_bindings_resolve_to_actions() {
+        let set = remap_from("[bindings]\nCaps_Lock = \"ESC\"\nf13 = [\"left_ctrl\", \"c\"]")
+            .bindings()
+            .unwrap();
+        let caps = InputKey::parse("caps_lock").unwrap();
+        assert_eq!(set.get(caps), Some(&Action::Key(InputKey::parse("esc").unwrap())));
     }
 }

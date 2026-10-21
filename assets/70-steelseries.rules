@@ -10,6 +10,11 @@ SUBSYSTEM=="usb", ATTRS{idVendor}=="1038", TAG+="uaccess", GROUP="input", MODE="
 SUBSYSTEM=="hidraw", ATTRS{idVendor}=="1038", TAG+="uaccess", GROUP="input", MODE="0660"
 SUBSYSTEM=="input", ATTRS{idVendor}=="1038", GROUP="input", MODE="0660"
 
+# Key remapper (optional `remap` feature, see assets/ssgg-uinput.conf): reading and grabbing the keyboard's
+# evdev nodes is covered by the input line above. /dev/uinput lets a process inject keystrokes, so it gets
+# the same group policy and no uaccess tag; this needs the `input` group even in a desktop session.
+KERNEL=="uinput", SUBSYSTEM=="misc", GROUP="input", MODE="0660", OPTIONS+="static_node=uinput"
+
 # External script hook (requires steelseries-perms.py in same dir)
 # ACTION=="add", SUBSYSTEM=="hidraw", ATTRS{idVendor}=="1038", RUN+="/etc/udev/rules.d/steelseries-perms.py '%E{DEVNAME}'"
 
