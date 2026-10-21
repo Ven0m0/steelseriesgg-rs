@@ -116,6 +116,8 @@ fn parse_last_frame(bytes: &[u8]) -> Vec<(u8, Color)> {
 pub struct ApexProTkl2023 {
     inner: GenericKeyboard,
     initialized_new_protocol: bool,
+    /// Software brightness (0-100) applied to every direct frame; see `set_direct_brightness`.
+    brightness: u8,
 }
 
 impl ApexProTkl2023 {
@@ -127,6 +129,7 @@ impl ApexProTkl2023 {
         Self {
             inner: keyboard,
             initialized_new_protocol: false,
+            brightness: 100,
         }
     }
 
@@ -136,6 +139,7 @@ impl ApexProTkl2023 {
         Self {
             inner: GenericKeyboard::new_without_device(info),
             initialized_new_protocol: false,
+            brightness: 100,
         }
     }
 
@@ -218,24 +222,26 @@ impl ApexProTkl2023 {
     /// Send one direct-mode feature report covering every key in `direct_keys()`.
     fn send_direct_frame(&mut self, color_for: impl Fn(u8) -> Color) -> Result<()> {
         self.ensure_new_protocol_init()?;
-        let buf = self.build_direct_frame(color_for)?;
+        let entries = self.direct_entries(color_for);
+        let buf = self.frame_for(&entries)?;
         self.inner.send_feature(&buf, buf.len())?;
-        self.save_last_frame(&buf);
+        self.save_last_frame(&entries);
         Ok(())
     }
 
-    /// Remember the entries of a frame that reached the board. Best effort: a failed save only costs
-    /// the next per-key request its merge base, so it is logged and not propagated.
-    fn save_last_frame(&self, frame: &[u8]) {
+    /// Remember the requested (unscaled) entries of a frame that reached the board, so repeated
+    /// brightness changes do not compound. Best effort: a failed save only costs the next per-key
+    /// request its merge base, so it is logged and not propagated.
+    fn save_last_frame(&self, entries: &[(u8, Color)]) {
         let Some(path) = last_frame_path(self.inner.info().product_id) else {
             return;
         };
-        let entries = &frame[3..3 + self.direct_keys().len() * 4];
+        let bytes: Vec<u8> = entries.iter().flat_map(|(u, c)| [*u, c.r, c.g, c.b]).collect();
         let saved = path
             .parent()
             .map_or(Ok(()), std::fs::create_dir_all)
             .map_err(crate::Error::from)
-            .and_then(|()| crate::fs_utils::secure_write(&path, entries));
+            .and_then(|()| crate::fs_utils::secure_write(&path, &bytes));
         if let Err(e) = saved {
             tracing::warn!("Could not save the last direct frame to {}: {e}", path.display());
         }
@@ -248,21 +254,42 @@ impl ApexProTkl2023 {
             .unwrap_or_default()
     }
 
-    fn build_direct_frame(&self, color_for: impl Fn(u8) -> Color) -> Result<Vec<u8>> {
-        let entries: Vec<(u8, Color)> = self
-            .direct_keys()
+    /// One entry per key in `direct_keys()`, in table order.
+    fn direct_entries(&self, color_for: impl Fn(u8) -> Color) -> Vec<(u8, Color)> {
+        self.direct_keys()
             .iter()
             .map(|&usage| (usage, color_for(usage)))
-            .collect();
+            .collect()
+    }
+
+    /// Frame for `entries` with the software brightness applied.
+    fn frame_for(&self, entries: &[(u8, Color)]) -> Result<Vec<u8>> {
+        let factor = f32::from(self.brightness) / 100.0;
+        let shown: Vec<(u8, Color)> = entries.iter().map(|(u, c)| (*u, c.scale(factor))).collect();
         let command = DirectFrameCommand {
             packet: self.direct_packet_id().unwrap_or(CommandCode::Apex2023Direct),
             report_len: self.direct_packet_length(),
-            entries: &entries,
+            entries: &shown,
         };
         let mut buf = vec![0u8; command.report_len];
         let size = HidReportBuilder::new(HidDeviceType::Keyboard).build_report(command, &mut buf)?;
         buf.truncate(size);
         Ok(buf)
+    }
+
+    /// [EXPERIMENTAL] No brightness command is known for the direct models (GG scales colours in
+    /// software), so remember the level and resend the last frame at it; later frames are scaled too.
+    /// shortcut: the level lives in this process only, so a later `ssgg` run sends full-brightness
+    /// colours until it sets brightness again; upgrade by persisting it next to the last frame once
+    /// the daemon stops pre-scaling through `RgbController`.
+    fn set_direct_brightness(&mut self, level: u8) -> Result<()> {
+        self.brightness = level.min(100);
+        let previous = self.load_last_frame();
+        if previous.is_empty() {
+            tracing::warn!("No saved frame to dim; the level applies to the next frame");
+            return Ok(());
+        }
+        self.send_direct_frame(|usage| per_key_color(&[], &previous, usage))
     }
 
     /// Send per-key direct RGB using the new 643-byte feature report protocol.
@@ -379,6 +406,9 @@ crate::impl_keyboard_with_delegation!(ApexProTkl2023, {
     }
 
     async fn set_brightness(&mut self, brightness: u8) -> Result<()> {
+        if self.uses_new_protocol() {
+            return self.set_direct_brightness(brightness);
+        }
         self.inner.set_brightness(brightness).await
     }
 
@@ -519,7 +549,7 @@ mod tests {
         let keyboard = keyboard_for(product_ids::APEX_PRO_TKL_2023);
         let requested = [(0x1A, Color::RED), (0x29, Color::BLUE)]; // W, Esc
         let frame = keyboard
-            .build_direct_frame(|usage| per_key_color(&requested, &[], usage))
+            .frame_for(&keyboard.direct_entries(|usage| per_key_color(&requested, &[], usage)))
             .unwrap();
 
         assert_eq!(frame.len(), WIRED_2023_PACKET_LENGTH);
@@ -609,9 +639,29 @@ mod tests {
     fn original_apex_pro_uses_openrgb_gen1_frame() {
         let keyboard = keyboard_for(product_ids::APEX_PRO);
         assert_eq!(keyboard.direct_packet_id(), Some(CommandCode::ApexGen1Direct));
-        let frame = keyboard.build_direct_frame(|_| Color::RED).unwrap();
+        let frame = keyboard.frame_for(&keyboard.direct_entries(|_| Color::RED)).unwrap();
         assert_eq!(frame.len(), APEX_2023_PACKET_LENGTH);
         assert_eq!(&frame[..7], &[0x00, 0x3A, 112, 0x04, 0xFF, 0x00, 0x00]);
+    }
+
+    #[test]
+    fn brightness_scales_the_frame_without_compounding() {
+        let mut keyboard = keyboard_for(product_ids::APEX_PRO_TKL_2023);
+        let entries = keyboard.direct_entries(|_| Color::new(200, 100, 50));
+
+        keyboard.brightness = 50;
+        let first = keyboard.frame_for(&entries).unwrap();
+        let second = keyboard.frame_for(&entries).unwrap();
+
+        assert_eq!(&first[3..7], &[0x04, 100, 50, 25]);
+        assert_eq!(first, second, "scaling must not feed back into the entries");
+        assert_eq!(entries[0], (0x04, Color::new(200, 100, 50)));
+
+        keyboard.brightness = 100;
+        assert_eq!(&keyboard.frame_for(&entries).unwrap()[3..7], &[0x04, 200, 100, 50]);
+
+        keyboard.brightness = 0;
+        assert_eq!(&keyboard.frame_for(&entries).unwrap()[3..7], &[0x04, 0, 0, 0]);
     }
 
     #[test]
