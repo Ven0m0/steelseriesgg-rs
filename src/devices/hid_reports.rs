@@ -192,8 +192,6 @@ impl CommandCode {
             0x40 => Some(CommandCode::Apex2023Direct),
             0x61 => Some(CommandCode::Apex2023DirectWireless),
             0x3A => Some(CommandCode::ApexGen1Direct),
-            0x8E => Some(CommandCode::ApexMDirect),
-            0x01 => Some(CommandCode::ApexMEnable),
             0x4B => Some(CommandCode::Apex2023Init),
             0x2D => Some(CommandCode::ActuationControl),
             0x03 => Some(CommandCode::ProfileChunk),
@@ -3708,12 +3706,18 @@ mod tests {
             (0x61, CommandCode::Apex2023DirectWireless),
             (0x3A, CommandCode::ApexGen1Direct),
             (0x4B, CommandCode::Apex2023Init),
-            (0x8E, CommandCode::ApexMDirect),
-            (0x01, CommandCode::ApexMEnable),
         ] {
             assert_eq!(CommandCode::from_report_byte(byte), Some(code));
             assert_eq!(code as u8, byte);
         }
+    }
+
+    #[test]
+    fn tag_only_m750_codes_are_not_parsed_from_report_bytes() {
+        // Bytes 4 and 5 of the M750 headers, not command bytes at offset 1: parsing them would misread
+        // unrelated reports.
+        assert_eq!(CommandCode::from_report_byte(0x8E), None);
+        assert_eq!(CommandCode::from_report_byte(0x01), None);
     }
 
     fn headset_report(command: &dyn HidCommand) -> Vec<u8> {

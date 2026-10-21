@@ -10,10 +10,9 @@ use crate::devices::hid_reports::{
     APEX_M_REPORT_SIZE, APEX_M_SLOT_COUNT, ApexMDirectCommand, ApexMEnableCommand, ApexMEnableStep, HidCommand,
     HidDeviceType,
 };
-use crate::devices::key_mapping::{KeyAddress, KeyId, KeyMapping};
-use crate::devices::zone_mapping::{ZoneEffect, ZoneMapping};
+use crate::devices::key_mapping::{KeyAddress, KeyId};
 use crate::devices::{Device, DeviceInfo, DeviceType};
-use crate::rgb::{Color, PerKeyEffect};
+use crate::rgb::Color;
 use crate::{Error, Result};
 use async_trait::async_trait;
 
@@ -115,7 +114,19 @@ impl Device for ApexM750 {
     }
 }
 
-crate::impl_keyboard_with_delegation!(ApexM750, {
+// Hand-written instead of `impl_keyboard_with_delegation!`: the macro forwards the per-key effect and zone
+// effect methods to `GenericKeyboard`, which send its generic `0x21` frames and APPLY (`0x09`). The trait
+// defaults for those methods send nothing.
+#[async_trait]
+impl Keyboard for ApexM750 {
+    fn zone_count(&self) -> usize {
+        self.inner.zone_count()
+    }
+
+    async fn clear_per_key_rgb(&mut self) -> Result<()> {
+        self.set_color(Color::BLACK).await
+    }
+
     async fn set_color(&mut self, color: Color) -> Result<()> {
         self.send_solid(color)
     }
@@ -151,7 +162,7 @@ crate::impl_keyboard_with_delegation!(ApexM750, {
     async fn set_key_region(&mut self, _start_hid: u8, _count: u8, _color: Color) -> Result<()> {
         Err(Self::unsupported())
     }
-});
+}
 
 #[cfg(test)]
 mod tests {

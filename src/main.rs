@@ -373,12 +373,10 @@ fn cmd_headset(manager: &DeviceManager, action: HeadsetAction) -> Result<()> {
     let mut headset = manager.open_headset(headset_info)?;
     headset.initialize()?;
 
-    if !matches!(action, HeadsetAction::Status) {
-        eprintln!(
-            "{}",
-            "[EXPERIMENTAL] Headset commands come from community forks and are untested on hardware.".yellow()
-        );
-    }
+    eprintln!(
+        "{}",
+        "[EXPERIMENTAL] Headset commands come from community forks and are untested on hardware.".yellow()
+    );
 
     match action {
         HeadsetAction::Status => {
@@ -424,7 +422,7 @@ fn cmd_mouse(manager: &DeviceManager, action: MouseAction) -> Result<()> {
     println!("Using mouse: {}", mouse_info.name);
     eprintln!(
         "{}",
-        "[EXPERIMENTAL] Mouse commands come from a community rivalcfg-derived fork and are untested on hardware.          Settings apply to the running mouse and are not saved to its memory."
+        "[EXPERIMENTAL] Mouse commands come from a community rivalcfg-derived fork and are untested on hardware. Settings apply to the running mouse and are not saved to its memory."
             .yellow()
     );
     warn_if_gg_engine_running();
