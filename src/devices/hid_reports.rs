@@ -41,6 +41,14 @@ pub enum CommandCode {
     /// [EXPERIMENTAL] Apex Pro TKL 2023 direct-mode lighting frame (0x40), sent as a feature
     /// report by `ApexProTkl2023`. See docs/development/apex-pro-tkl-2023-gg-capture.md.
     Apex2023Direct = 0x40,
+    /// [EXPERIMENTAL] Direct-mode lighting frame of the wireless Apex Pro TKL models (0x61), see
+    /// [`DirectFrameCommand`]. Not listed as confirmed in `.claude/rules/experimental-protocol.md`.
+    Apex2023DirectWireless = 0x61,
+    /// [EXPERIMENTAL] Direct-mode lighting frame of the original Apex Pro (0x3A), from OpenRGB, untested.
+    ApexGen1Direct = 0x3A,
+    /// [EXPERIMENTAL] Gen 3 init feature report (0x4B) sent once before the first direct frame, see
+    /// [`DirectInitCommand`].
+    Apex2023Init = 0x4B,
     /// Actuation point control (0x2D) - EXPERIMENTAL
     /// NOTE: This command code is experimental based on hardware research.
     ActuationControl = 0x2D,
@@ -100,6 +108,9 @@ impl fmt::Display for CommandCode {
             CommandCode::ColorShift => write!(f, "COLOR_SHIFT"),
             CommandCode::PerKeyRgb => write!(f, "PERKEY_RGB_EXPERIMENTAL"),
             CommandCode::Apex2023Direct => write!(f, "APEX2023_DIRECT_EXPERIMENTAL"),
+            CommandCode::Apex2023DirectWireless => write!(f, "APEX2023_DIRECT_WIRELESS_EXPERIMENTAL"),
+            CommandCode::ApexGen1Direct => write!(f, "APEX_GEN1_DIRECT_EXPERIMENTAL"),
+            CommandCode::Apex2023Init => write!(f, "APEX2023_INIT_EXPERIMENTAL"),
             CommandCode::ActuationControl => write!(f, "ACTUATION_CTRL_EXPERIMENTAL"),
             CommandCode::ProfileChunk => write!(f, "PROFILE_CHUNK_EXPERIMENTAL"),
             CommandCode::OnboardPayloadPull => write!(f, "ONBOARD_PULL"),
@@ -128,6 +139,9 @@ impl CommandCode {
             0x26 => Some(CommandCode::ColorShift),
             0x23 | 0x2A => Some(CommandCode::PerKeyRgb),
             0x40 => Some(CommandCode::Apex2023Direct),
+            0x61 => Some(CommandCode::Apex2023DirectWireless),
+            0x3A => Some(CommandCode::ApexGen1Direct),
+            0x4B => Some(CommandCode::Apex2023Init),
             0x2D => Some(CommandCode::ActuationControl),
             0x03 => Some(CommandCode::ProfileChunk),
             0x85 => Some(CommandCode::OnboardPayloadPull),
@@ -487,6 +501,112 @@ impl HidCommand for ProfileChunkCommand<'_> {
 
     fn description(&self) -> String {
         format!("Profile chunk: {} bytes at offset {}", self.data.len(), self.offset)
+    }
+}
+
+/// [EXPERIMENTAL] Direct-mode lighting frame, a feature report:
+/// `00 | packet id | key count | (usage R G B) x count | zero padding`, `report_len` bytes in all.
+///
+/// Packet id `0x40` (wired Apex Pro TKL 2023 and Gen 3), `0x61` (wireless Gen 3) or `0x3A` (original Apex
+/// Pro, from OpenRGB). One frame replaces every key. Hardware evidence is thin: a solid-colour and a
+/// per-key `0x40` frame were replayed on the wired Apex Pro TKL 2023 (`0x1628`, 2026-10-14 and 2026-10-21);
+/// see docs/development/apex-pro-tkl-2023-gg-capture.md.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DirectFrameCommand<'a> {
+    /// Frame packet id: [`CommandCode::Apex2023Direct`], [`CommandCode::Apex2023DirectWireless`] or
+    /// [`CommandCode::ApexGen1Direct`].
+    pub packet: CommandCode,
+    /// Report length including the report-ID byte (643, or 645 for the wired 2023 model).
+    pub report_len: usize,
+    /// `(HID usage, colour)` per key, in the order the board expects.
+    pub entries: &'a [(u8, Color)],
+}
+
+impl DirectFrameCommand<'_> {
+    const HEADER_LEN: usize = 3;
+    const ENTRY_LEN: usize = 4;
+}
+
+impl HidCommand for DirectFrameCommand<'_> {
+    fn command_code(&self) -> CommandCode {
+        self.packet
+    }
+
+    fn serialize(&self, buffer: &mut [u8], _device_type: HidDeviceType) -> Result<usize> {
+        self.validate()?;
+        check_report_buffer(buffer, self.report_len)?;
+        let report = &mut buffer[..self.report_len];
+        report.fill(0);
+        report[1] = self.packet as u8;
+        report[2] = self.entries.len() as u8;
+        let (slots, _) = report[Self::HEADER_LEN..].as_chunks_mut::<4>();
+        for (slot, (usage, color)) in slots.iter_mut().zip(self.entries) {
+            *slot = [*usage, color.r, color.g, color.b];
+        }
+        Ok(self.report_len)
+    }
+
+    fn validate(&self) -> Result<()> {
+        if !matches!(
+            self.packet,
+            CommandCode::Apex2023Direct | CommandCode::Apex2023DirectWireless | CommandCode::ApexGen1Direct
+        ) {
+            return Err(Error::InvalidConfig(format!(
+                "{} is not a direct-mode frame packet id",
+                self.packet
+            )));
+        }
+        let needed = Self::HEADER_LEN + self.entries.len() * Self::ENTRY_LEN;
+        if self.entries.len() > usize::from(u8::MAX) || needed > self.report_len {
+            return Err(Error::InvalidConfig(format!(
+                "{} direct-mode entries need {} bytes, the {}-byte report holds fewer",
+                self.entries.len(),
+                needed,
+                self.report_len
+            )));
+        }
+        Ok(())
+    }
+
+    fn description(&self) -> String {
+        format!(
+            "Direct frame {:#04x}: {} keys in {} bytes",
+            self.packet as u8,
+            self.entries.len(),
+            self.report_len
+        )
+    }
+}
+
+/// [EXPERIMENTAL] Gen 3 init feature report `00 4B` + zeros (643 bytes), sent once before the first
+/// [`DirectFrameCommand`] on the models that need it. The controller needs a short pause afterwards.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DirectInitCommand;
+
+impl DirectInitCommand {
+    /// Report length including the report-ID byte.
+    pub const REPORT_SIZE: usize = 643;
+}
+
+impl HidCommand for DirectInitCommand {
+    fn command_code(&self) -> CommandCode {
+        CommandCode::Apex2023Init
+    }
+
+    fn serialize(&self, buffer: &mut [u8], _device_type: HidDeviceType) -> Result<usize> {
+        check_report_buffer(buffer, Self::REPORT_SIZE)?;
+        let report = &mut buffer[..Self::REPORT_SIZE];
+        report.fill(0);
+        report[1] = CommandCode::Apex2023Init as u8;
+        Ok(Self::REPORT_SIZE)
+    }
+
+    fn validate(&self) -> Result<()> {
+        Ok(())
+    }
+
+    fn description(&self) -> String {
+        "Direct-mode init (0x4B)".to_string()
     }
 }
 
@@ -2937,5 +3057,77 @@ mod tests {
             builder.parse_command_code(&actuation_data),
             Some(CommandCode::ActuationControl)
         );
+    }
+
+    #[test]
+    fn direct_frame_layout_and_padding() {
+        let entries = [(0x04, Color::new(1, 2, 3)), (0x05, Color::new(4, 5, 6))];
+        let command = DirectFrameCommand {
+            packet: CommandCode::ApexGen1Direct,
+            report_len: 643,
+            entries: &entries,
+        };
+        let mut buffer = [0xAAu8; 700];
+        let size = command.serialize(&mut buffer, HidDeviceType::Keyboard).unwrap();
+
+        assert_eq!(size, 643);
+        assert_eq!(&buffer[..11], &[0x00, 0x3A, 2, 0x04, 1, 2, 3, 0x05, 4, 5, 6]);
+        assert!(buffer[11..643].iter().all(|&b| b == 0));
+        assert_eq!(buffer[643], 0xAA, "bytes past the report are untouched");
+    }
+
+    #[test]
+    fn direct_frame_rejects_bad_packet_id_and_overflow() {
+        let entries = [(0x04, Color::RED); 4];
+        let mut buffer = [0u8; 645];
+        let wrong_packet = DirectFrameCommand {
+            packet: CommandCode::Apply,
+            report_len: 643,
+            entries: &entries,
+        };
+        assert!(wrong_packet.serialize(&mut buffer, HidDeviceType::Keyboard).is_err());
+
+        let too_small = DirectFrameCommand {
+            packet: CommandCode::Apex2023Direct,
+            report_len: 18, // header 3 + 4 entries * 4 = 19 bytes needed
+            entries: &entries,
+        };
+        assert!(too_small.serialize(&mut buffer, HidDeviceType::Keyboard).is_err());
+
+        let short_buffer = DirectFrameCommand {
+            packet: CommandCode::Apex2023Direct,
+            report_len: 645,
+            entries: &entries,
+        };
+        assert!(
+            short_buffer
+                .serialize(&mut buffer[..100], HidDeviceType::Keyboard)
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn direct_init_is_4b_feature_report() {
+        let mut buffer = [0xAAu8; 643];
+        let size = DirectInitCommand
+            .serialize(&mut buffer, HidDeviceType::Keyboard)
+            .unwrap();
+
+        assert_eq!(size, 643);
+        assert_eq!(&buffer[..2], &[0x00, 0x4B]);
+        assert!(buffer[2..].iter().all(|&b| b == 0));
+    }
+
+    #[test]
+    fn direct_packet_ids_are_known_command_codes() {
+        for (byte, code) in [
+            (0x40, CommandCode::Apex2023Direct),
+            (0x61, CommandCode::Apex2023DirectWireless),
+            (0x3A, CommandCode::ApexGen1Direct),
+            (0x4B, CommandCode::Apex2023Init),
+        ] {
+            assert_eq!(CommandCode::from_report_byte(byte), Some(code));
+            assert_eq!(code as u8, byte);
+        }
     }
 }

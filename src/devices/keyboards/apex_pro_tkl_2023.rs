@@ -3,7 +3,8 @@
 use super::{GenericKeyboard, Keyboard};
 use crate::Result;
 use crate::devices::hid_reports::{
-    ActuationCommand, HidCommand, HidDeviceType, HidReportBuilder, KEYBOARD_REPORT_SIZE,
+    ActuationCommand, CommandCode, DirectFrameCommand, DirectInitCommand, HidCommand, HidDeviceType, HidReportBuilder,
+    KEYBOARD_REPORT_SIZE,
 };
 use crate::devices::key_mapping::{KeyAddress, KeyId, KeyMapping};
 use crate::devices::product_ids;
@@ -13,14 +14,10 @@ use crate::rgb::{Color, PerKeyEffect};
 use async_trait::async_trait;
 use std::ops::{Deref, DerefMut};
 
-/// Apex 2023 new protocol constants (from OpenRGB reverse engineering).
-const APEX_2023_PACKET_LENGTH: usize = 643;
-const APEX_2023_PACKET_ID_INIT: u8 = 0x4B;
-const APEX_2023_PACKET_ID_DIRECT_WIRED: u8 = 0x40;
-const APEX_2023_PACKET_ID_DIRECT_WIRELESS: u8 = 0x61;
-/// [EXPERIMENTAL] Direct-mode packet ID of the original Apex Pro (PID 0x1610): OpenRGB's
-/// `APEX_GEN1_PACKET_ID_DIRECT`, same 643-byte layout and key table, no init. Untested here (issue #283).
-const APEX_GEN1_PACKET_ID_DIRECT: u8 = 0x3A;
+/// Apex 2023 new protocol report length (from OpenRGB reverse engineering). The packet ids live in
+/// [`CommandCode`]; the original Apex Pro (PID 0x1610) uses OpenRGB's Gen 1 id `0x3A` with the same
+/// 643-byte layout and key table, no init. Untested here (issue #283).
+const APEX_2023_PACKET_LENGTH: usize = DirectInitCommand::REPORT_SIZE;
 
 /// TKL key HID codes (from OpenRGB SteelSeriesApexController.cpp).
 const TKL_KEYS: &[u8] = &[
@@ -191,14 +188,14 @@ impl ApexProTkl2023 {
     /// Verified on Apex Pro TKL Wireless Gen 3 hardware: the dongle (`0x1644`) and
     /// the same keyboard on USB cable (`0x1646`) both answer to the wireless packet
     /// ID `0x61`, while the wired-only Gen 3 model (`0x1642`) uses `0x40`.
-    fn direct_packet_id(&self) -> Option<u8> {
+    fn direct_packet_id(&self) -> Option<CommandCode> {
         Some(match self.inner.info().product_id {
             product_ids::APEX_PRO_TKL_2023_WIRELESS
             | product_ids::APEX_PRO_TKL_2023_WIRELESS_2
             | product_ids::APEX_PRO_TKL_WIRELESS_2024_DONGLE
-            | product_ids::APEX_PRO_TKL_WIRELESS_2024 => APEX_2023_PACKET_ID_DIRECT_WIRELESS,
-            product_ids::APEX_PRO_TKL_2024 | product_ids::APEX_PRO_TKL_2023 => APEX_2023_PACKET_ID_DIRECT_WIRED,
-            product_ids::APEX_PRO => APEX_GEN1_PACKET_ID_DIRECT,
+            | product_ids::APEX_PRO_TKL_WIRELESS_2024 => CommandCode::Apex2023DirectWireless,
+            product_ids::APEX_PRO_TKL_2024 | product_ids::APEX_PRO_TKL_2023 => CommandCode::Apex2023Direct,
+            product_ids::APEX_PRO => CommandCode::ApexGen1Direct,
             _ => return None,
         })
     }
@@ -208,10 +205,9 @@ impl ApexProTkl2023 {
         if self.initialized_new_protocol || self.is_wired_2023() || self.is_gen1() {
             return Ok(());
         }
-        let mut buf = vec![0u8; APEX_2023_PACKET_LENGTH];
-        buf[0] = 0x00; // Report ID
-        buf[1] = APEX_2023_PACKET_ID_INIT;
-        self.inner.send_feature(&buf, APEX_2023_PACKET_LENGTH)?;
+        let mut buf = vec![0u8; DirectInitCommand::REPORT_SIZE];
+        let size = HidReportBuilder::new(HidDeviceType::Keyboard).build_report(DirectInitCommand, &mut buf)?;
+        self.inner.send_feature(&buf[..size], size)?;
         // The controller needs a moment before it will honour direct-mode packets.
         std::thread::sleep(std::time::Duration::from_millis(50));
         self.initialized_new_protocol = true;
@@ -222,7 +218,7 @@ impl ApexProTkl2023 {
     /// Send one direct-mode feature report covering every key in `direct_keys()`.
     fn send_direct_frame(&mut self, color_for: impl Fn(u8) -> Color) -> Result<()> {
         self.ensure_new_protocol_init()?;
-        let buf = self.build_direct_frame(color_for);
+        let buf = self.build_direct_frame(color_for)?;
         self.inner.send_feature(&buf, buf.len())?;
         self.save_last_frame(&buf);
         Ok(())
@@ -252,25 +248,21 @@ impl ApexProTkl2023 {
             .unwrap_or_default()
     }
 
-    fn build_direct_frame(&self, color_for: impl Fn(u8) -> Color) -> Vec<u8> {
-        let packet_id = self.direct_packet_id().unwrap_or(APEX_2023_PACKET_ID_DIRECT_WIRED);
-
-        let keys = self.direct_keys();
-        let packet_length = self.direct_packet_length();
-        let mut buf = vec![0u8; packet_length];
-        buf[0] = 0x00; // Report ID
-        buf[1] = packet_id;
-        buf[2] = keys.len() as u8;
-
-        for (i, &hid_code) in keys.iter().enumerate() {
-            let color = color_for(hid_code);
-            let offset = 3 + i * 4;
-            buf[offset] = hid_code;
-            buf[offset + 1] = color.r;
-            buf[offset + 2] = color.g;
-            buf[offset + 3] = color.b;
-        }
-        buf
+    fn build_direct_frame(&self, color_for: impl Fn(u8) -> Color) -> Result<Vec<u8>> {
+        let entries: Vec<(u8, Color)> = self
+            .direct_keys()
+            .iter()
+            .map(|&usage| (usage, color_for(usage)))
+            .collect();
+        let command = DirectFrameCommand {
+            packet: self.direct_packet_id().unwrap_or(CommandCode::Apex2023Direct),
+            report_len: self.direct_packet_length(),
+            entries: &entries,
+        };
+        let mut buf = vec![0u8; command.report_len];
+        let size = HidReportBuilder::new(HidDeviceType::Keyboard).build_report(command, &mut buf)?;
+        buf.truncate(size);
+        Ok(buf)
     }
 
     /// Send per-key direct RGB using the new 643-byte feature report protocol.
@@ -499,15 +491,15 @@ mod tests {
         // to the wireless packet ID; the wired-only model uses 0x40.
         assert_eq!(
             keyboard_for(product_ids::APEX_PRO_TKL_WIRELESS_2024_DONGLE).direct_packet_id(),
-            Some(APEX_2023_PACKET_ID_DIRECT_WIRELESS)
+            Some(CommandCode::Apex2023DirectWireless)
         );
         assert_eq!(
             keyboard_for(product_ids::APEX_PRO_TKL_WIRELESS_2024).direct_packet_id(),
-            Some(APEX_2023_PACKET_ID_DIRECT_WIRELESS)
+            Some(CommandCode::Apex2023DirectWireless)
         );
         assert_eq!(
             keyboard_for(product_ids::APEX_PRO_TKL_2024).direct_packet_id(),
-            Some(APEX_2023_PACKET_ID_DIRECT_WIRED)
+            Some(CommandCode::Apex2023Direct)
         );
     }
 
@@ -516,7 +508,7 @@ mod tests {
         // [EXPERIMENTAL] layout read from a GG USBPcap capture, not yet confirmed on hardware.
         let keyboard = keyboard_for(product_ids::APEX_PRO_TKL_2023);
         assert!(keyboard.uses_new_protocol());
-        assert_eq!(keyboard.direct_packet_id(), Some(APEX_2023_PACKET_ID_DIRECT_WIRED));
+        assert_eq!(keyboard.direct_packet_id(), Some(CommandCode::Apex2023Direct));
         assert_eq!(keyboard.direct_keys().len(), 84);
         assert_eq!(keyboard.direct_packet_length(), 645);
         assert!(3 + keyboard.direct_keys().len() * 4 <= WIRED_2023_PACKET_LENGTH);
@@ -526,10 +518,12 @@ mod tests {
     fn wired_2023_per_key_frame_lights_only_requested_keys() {
         let keyboard = keyboard_for(product_ids::APEX_PRO_TKL_2023);
         let requested = [(0x1A, Color::RED), (0x29, Color::BLUE)]; // W, Esc
-        let frame = keyboard.build_direct_frame(|usage| per_key_color(&requested, &[], usage));
+        let frame = keyboard
+            .build_direct_frame(|usage| per_key_color(&requested, &[], usage))
+            .unwrap();
 
         assert_eq!(frame.len(), WIRED_2023_PACKET_LENGTH);
-        assert_eq!(&frame[..3], &[0x00, APEX_2023_PACKET_ID_DIRECT_WIRED, 0x54]);
+        assert_eq!(&frame[..3], &[0x00, 0x40, 0x54]);
         for (i, entry) in frame[3..3 + WIRED_2023_KEYS.len() * 4]
             .as_chunks::<4>()
             .0
@@ -614,8 +608,8 @@ mod tests {
     #[test]
     fn original_apex_pro_uses_openrgb_gen1_frame() {
         let keyboard = keyboard_for(product_ids::APEX_PRO);
-        assert_eq!(keyboard.direct_packet_id(), Some(APEX_GEN1_PACKET_ID_DIRECT));
-        let frame = keyboard.build_direct_frame(|_| Color::RED);
+        assert_eq!(keyboard.direct_packet_id(), Some(CommandCode::ApexGen1Direct));
+        let frame = keyboard.build_direct_frame(|_| Color::RED).unwrap();
         assert_eq!(frame.len(), APEX_2023_PACKET_LENGTH);
         assert_eq!(&frame[..7], &[0x00, 0x3A, 112, 0x04, 0xFF, 0x00, 0x00]);
     }
