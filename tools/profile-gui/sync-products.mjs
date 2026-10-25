@@ -113,11 +113,17 @@ export function keyboardModels(block, ids) {
   const byName = new Map(ids.map((e) => [e.name, e]));
   const source = block.replace(/\/\/.*$/gm, '');
   const row = /model\(\s*([A-Z0-9_]+)\s*,\s*"([^"]*)"\s*,\s*(?:C|KeyboardClass)::([A-Za-z0-9]+)/g;
-  return [...source.matchAll(row)].map((m) => {
+  const rows = [...source.matchAll(row)].map((m) => {
     const entry = byName.get(m[1]);
     if (!entry) throw new Error(`a keyboard row names no product ID constant: ${m[1]}`);
     return { hex: entry.hex, name: m[2], class: m[3] };
   });
+  // A row written another way (a bare 0x number, `product_ids::X`, an escaped quote) must fail, not vanish.
+  const calls = (source.match(/(?:^|\n)\s*model\(/g) ?? []).length;
+  if (calls !== rows.length) {
+    throw new Error(`${calls} keyboard rows in KEYBOARD_MODELS but ${rows.length} parse as model(CONST, "name", C::Class, ...)`);
+  }
+  return rows;
 }
 
 /** `APEX_7 => DeviceType::Keyboard` arms, resolved through the constant names, lowercased. */

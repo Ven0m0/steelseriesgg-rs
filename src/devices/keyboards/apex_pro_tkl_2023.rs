@@ -61,8 +61,8 @@ pub(crate) const GEN1_FRAME: DirectFrame = DirectFrame {
     keys: TKL_KEYS,
     init: false,
 };
-/// [EXPERIMENTAL] Gen 3 frame (`0x40` after the `0x4B` init). The wired Gen 3 model `0x1642` is verified on
-/// hardware with this packet id (see [`ApexProTkl2023::direct_packet_id`]).
+/// [EXPERIMENTAL] Gen 3 frame (`0x40` after the `0x4B` init), wired Gen 3 model `0x1642`. No test record in
+/// this repo; see the note on [`ApexProTkl2023::direct_packet_id`].
 pub(crate) const GEN3_FRAME: DirectFrame = DirectFrame {
     packet_id: CommandCode::Apex2023Direct,
     length: APEX_2023_PACKET_LENGTH,

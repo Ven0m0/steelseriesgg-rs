@@ -228,9 +228,9 @@ console.log('product IDs, model names and the read platform');
   }
   // Keyboards are named by their rows in keyboards/models.rs, not by arms of the name function.
   const models = readFileSync(`${import.meta.dirname}/../../src/devices/keyboards/models.rs`, 'utf8');
-  const keyboardRows = [...models.matchAll(/model\(\s*([A-Z0-9_]+)\s*,\s*"([^"]*)"\s*,\s*C::([A-Za-z0-9]+)/g)]
-    .map((m) => ({ pid: consts[m[1]], name: m[2], klass: m[3] }));
-  ok('every keyboard row names a product ID constant', () => keyboardRows.length > 20 && keyboardRows.every((r) => r.pid !== undefined),
+  const idList = Object.entries(consts).map(([name, pid]) => ({ name, pid, hex: `0x${pid.toString(16).toUpperCase().padStart(4, '0')}` }));
+  const keyboardRows = sync.keyboardModels(models, idList).map((k) => ({ pid: Number.parseInt(k.hex, 16), name: k.name, klass: k.class }));
+  ok('every keyboard row parses and names a product ID constant', () => keyboardRows.length === (models.match(/(?:^|\n)\s*model\(/g) ?? []).length,
     () => keyboardRows.length);
   for (const row of keyboardRows) rustNames.set(row.pid, row.name);
   const onboardRowIds = keyboardRows.filter((r) => r.klass === 'Apex7').map((r) => r.pid);
