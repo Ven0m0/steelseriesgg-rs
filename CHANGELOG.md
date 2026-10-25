@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Releases and this changelog are generated automatically from
 [Conventional Commits](https://www.conventionalcommits.org/) by release-please.
 
+## [0.1.12](https://github.com/Ven0m0/steelseriesgg-rs/compare/v0.1.11...v0.1.12) (2026-10-25)
+
+
+### Fixed
+
+* **apex-pro-tkl-2023:** use GG's 40-step actuation table ([#311](https://github.com/Ven0m0/steelseriesgg-rs/issues/311)) ([f070eea](https://github.com/Ven0m0/steelseriesgg-rs/commit/f070eea1e1e57d994192bc00df3aa97e145f34e1))
+
 ## [0.1.11](https://github.com/Ven0m0/steelseriesgg-rs/compare/v0.1.10...v0.1.11) (2026-10-25)
 
 
