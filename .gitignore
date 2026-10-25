@@ -56,3 +56,7 @@ apexctl/
 # preview.mjs output (tools/profile-gui)
 tools/profile-gui/board-preview.svg
 handoff.md
+
+# Device dumps (profile blobs, captures); keep them outside the repo
+*.bin
+!tools/profile-gui/examples/*.bin
