@@ -1,7 +1,8 @@
 //! Headsets using one-byte `<id> <opcode> <value>` frames: Arctis Nova 4/5/7, Nova 3, Nova Pro and Arctis 7+.
 //!
-//! [EXPERIMENTAL] The protocol comes from community forks and GG's decrypted device specs and has not been run
-//! on hardware. Frames are 64-byte output reports on the vendor control collection (usage page `0xFFC0`),
+//! [EXPERIMENTAL] The protocol comes from community forks and GG's decrypted device specs. Status, sidetone, mic
+//! volume and auto-off are confirmed on the PIDs in [`HARDWARE_CONFIRMED`] only; every other model is untested.
+//! Frames are 64-byte output reports on the vendor control collection (usage page `0xFFC0`),
 //! report number 0 (6 on the Nova Pro family). The save frame `<id> 09` is never sent: it would persist
 //! settings on the headset.
 
@@ -181,6 +182,10 @@ pub const NOVA7_MODELS: &[Nova7Model] = &[
     nova_pro_model(ARCTIS_NOVA_PRO_WIRELESS_XBOX_WHITE, true),
     nova_pro_model(ARCTIS_NOVA_3, false),
 ];
+
+/// PIDs on which status, sidetone, mic volume and auto-off were sent from `ssgg` on hardware and worked: Arctis
+/// Nova 7 Gen 2, Linux, 2026-10-25 (`.claude/rules/experimental-protocol.md`).
+pub const HARDWARE_CONFIRMED: &[u16] = &[ARCTIS_NOVA_7_WIRELESS_GEN2];
 
 /// Look up the Nova 7 behaviour for a product ID; `None` for every other headset.
 pub fn nova7_model(product_id: u16) -> Option<&'static Nova7Model> {
@@ -557,6 +562,13 @@ mod tests {
             );
             assert_eq!(m.sidetone, !no_extras.contains(&m.product_id), "{:#06x}", m.product_id);
             assert_eq!(m.chat_mix, m.sidetone, "{:#06x}", m.product_id);
+        }
+    }
+
+    #[test]
+    fn hardware_confirmed_pids_are_in_the_table() {
+        for pid in HARDWARE_CONFIRMED {
+            assert!(nova7_model(*pid).is_some(), "{pid:#06x}");
         }
     }
 

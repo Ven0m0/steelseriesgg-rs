@@ -22,6 +22,7 @@ use tracing_subscriber::FmtSubscriber;
 
 use steelseries_gg::config::Config;
 use steelseries_gg::device_state::{DeviceId, DeviceStateStore, KeyboardState};
+use steelseries_gg::devices::headsets::nova7::HARDWARE_CONFIRMED;
 use steelseries_gg::devices::keyboards::Keyboard;
 use steelseries_gg::devices::{
     DeviceInfo, DeviceManager, DeviceType, KeyAddress, KeyId,
@@ -379,10 +380,14 @@ fn cmd_headset(manager: &DeviceManager, action: HeadsetAction) -> Result<()> {
     let mut headset = manager.open_headset(headset_info)?;
     headset.initialize()?;
 
-    eprintln!(
-        "{}",
-        "[EXPERIMENTAL] Headset commands come from community forks and are untested on hardware.".yellow()
-    );
+    if HARDWARE_CONFIRMED.contains(&headset_info.product_id) {
+        eprintln!("Status, sidetone, mic volume and auto-off are confirmed on this model (2026-10-25).");
+    } else {
+        eprintln!(
+            "{}",
+            "[EXPERIMENTAL] Headset commands come from community forks and are untested on hardware.".yellow()
+        );
+    }
 
     match action {
         HeadsetAction::Status => {

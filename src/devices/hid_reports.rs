@@ -108,17 +108,19 @@ pub enum CommandCode {
     /// `ssgg onboard write` and `ssgg onboard load` commands send it, on request only; a plain read sends
     /// nothing. See [`OnboardProfileDeployCommand`].
     OnboardProfileDeploy = 0x89,
-    /// [EXPERIMENTAL] Arctis Nova 7 family sidetone level (0x39, `00 39 <0..=3>`), see
-    /// [`HeadsetSettingCommand`]. From community forks, untested on hardware.
+    /// Arctis Nova 7 family sidetone level (0x39, `00 39 <0..=3>`), see [`HeadsetSettingCommand`]. Confirmed on
+    /// `0x227E` (Nova 7 Gen 2, 2026-10-25); [EXPERIMENTAL] on every other PID, from community forks.
     HeadsetSidetone = 0x39,
-    /// [EXPERIMENTAL] Arctis Nova 7 family microphone volume (0x37, `00 37 <0..=7>`), see
-    /// [`HeadsetSettingCommand`]. From community forks, untested on hardware.
+    /// Arctis Nova 7 family microphone volume (0x37, `00 37 <0..=7>`), see [`HeadsetSettingCommand`]. Confirmed
+    /// on `0x227E` (Nova 7 Gen 2, 2026-10-25); [EXPERIMENTAL] on every other PID, from community forks.
     HeadsetMicVolume = 0x37,
-    /// [EXPERIMENTAL] Arctis Nova 7 family inactivity auto-off in minutes (0xA3, `00 a3 <minutes>`), see
-    /// [`HeadsetSettingCommand`]. From community forks, untested on hardware.
+    /// Arctis Nova 7 family inactivity auto-off in minutes (0xA3, `00 a3 <minutes>`), see
+    /// [`HeadsetSettingCommand`]. Confirmed on `0x227E` (Nova 7 Gen 2, 2026-10-25); [EXPERIMENTAL] on every other
+    /// PID, from community forks.
     HeadsetAutoOff = 0xA3,
-    /// [EXPERIMENTAL] Arctis Nova 7 family status query (0xB0, `00 b0`), answered by an input report that
-    /// starts with `b0`, see [`HeadsetStatusQueryCommand`]. From community forks, untested on hardware.
+    /// Arctis Nova 7 family status query (0xB0, `00 b0`), answered by an input report that starts with `b0`, see
+    /// [`HeadsetStatusQueryCommand`]. Confirmed on `0x227E` (Nova 7 Gen 2, 2026-10-25); [EXPERIMENTAL] on every
+    /// other PID, from community forks.
     HeadsetStatus = 0xB0,
     /// [EXPERIMENTAL] Nova Pro Wireless family battery query (0xB7, `06 b7`), see
     /// [`HeadsetBatteryQueryCommand`]. From GG's decrypted device specs, untested on hardware.
@@ -1770,8 +1772,9 @@ impl HidCommand for OnboardFileCommitCommand {
 /// [`HEADSET_REPORT_SIZE`], byte 0 being the hidapi report number (`00` on the Nova 4/5/7 and Arctis 7+
 /// families, `06` on the Nova Pro family). `code` selects the setting; `value` is bounded by the widest range
 /// any model accepts, the per-model range lives in `headsets::nova7::Nova7Model`. Source: community forks and
-/// GG's decrypted device specs, never sent from `ssgg` on hardware. Never followed by the save frame
-/// `<id> 09`, which would persist the setting on the headset.
+/// GG's decrypted device specs. Sidetone, mic volume and auto-off confirmed from `ssgg` on Arctis Nova 7 Gen 2
+/// `0x227E` (Linux, 2026-10-25), untested on every other PID. Never followed by the save frame `<id> 09`, which
+/// would persist the setting on the headset.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct HeadsetSettingCommand {
     /// Report number in byte 0: `0x00`, or `0x06` on the Nova Pro family.
@@ -1833,7 +1836,8 @@ impl HidCommand for HeadsetSettingCommand {
 
 /// [EXPERIMENTAL] Arctis Nova 7 family status query: `00 b0` zero padded to [`HEADSET_REPORT_SIZE`]. The
 /// headset answers with an input report `b0 <power> <battery> <charge> <chat game> <chat chat> ...`.
-/// Source: community forks, never sent from `ssgg` on hardware.
+/// Source: community forks. Confirmed from `ssgg` on Arctis Nova 7 Gen 2 `0x227E` (Linux, 2026-10-25), untested
+/// on every other PID.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct HeadsetStatusQueryCommand;
 

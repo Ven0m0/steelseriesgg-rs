@@ -127,10 +127,21 @@ GG names PID `0x1628` `apex_pro_tkl_2022` regardless of the retail year.
 
 ### Arctis Nova 7 family protocol [EXPERIMENTAL]
 
-Source: two community forks. Nothing here has been run from `ssgg` on hardware, so every command is
-Experimental (see `.claude/rules/experimental-protocol.md`). Code: `src/devices/headsets/nova7.rs`
-(per-PID table `NOVA7_MODELS`) and `HeadsetSettingCommand` / `HeadsetStatusQueryCommand` in
-`src/devices/hid_reports.rs`.
+Source: two community forks. Code: `src/devices/headsets/nova7.rs` (per-PID table `NOVA7_MODELS`, confirmed PIDs
+in `HARDWARE_CONFIRMED`) and `HeadsetSettingCommand` / `HeadsetStatusQueryCommand` in `src/devices/hid_reports.rs`.
+Every command is Experimental on every PID except the one below (see `.claude/rules/experimental-protocol.md`).
+
+Hardware results, Arctis Nova 7 Gen 2 `0x227E`, Linux, 2026-10-25 (owner test, GG not running):
+
+- Detection: control collection is interface 3 (usage page `0xFFC0`), picked automatically; the serial is empty.
+- Status `00 b0`: percent battery matched an independent reading; the charge byte flipped to charging on USB
+  plug-in; ChatMix read -1.00 / +0.02 / +1.00 with the dial at full game / middle / full chat.
+- Sidetone `00 39`: step 3 audible, step 0 silent. After a power cycle the headset falls back to its own saved
+  level, because the save frame is never sent. Steps 1-2 untested.
+- Mic volume `00 37`: recorded mic level -80 dBFS at step 0 and -39 dBFS at step 7 (alternating takes through
+  PipeWire). Sidetone does not follow the mic volume. Middle steps untested.
+- Auto-off `00 a3`: `01` turned the headset off after about a minute idle, so the value is minutes. `00`
+  (disable) was sent but not observed.
 
 - Transport: 64-byte output reports `00 <opcode> <arg>` zero padded (byte 0 is the hidapi report number), on the
   vendor control collection (usage page `0xFFC0`, interface 3 in the forks). `control_score` already ranks that
