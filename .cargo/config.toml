@@ -79,3 +79,12 @@ build-sonar  = "build --release --locked --features sonar"
 
 # Build with PulseAudio/PipeWire (requires libpulse-dev)
 build-audio  = "build --release --locked --features audio"
+
+# Fat LTO through rustflags on top of [profile.release] lto. Rustflags also reach build scripts (which cargo
+# builds with -Cembed-bitcode=no) and proc-macros (which need -Zdylib-lto, so RUSTC_BOOTSTRAP=1 must reach
+# rustc). target.'cfg(all())' flags join the per-triple target-cpu flags above. A set RUSTFLAGS env var
+# replaces all config rustflags, this alias included.
+build-lto = [
+    "build", "--release", "--locked", "--config",
+    "target.'cfg(all())'.rustflags = ['-Clto=fat', '-Cembed-bitcode=yes', '-Zdylib-lto']",
+]
