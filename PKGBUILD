@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Maintainer: Your Name <your.email@example.com>
+# Maintainer: ven0m0.wastaken@gmail.com
 # shell: bash
 # shellcheck disable=SC2034,SC2154
 pkgname=ssgg
