@@ -484,8 +484,9 @@ node tools/profile-gui/sync-products.mjs --check   # exit 1 when Rust moved and 
 ```
 
 `sync-products.mjs` parses these Rust regions - `pub mod product_ids`,
-`device_name_from_product_id` and `device_type_from_product_id` in `src/devices/mod.rs`, the
-`keyboard_class` family arms in `src/devices/discovery.rs`, and the
+`device_name_from_product_id` and `device_type_from_product_id` in `src/devices/mod.rs` (headsets
+and mice), the `KEYBOARD_MODELS` rows in `src/devices/keyboards/models.rs` (keyboard names and classes),
+and the
 `codecs()` registry in `src/devices/keyboards/onboard.rs` - and writes `products.generated.js`,
 which `index.html` loads **before** `app.js`, so the page reads it as `globalThis.SsggProducts`.
 Run it after changing any of those tables; `selftest.mjs` runs `--check` as a check, so a stale
@@ -499,7 +500,7 @@ What the page derives from it:
   used only when the registry is silent);
 - the device kind (`keyboard` / `mouse` / `headset` / registry fallback), which decides whether a
   mouse button layout or the line `no keyboard layout: a headset has no key mappings` is printed;
-- the on-board family set (the `KeyboardClass::Apex7` arms of `keyboard_class`): a model in it gets
+- the on-board family set (the `KEYBOARD_MODELS` rows of class `Apex7`): a model in it gets
   `payload layout: legacy Apex 750-byte A/B` plus the extra blocks this page decodes (128 mapping
   slots, scroll wheel, OLED, macros); a model outside it is labelled
   `payload layout: not the one this page encodes`, because a profile from it needs that family's own

@@ -676,8 +676,8 @@ const PRODUCT_NAMES = {
 };
 
 // Product IDs the Apex on-board protocol was reverse-engineered on, mirroring the class the discovery
-// gate builds for them: the `KeyboardClass::Apex7` arm of `keyboard_class` in
-// `src/devices/discovery.rs`. `Apex7` is the on-board class - it answers the protocol through the
+// gate builds for them: the `KEYBOARD_MODELS` rows of class `Apex7` in
+// `src/devices/keyboards/models.rs`. `Apex7` is the on-board class - it answers the protocol through the
 // codec the class hands to the CLI (`Keyboard::onboard_codec`), which is what lets `ssgg onboard
 // read` reach a board - and it is built for the board the frames are known from and for nothing
 // else: the `0x1614` / `0x1616` / `0x1618` platform siblings build as `Generic`, answer no codec, and
@@ -706,8 +706,8 @@ function importedName(pid) {
   return typeof name === 'string' && name !== 'Unknown SteelSeries Device' ? name : null;
 }
 
-/// Models whose on-board profile protocol Rust reverse-engineered (the `KeyboardClass::Apex7` arms of
-/// `keyboard_class` in src/devices/discovery.rs). The page encodes one payload layout, so a model
+/// Models whose on-board profile protocol Rust reverse-engineered (the `KEYBOARD_MODELS` rows of class
+/// `Apex7` in src/devices/keyboards/models.rs). The page encodes one payload layout, so a model
 /// outside this list needs its own family's layout, encoder and feature set.
 function onboardModelPids() {
   return PRODUCTS === null ? LEGACY_ONBOARD_PIDS.slice() : PRODUCTS.onboardPids.map((hex) => Number.parseInt(hex, 16));

@@ -64,8 +64,11 @@ and attach the zip. Attach `device.pcap` too if it is under 25 MB (zip it first)
    is a worked example (lighting frame, profile blob, per-key slots).
 2. Write your findings as `docs/development/<device>-gg-capture.md` in the same style: transport (interface,
    report type and length), each command with its layout, and open questions.
-3. Add the product ID to `product_ids` in `src/devices/mod.rs` and wire the device in
-   `src/devices/discovery.rs` and `src/devices/keyboards/` or `src/devices/headsets/`. The `/new-device`
+3. Add the product ID to `product_ids` in `src/devices/mod.rs`. A keyboard then gets one row in
+   `KEYBOARD_MODELS` (`src/devices/keyboards/models.rs`): name, class, raw-hidraw fallback and direct frame,
+   which is everything discovery and the direct-lighting class read per model. A headset or mouse goes in
+   `src/devices/discovery.rs` and its own family table under `src/devices/headsets/` or `src/devices/mice/`.
+   Run `node tools/profile-gui/sync-products.mjs` afterwards. The `/new-device`
    Claude Code command scaffolds this. Build every report with `HidReportBuilder`
    (`src/devices/hid_reports.rs`), never with hand-written byte arrays.
 4. Label everything you have not replayed on the real device `[EXPERIMENTAL]` (see
