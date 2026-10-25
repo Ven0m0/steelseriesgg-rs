@@ -96,7 +96,7 @@ none is expected to turn up without new firmware.
    hardware test settles it.
    **Implemented 2026-10-25, owed hardware tests H1/H2 in `handoff.md`:** `ssgg actuation set|set-value|clear-second|
    release-mode|rapid-trigger|rapid-tap|rapid-tap-pairs` send the `38 6x` frames on `0x1628` (every analog key;
-   `--dry-run` prints the bytes; only the four captured distances are accepted), and `ssgg onboard gen3-read`
+   `--dry-run` prints the bytes; 0.1-4.0 mm from GG's table; `set 0.1` confirmed on hardware 2026-10-25), and `ssgg onboard gen3-read`
    reads one slot read-only and checks the CRC at 12320. The spec also names three of the init frames in item 3:
    `b2` is `load_profile`, `34` is `set_profile_volatile`, `38 66`/`38 67` are rapid tap enable/pairs. The spec's
    `device-key-idx-to-hid` matches `WIRED_2023_PROFILE_SLOTS` slot for slot.
@@ -105,8 +105,8 @@ none is expected to turn up without new firmware.
    command: no read-back exists (confirmed 2026-10-21, not just undiscovered), so there is no current blob to
    modify and a write would overwrite the board's other on-board settings with a stale/synthetic blob. Leave
    unwired unless a read-back command surfaces on a firmware update.
-2. ~~Actuation calibration conflict~~ resolved 2026-10-21: `ACTUATION_POINTS` 1.0mm point updated to the live
-   `(47,42)` reading (owner's board, GG UI showed 1.0mm), replacing the earlier, never-UI-verified `(21,18)`.
+2. ~~Actuation calibration conflict~~ resolved 2026-10-25: `(47,42)` is 1.8 mm (GG's table and the board's
+   sync reports); `ACTUATION_POINTS` now holds GG's full 40-step table, with 1.0 mm back at `(21,18)`.
 3. ~~Capture GG startup to check for a read-back command~~ superseded by the 2026-10-21 live trace above: there
    is none. **Still open, needs a capture** (USBPcap, started before launching GG): the init-sequence byte
    meanings `b1`, `b2`, `34`, `38 66`, `38 67`; the profile tables at blob offsets 1080, 1224, 1590.

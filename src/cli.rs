@@ -555,7 +555,7 @@ pub(crate) enum MouseAction {
 /// confirmed on hardware, and whether they survive unplugging is unknown. Each one sets every analog key.
 #[derive(Subcommand)]
 pub(crate) enum ActuationAction {
-    /// Set actuation point for all keys (global). Apex Pro TKL 2023: only 0.1, 1.0, 2.0 or 3.0 mm
+    /// Set actuation point for all keys (global). Apex Pro TKL 2023: 0.1-4.0 mm in 0.1 mm steps
     Set {
         /// Actuation point in millimeters (0.1 to 4.0mm, e.g., 1.2, 2.5, 3.6)
         mm: f32,
@@ -582,7 +582,7 @@ pub(crate) enum ActuationAction {
     /// Apex Pro TKL 2023: set the actuation of single keys, e.g. `set-key W=1.0 A=2.0`. The other keys keep the
     /// values ssgg last sent, so run `set <mm>` once first; changes made in GG since then are not seen
     SetKey {
-        /// KEY=MM pairs (key names as in `rgb perkey`; mm 0.1, 1.0, 2.0 or 3.0)
+        /// KEY=MM pairs (key names as in `rgb perkey`; mm 0.1-4.0)
         #[arg(required = true)]
         keys: Vec<String>,
         /// Set the second actuation layer instead

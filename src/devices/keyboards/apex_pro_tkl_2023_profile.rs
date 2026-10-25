@@ -16,13 +16,52 @@ pub const PROFILE_LEN: usize = 12_500;
 /// Offset of the little-endian CRC over `blob[..PROFILE_CHECKSUM_OFFSET]`.
 pub const PROFILE_CHECKSUM_OFFSET: usize = 12_320;
 
-/// Observed `(tenths of a mm, actuation raw, reset raw)` triples. GG wrote both bytes together and the
-/// scale is non-linear, so values in between are unknown and must not be interpolated.
-///
-/// The 1.0mm point is a live read (owner's board, 2026-10-21, GG's UI showed 1.0mm; see
-/// `docs/development/apex-pro-tkl-2023-gg-capture.md`), overriding the earlier capture's `(0x15, 0x12)`
-/// for that point, which was never confirmed against a labelled UI value the way this one was.
-const ACTUATION_POINTS: [(u8, u8, u8); 4] = [(1, 0x05, 0x05), (10, 0x2F, 0x2A), (20, 0x39, 0x34), (30, 0x86, 0x7B)];
+/// `(actuation raw, reset raw)` for 0.1-4.0 mm, index = tenths of a mm - 1. GG's own table: the device
+/// spec's `hall-thresholds-to-actuation-alist` (`apex_pro_tkl_2022`) and the identical `mm -> "l:h"` map in
+/// GG's UI bundle (`app.asar`), read 2026-10-25. The scale is non-linear. `(47, 42)` is 1.8 mm, the board's
+/// default; the 2026-10-21 note that GG showed it as 1.0 mm was wrong.
+const ACTUATION_POINTS: [(u8, u8); 40] = [
+    (5, 5),
+    (5, 4),
+    (6, 5),
+    (8, 6),
+    (10, 8),
+    (12, 10),
+    (14, 12),
+    (16, 14),
+    (18, 16),
+    (21, 18),
+    (24, 21),
+    (27, 24),
+    (30, 27),
+    (33, 29),
+    (36, 33),
+    (39, 36),
+    (43, 40),
+    (47, 42),
+    (52, 47),
+    (57, 52),
+    (62, 57),
+    (68, 62),
+    (74, 68),
+    (81, 74),
+    (88, 81),
+    (95, 87),
+    (104, 95),
+    (114, 104),
+    (124, 114),
+    (134, 123),
+    (147, 134),
+    (161, 147),
+    (175, 161),
+    (189, 174),
+    (197, 189),
+    (206, 197),
+    (215, 206),
+    (224, 215),
+    (224, 217),
+    (224, 219),
+];
 
 /// Profile checksum: the STM32 hardware CRC-32 (poly 0x04C11DB7, init 0xFFFFFFFF, no reflection,
 /// no final XOR) over the data read as little-endian 32-bit words, MSB first.
@@ -58,16 +97,14 @@ pub fn seal_profile(blob: &mut [u8; PROFILE_LEN]) {
     blob[PROFILE_CHECKSUM_OFFSET..PROFILE_CHECKSUM_OFFSET + 4].copy_from_slice(&crc.to_le_bytes());
 }
 
-/// Raw `(h, l)` hall pair (actuation, reset) of a distance in tenths of a mm. Only the four captured
-/// distances are known.
+/// Raw `(h, l)` hall pair (actuation, reset) of a distance in tenths of a mm (1..=40).
 pub fn actuation_raw(tenths_mm: u8) -> Result<(u8, u8)> {
-    ACTUATION_POINTS
-        .iter()
-        .find(|(t, _, _)| *t == tenths_mm)
-        .map(|&(_, actuation, reset)| (actuation, reset))
+    usize::from(tenths_mm)
+        .checked_sub(1)
+        .and_then(|i| ACTUATION_POINTS.get(i).copied())
         .ok_or_else(|| {
             Error::Profile(format!(
-                "Actuation {}.{} mm has no known raw value; captured points are 0.1, 1.0, 2.0 and 3.0 mm",
+                "Actuation {}.{} mm is outside 0.1-4.0 mm",
                 tenths_mm / 10,
                 tenths_mm % 10
             ))
@@ -75,7 +112,7 @@ pub fn actuation_raw(tenths_mm: u8) -> Result<(u8, u8)> {
 }
 
 /// Set the actuation and reset point of one analog key (by HID usage), or of every analog key when
-/// `usage` is `None`, then reseal the blob. Only the four captured distances are accepted.
+/// `usage` is `None`, then reseal the blob.
 pub fn set_actuation(blob: &mut [u8; PROFILE_LEN], usage: Option<u8>, tenths_mm: u8) -> Result<()> {
     let (actuation, reset) = actuation_raw(tenths_mm)?;
 
@@ -131,6 +168,17 @@ mod tests {
     }
 
     #[test]
+    fn actuation_raw_follows_ggs_table() {
+        assert_eq!(actuation_raw(10).unwrap(), (21, 18));
+        assert_eq!(actuation_raw(18).unwrap(), (47, 42));
+        assert_eq!(actuation_raw(40).unwrap(), (224, 219));
+        assert!(
+            ACTUATION_POINTS.iter().all(|&(h, l)| h >= l),
+            "reset never sits below actuation"
+        );
+    }
+
+    #[test]
     fn checksum_matches_only_a_sealed_blob() {
         let mut blob = Box::new([0u8; PROFILE_LEN]);
         blob[7] = 0x42;
@@ -143,7 +191,8 @@ mod tests {
     #[test]
     fn set_actuation_rejects_unknown_values_and_keys() {
         let mut blob = Box::new([0u8; PROFILE_LEN]);
-        assert!(set_actuation(&mut blob, None, 15).is_err());
+        assert!(set_actuation(&mut blob, None, 0).is_err());
+        assert!(set_actuation(&mut blob, None, 41).is_err());
         assert!(set_actuation(&mut blob, Some(0x29), 10).is_err()); // Esc has no slot
         assert!(blob.iter().all(|&b| b == 0), "a rejected edit must not touch the blob");
 

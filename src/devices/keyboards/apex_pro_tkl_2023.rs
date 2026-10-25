@@ -99,7 +99,7 @@ pub fn profile_slot(usage: u8) -> Option<usize> {
 /// a setting survives a power cycle is unknown.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AnalogSetting {
-    /// Actuation of one layer at a captured distance (tenths of a mm), or `None` for all-zero thresholds
+    /// Actuation of one layer at a distance in tenths of a mm (1..=40), or `None` for all-zero thresholds
     /// (the second layer read all zero on the owner's board, which GG showed as no second actuation).
     Actuation { layer: HallLayer, tenths_mm: Option<u8> },
     /// Per-key thresholds of one layer as `(hid, h, l)`, exactly the 68 analog keys; see [`key_actuation_setting`].
@@ -126,7 +126,7 @@ fn analog_keys() -> [u8; 68] {
 ///
 /// # Errors
 ///
-/// Returns an error for an uncaptured distance, a bad mode, or a rapid-tap key without an analog switch.
+/// Returns an error for a distance outside 0.1-4.0 mm, a bad mode, or a rapid-tap key without an analog switch.
 pub fn analog_report(setting: &AnalogSetting) -> Result<(Vec<u8>, bool)> {
     let keys = analog_keys();
     let frame: Option<HallFrame>;
@@ -248,7 +248,7 @@ fn merge_actuation(base: &[(u8, u8, u8)], layer: HallLayer, changes: &[(u8, u8)]
 ///
 /// # Errors
 ///
-/// Returns an error when no frame was saved, a key has no analog switch, or a distance is not captured.
+/// Returns an error when no frame was saved, a key has no analog switch, or a distance is outside 0.1-4.0 mm.
 pub fn key_actuation_setting(layer: HallLayer, changes: &[(u8, u8)]) -> Result<AnalogSetting> {
     let base = actuation_frame_path(layer)
         .and_then(|path| std::fs::read(path).ok())
@@ -646,8 +646,8 @@ impl ApexProTkl2023 {
         Ok(())
     }
 
-    /// On the wired board this sends the spec's live hall thresholds for every analog key (only the captured
-    /// distances are accepted); elsewhere the unverified `0x2D` guess, a confirmed no-op on `0x1628`.
+    /// On the wired board this sends the spec's live hall thresholds for every analog key (0.1-4.0 mm);
+    /// elsewhere the unverified `0x2D` guess, a confirmed no-op on `0x1628`.
     pub fn set_actuation_point(&mut self, value: u8) -> Result<()> {
         if self.is_wired_2023() {
             self.send_analog_setting(&AnalogSetting::Actuation {
@@ -682,15 +682,34 @@ impl ApexProTkl2023 {
         }
     }
 
-    /// [EXPERIMENTAL] Send one live analog-key setting, see [`AnalogSetting`]. Wired board only.
-    pub fn send_analog_setting(&mut self, setting: &AnalogSetting) -> Result<()> {
+    /// [EXPERIMENTAL] Send one live analog-key setting, see [`AnalogSetting`]. Wired board only. Returns the
+    /// board's `38 ...` answer if one arrives (rapid tap was captured answering `38 00 66`); what other
+    /// answers mean is unknown, so it is only reported.
+    pub fn send_analog_setting(&mut self, setting: &AnalogSetting) -> Result<Option<Vec<u8>>> {
         self.require_wired_2023("a live analog-key setting")?;
         let (report, feature) = analog_report(setting)?;
         self.send_report(&report, feature)?;
         if let Some((layer, frame)) = hall_frame(setting)? {
             save_actuation_frame(layer, &frame);
         }
-        Ok(())
+        Ok(self.analog_reply())
+    }
+
+    /// First `0x38` input report within about 300 ms. A failed read only loses the diagnostic: the setting
+    /// was already sent.
+    fn analog_reply(&self) -> Option<Vec<u8>> {
+        for _ in 0..3 {
+            match self.inner.read_profile_input_packet(KEYBOARD_REPORT_SIZE, 100) {
+                Ok(Some(reply)) if reply.first() == Some(&(CommandCode::AnalogKeys as u8)) => return Some(reply),
+                Ok(Some(_)) => {}
+                Ok(None) => return None,
+                Err(e) => {
+                    tracing::debug!("No analog-key answer read: {e}");
+                    return None;
+                }
+            }
+        }
+        None
     }
 
     /// [EXPERIMENTAL] Send one display command (leave direct mode, OLED write or reset). Wired board only.
@@ -878,7 +897,7 @@ crate::impl_keyboard_with_delegation!(ApexProTkl2023, {
         self.set_actuation_point_mm(mm)
     }
 
-    fn send_analog_setting(&mut self, setting: &AnalogSetting) -> Result<()> {
+    fn send_analog_setting(&mut self, setting: &AnalogSetting) -> Result<Option<Vec<u8>>> {
         self.send_analog_setting(setting)
     }
 
@@ -1143,8 +1162,8 @@ mod tests {
             "Esc is not analog"
         );
         assert!(
-            merge_actuation(&base, HallLayer::Primary, &[(0x1A, 15)]).is_err(),
-            "1.5 mm not captured"
+            merge_actuation(&base, HallLayer::Primary, &[(0x1A, 41)]).is_err(),
+            "4.1 mm is past the travel"
         );
         assert!(
             merge_actuation(&base[..67], HallLayer::Primary, &[(0x1A, 20)]).is_err(),
@@ -1158,7 +1177,8 @@ mod tests {
             layer: HallLayer::Primary,
             tenths_mm: Some(tenths),
         };
-        assert!(analog_report(&at(15)).is_err());
+        assert!(analog_report(&at(0)).is_err());
+        assert!(analog_report(&at(41)).is_err());
         assert!(analog_report(&AnalogSetting::ReleaseMode(1)).is_err());
         let pair = |hid_2| RapidTapPair {
             hid_1: 0x04,

@@ -62,8 +62,8 @@ field names come from GG's stored config (see "GG's stored config" below).
 | Blob offset | Content | Values seen |
 |-------------|---------|-------------|
 | 1080 | `08 00 00 00` | meaning unknown |
-| 1084 + slot | Actuation point (`hall_thresholds.h`) | 0.1 mm = 0x05, 1.0 = 0x2F, 2.0 = 0x39, 3.0 = 0x86 |
-| 1154 + slot | Reset point (`hall_thresholds.l`) | 0.1 mm = 0x05, 1.0 = 0x2A, 2.0 = 0x34, 3.0 = 0x7b |
+| 1084 + slot | Actuation point (`hall_thresholds.h`) | 0.1 mm = 0x05, 1.0 = 0x15, 1.8 = 0x2F, 2.0 = 0x39, 3.0 = 0x86, 4.0 = 0xE0 |
+| 1154 + slot | Reset point (`hall_thresholds.l`) | 0.1 mm = 0x05, 1.0 = 0x12, 1.8 = 0x2A, 2.0 = 0x34, 3.0 = 0x7b, 4.0 = 0xDB |
 | 1224 | `04 00 00 00` x3, then zeros | meaning unknown |
 | 1446 + slot | Release mode (`release_mode`) | 0 = off, 2 = Rapid Trigger, 3 = Key Guard |
 | 1516 + slot | Rapid Trigger sensitivity (`rapid_trigger_sensitivity`) | default 2 |
@@ -73,13 +73,13 @@ field names come from GG's stored config (see "GG's stored config" below).
 
 Key W is slot 16 (actuation byte at 1100, reset byte at 1170, mode byte at 1462).
 
-- The actuation encoding is non-linear (a raw sensor scale); only these four points are known.
+- The actuation encoding is non-linear (a raw sensor scale). The full 0.1-4.0 mm table (40 steps) is GG's:
+  the spec's `hall-thresholds-to-actuation-alist` (`apex_pro_tkl_2022`) and the identical `mm -> "l:h"` map in
+  GG's UI bundle (`resources\app.asar`, byte offset 11774110), read 2026-10-25; `ACTUATION_POINTS` holds it.
+  The board's own OLED-menu sync reports agree for every 0.2 mm step (see "Hardware results, 2026-10-25").
 - Earlier versions of this note called offset 1170 a "second threshold". It is the reset point
-  (`hall_thresholds.l`) of the same setting. An earlier capture called `h` = 21 (0x15), `l` = 18 (0x12)
-  the default; a live read of the owner's board at GG's own labelled 1.0mm (2026-10-21) instead showed
-  `h` = 47 (0x2F), `l` = 42 (0x2A), which is now the value in `ACTUATION_POINTS`. The 21/18 claim was
-  never checked against a labelled UI value and is likely wrong, but it has not been re-captured to
-  confirm what (if anything) it corresponds to.
+  (`hall_thresholds.l`) of the same setting. `h` = 47, `l` = 42 is **1.8 mm**, the board's default, not 1.0 mm
+  as the 2026-10-21 note below claimed; the original 1.0 mm value `h` = 21, `l` = 18 was right.
 
 ### Slot map (slot = index, HID usage in hex)
 
@@ -206,6 +206,24 @@ Over about one minute, including the owner opening the keyboard's actuation sett
    trace and engine memory read"): zero `GET_FEATURE` transfers over ~1 minute including the owner viewing
    GG's actuation page; GG's UI reads only its own cached config. Explains `ssgg actuation` having no effect
    on `0x1628` (confirmed by the owner, 2026-10-21): there is no wire command to send.
-7. ~~Whether `ACTUATION_POINTS`' `(10, 21, 18)` (1.0mm) is correct.~~ No: live read, 2026-10-21, showed
-   `(47, 42)` on a board the owner confirmed GG reported as 1.0mm. The table now uses `(10, 47, 42)`; the
-   old `(21, 18)` was never checked against a labelled UI value in the first place.
+7. ~~Whether `ACTUATION_POINTS`' `(10, 21, 18)` (1.0mm) is correct.~~ Yes (2026-10-25): GG's table and the
+   board's own sync report both give `(21, 18)` for 1.0 mm. The 2026-10-21 switch to `(47, 42)` was wrong:
+   that pair is 1.8 mm, the default, so `ssgg actuation set 1.0` resent the board's current value.
+
+## Hardware results, 2026-10-25
+
+Wired `0x1628`, firmware 1.19.7, Windows, owner's board.
+
+- **GG's wire frames** (Frida, read-only, hooks on `DeviceIoControl` `IOCTL_HID_SET_FEATURE` and `WriteFile`
+  in `SteelSeriesEngine.exe`): setting all keys to 0.1 mm in GG sent `00 38 61 44 00 04 05 05 05 05 05 06 ...`
+  (feature, 645 bytes), 4.0 mm sent the same with `e0 db`; both byte-identical to `ssgg actuation set --dry-run`.
+  Rapid Trigger on/off sent `00 38 62 44 04 02 ...` / `... 04 00 ...`, Rapid Tap `38 66 01` / `38 66 00`
+  (output). After the 0.1 mm frame GG also sent `02 01 80` and profile chunks `00 03 01 80 ...` (an on-board
+  profile save; the hook kept only the first chunk).
+- **Board sync reports** (USBPcap, EP `0x85`, 64 bytes): changing actuation on the OLED menu sends
+  `0f <h> <l> <32-byte HID bitmask>` per step, e.g. `0f 05 05` 0.1 mm, `0f 15 12` 1.0, `0f 39 34` 2.0,
+  `0f e0 db` 4.0, matching GG's table. Release-mode changes send `0d <mode> <bitmask>`.
+- **ssgg's frame takes effect**: with GG stopped and the board at 4.0 mm (set on the OLED),
+  `ssgg actuation set 0.1` (on the wire: `SET_REPORT` wValue `0x0300`, wIndex 1, 644 bytes) made every key
+  hair-trigger (owner, by feel). The board sends no answer to `38 61`, and the OLED does not refresh after a
+  host-side change, so its displayed value cannot be used to check one.

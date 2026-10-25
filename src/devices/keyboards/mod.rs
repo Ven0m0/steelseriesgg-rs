@@ -213,8 +213,9 @@ pub trait Keyboard: Device {
     }
 
     /// [EXPERIMENTAL] Send a live analog-key setting (actuation, release mode, rapid trigger, rapid tap).
-    /// Only the wired Apex Pro TKL 2023 (`0x1628`) defines these; other keyboards return an error.
-    fn send_analog_setting(&mut self, _setting: &apex_pro_tkl_2023::AnalogSetting) -> Result<()> {
+    /// Only the wired Apex Pro TKL 2023 (`0x1628`) defines these; other keyboards return an error. Returns the
+    /// board's answer, if any.
+    fn send_analog_setting(&mut self, _setting: &apex_pro_tkl_2023::AnalogSetting) -> Result<Option<Vec<u8>>> {
         Err(Error::DeviceCommunication(
             "live analog-key settings are not supported by this keyboard".to_string(),
         ))

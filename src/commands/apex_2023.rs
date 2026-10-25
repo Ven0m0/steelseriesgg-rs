@@ -123,11 +123,18 @@ pub(crate) async fn cmd_actuation(manager: &DeviceManager, action: ActuationActi
     if keyboard_info.product_id == product_ids::APEX_PRO_TKL_2023 {
         crate::warn_if_gg_engine_running();
         // No APPLY/initialize: GG sends neither around these frames, and direct mode ignores APPLY.
-        keyboard.send_analog_setting(&setting)?;
+        let reply = keyboard.send_analog_setting(&setting)?;
         println!(
             "Sent [EXPERIMENTAL]: from GG's device spec, never confirmed on hardware; whether it survives \
              unplugging is unknown"
         );
+        match reply {
+            Some(reply) => {
+                println!("Board answered:");
+                print_report(&reply);
+            }
+            None => println!("No 0x38 answer from the board"),
+        }
         return Ok(());
     }
 
