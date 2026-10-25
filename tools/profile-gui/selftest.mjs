@@ -209,7 +209,6 @@ console.log('product IDs, model names and the read platform');
   const dev = readFileSync(`${import.meta.dirname}/../../src/devices/mod.rs`, 'utf8');
   const consts = {};
   for (const m of dev.matchAll(/pub\s+const\s+([A-Z0-9_]+)\s*:\s*u16\s*=\s*(0x[0-9A-Fa-f]+);/g)) consts[m[1]] = Number(m[2]);
-  const discovery = readFileSync(`${import.meta.dirname}/../../src/devices/discovery.rs`, 'utf8');
   const body = dev.slice(dev.indexOf('pub fn device_name_from_product_id'));
   const rustNames = new Map();
   // Split on the match-arm arrow and read the identifiers in front of it. A pattern that lets the
@@ -227,6 +226,14 @@ console.log('product IDs, model names and the read platform');
       rustNames.set(pid, label[1]);
     }
   }
+  // Keyboards are named by their rows in keyboards/models.rs, not by arms of the name function.
+  const models = readFileSync(`${import.meta.dirname}/../../src/devices/keyboards/models.rs`, 'utf8');
+  const keyboardRows = [...models.matchAll(/model\(\s*([A-Z0-9_]+)\s*,\s*"([^"]*)"\s*,\s*C::([A-Za-z0-9]+)/g)]
+    .map((m) => ({ pid: consts[m[1]], name: m[2], klass: m[3] }));
+  ok('every keyboard row names a product ID constant', () => keyboardRows.length > 20 && keyboardRows.every((r) => r.pid !== undefined),
+    () => keyboardRows.length);
+  for (const row of keyboardRows) rustNames.set(row.pid, row.name);
+  const onboardRowIds = keyboardRows.filter((r) => r.klass === 'Apex7').map((r) => r.pid);
   const pageNames = new Map(Object.entries(app.PRODUCT_NAMES).map(([k, v]) => [Number(k), v]));
   ok('the Rust lookup names a product ID per table entry', () => rustNames.size > 30, () => rustNames.size);
   ok('the page names every product ID the Rust lookup names, with the same name', () => {
@@ -234,12 +241,7 @@ console.log('product IDs, model names and the read platform');
     return pageNames.size >= rustNames.size;
   }, () => [...rustNames].filter(([p]) => pageNames.get(p) !== rustNames.get(p)).slice(0, 3));
   const pageIds = new Set(app.LEGACY_ONBOARD_PIDS.map(Number));
-  const classBody = discovery.slice(discovery.indexOf('pub fn keyboard_class'));
-  const armBody = classBody.slice(0, classBody.indexOf('\n}\n'));
-  const apex7Parts = armBody.split('=>').map((chunk) => chunk.trim());
-  const apex7At = apex7Parts.findIndex((chunk) => /^KeyboardClass::Apex7\b/.test(chunk));
-  const apex7Arm = (apex7At < 0 ? '' : apex7Parts[apex7At - 1].split('\n').pop()).split('|');
-  const rustIds = new Set(apex7Arm.map((ident) => consts[ident.trim()]).filter((v) => v !== undefined));
+  const rustIds = new Set(onboardRowIds);
   ok('the product IDs the page lists as the family are the IDs discovery builds as the on-board class',
     () => pageIds.size === rustIds.size && [...pageIds].every((p) => rustIds.has(p)) && [...pageIds].every((p) => app.PRODUCT_NAMES[p] === rustNames.get(p)),
     () => [[...pageIds].map((p) => p.toString(16)), [...rustIds].map((p) => p.toString(16))]);
@@ -255,11 +257,7 @@ console.log('product IDs, model names and the read platform');
     () => [apex7.match(/onboard_codec|Apex7Onboard/g), app.LEGACY_ONBOARD_PIDS.map((p) => p.toString(16))]);
   ok('the family the page lists is the class the read gates on',
     () => {
-      const gate = discovery.slice(discovery.indexOf('pub fn keyboard_class'));
-      const parts = gate.slice(0, gate.indexOf('\n}\n')).split('=>').map((chunk) => chunk.trim());
-      const at = parts.findIndex((chunk) => /^KeyboardClass::Apex7\b/.test(chunk));
-      const arm = (at < 0 ? '' : parts[at - 1].split('\n').pop()).split('|');
-      const ids = arm.map((ident) => consts[ident.trim()]).filter((v) => v !== undefined);
+      const ids = onboardRowIds;
       return ids.length > 0 && ids.every((id) => app.LEGACY_ONBOARD_PIDS.includes(id)) && app.LEGACY_ONBOARD_PIDS.length === ids.length;
     }, () => [app.LEGACY_ONBOARD_PIDS.map((p) => p.toString(16))]);
 
@@ -359,7 +357,9 @@ ok('without the import the page says the registry was not imported', () => {
 
 ok('the on-board family the import marks is the class discovery builds for the on-board board', () => {
   const ids = sync.productIds(sectionOf(read('src/devices/mod.rs'), 'pub mod product_ids'));
-  const family = sync.familySet(fnBody(read('src/devices/discovery.rs'), 'pub fn keyboard_class'), ids);
+  const family = sync.keyboardModels(read('src/devices/keyboards/models.rs'), ids)
+    .filter((k) => k.class === 'Apex7')
+    .map((k) => k.hex);
   return eq([...app.PRODUCTS.onboardPids].sort(), [...family].sort())
     && app.onboardModelPids().map(app.productHex).join() === [...family].sort().join();
 }, () => [app.PRODUCTS.onboardPids, app.onboardModelPids().map(app.productHex)]);

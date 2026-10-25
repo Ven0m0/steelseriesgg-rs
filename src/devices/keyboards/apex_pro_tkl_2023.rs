@@ -1,6 +1,7 @@
 //! Apex Pro TKL 2023 specific implementations.
 
 use super::apex_pro_tkl_2023_profile::{PROFILE_LEN, actuation_raw, checksum_matches};
+use super::models::{DirectFrame, keyboard_model};
 use super::{GenericKeyboard, Keyboard};
 use crate::Result;
 use crate::devices::hid_reports::{
@@ -51,6 +52,48 @@ const WIRED_2023_KEYS: &[u8] = &[
 
 /// [EXPERIMENTAL] Report-ID byte plus the 644 bytes GG puts on the wire for the wired 2023 model.
 const WIRED_2023_PACKET_LENGTH: usize = 645;
+
+/// [EXPERIMENTAL] OpenRGB's Gen 1 frame (`0x3A`, no init): original Apex Pro, and from a community fork's
+/// table the Apex 5, Apex 7 TKL, Apex Pro TKL (original, pre-1.19.7 firmware) and Apex Pro (2024).
+pub(crate) const GEN1_FRAME: DirectFrame = DirectFrame {
+    packet_id: CommandCode::ApexGen1Direct,
+    length: APEX_2023_PACKET_LENGTH,
+    keys: TKL_KEYS,
+    init: false,
+};
+/// [EXPERIMENTAL] Gen 3 frame (`0x40` after the `0x4B` init). The wired Gen 3 model `0x1642` is verified on
+/// hardware with this packet id (see [`ApexProTkl2023::direct_packet_id`]).
+pub(crate) const GEN3_FRAME: DirectFrame = DirectFrame {
+    packet_id: CommandCode::Apex2023Direct,
+    length: APEX_2023_PACKET_LENGTH,
+    keys: TKL_KEYS,
+    init: true,
+};
+/// [EXPERIMENTAL] Wireless Apex Pro TKL frame (`0x61` after the `0x4B` init).
+pub(crate) const WIRELESS_FRAME: DirectFrame = DirectFrame {
+    packet_id: CommandCode::Apex2023DirectWireless,
+    ..GEN3_FRAME
+};
+/// [EXPERIMENTAL] Apex 9 TKL / Apex 9 Mini frame on pre-1.19.7 firmware: `0x40` in 513 bytes, no init.
+pub(crate) const APEX_9_FRAME: DirectFrame = DirectFrame {
+    packet_id: CommandCode::Apex2023Direct,
+    length: APEX_9_PACKET_LENGTH,
+    keys: TKL_KEYS,
+    init: false,
+};
+/// [EXPERIMENTAL] Apex 9 frame on 1.19.7+ firmware: the same frame after the `0x4B` init.
+pub(crate) const APEX_9_GEN3_FRAME: DirectFrame = DirectFrame {
+    init: true,
+    ..APEX_9_FRAME
+};
+/// [EXPERIMENTAL] Wired Apex Pro TKL 2023 (`0x1628`): GG's key table and frame size, and no `0x4B` init,
+/// which the GG capture never showed.
+pub(crate) const WIRED_2023_FRAME: DirectFrame = DirectFrame {
+    packet_id: CommandCode::Apex2023Direct,
+    length: WIRED_2023_PACKET_LENGTH,
+    keys: WIRED_2023_KEYS,
+    init: false,
+};
 
 /// [EXPERIMENTAL] Slot order of the per-key tables in GG's 12,500-byte profile blob for the wired
 /// Apex Pro TKL 2023 (PID 0x1628): index = slot, value = HID usage. Physical rows, left to right.
@@ -429,47 +472,31 @@ impl ApexProTkl2023 {
         self.inner.info().product_id == product_ids::APEX_PRO_TKL_2023
     }
 
-    /// The original Apex Pro speaks OpenRGB's "Gen 1" direct protocol, which needs no init report.
-    /// [EXPERIMENTAL] Apex 5, Apex 7 TKL, Apex Pro TKL (original) and Apex Pro (2024) share it; those four
-    /// come from a community fork's table, unverified, and never ran on hardware here.
-    fn is_gen1(&self) -> bool {
-        match self.inner.info().product_id {
-            product_ids::APEX_PRO_TKL => self.gen3_firmware != Some(true),
-            product_ids::APEX_PRO | product_ids::APEX_7_TKL | product_ids::APEX_5 | product_ids::APEX_PRO_2024 => true,
-            _ => false,
-        }
+    /// The direct frame of this model's [`KeyboardModel`](super::models::KeyboardModel) row, picked by the
+    /// firmware probe on the models that have two; `None` when the model has no direct frame.
+    fn model_frame(&self) -> Option<DirectFrame> {
+        let lighting = keyboard_model(self.inner.info().product_id)?.direct?;
+        Some(lighting.frame(self.gen3_firmware == Some(true)))
     }
 
-    /// [EXPERIMENTAL] The Apex 9 TKL / Apex 9 Mini take the `0x40` frame in a 513-byte report with no
-    /// init (community fork, untested).
-    fn is_apex_9(&self) -> bool {
-        matches!(
-            self.inner.info().product_id,
-            product_ids::APEX_9_TKL | product_ids::APEX_9_MINI
-        )
-    }
-
-    /// [EXPERIMENTAL] Models whose protocol OpenRGB picks by firmware (`SendInitialization`): from 1.19.7 they
-    /// take the Gen 3 init (`0x4B`), and the original Apex Pro TKL moves from `0x3A` to the `0x40` frame.
-    fn firmware_switches_protocol(&self) -> bool {
-        matches!(
-            self.inner.info().product_id,
-            product_ids::APEX_PRO_TKL | product_ids::APEX_9_TKL | product_ids::APEX_9_MINI
-        )
+    /// The frame to build. Models without a direct frame never send one (every sender checks
+    /// `uses_new_protocol`); the Gen 3 fallback only keeps the helpers total.
+    fn frame(&self) -> DirectFrame {
+        self.model_frame().unwrap_or(GEN3_FRAME)
     }
 
     /// Whether the 0x4B init report has to precede the first direct frame.
     fn needs_init(&self) -> bool {
-        if self.firmware_switches_protocol() {
-            return self.gen3_firmware == Some(true);
-        }
-        !(self.is_wired_2023() || self.is_gen1() || self.is_apex_9())
+        self.frame().init
     }
 
     /// Probe the firmware once on the models it matters for; a failed or unparsable poll keeps the
     /// pre-probe protocol, as OpenRGB does.
     fn probe_firmware(&mut self) {
-        if self.gen3_firmware.is_some() || !self.firmware_switches_protocol() {
+        let probes = keyboard_model(self.inner.info().product_id)
+            .and_then(|m| m.direct)
+            .is_some_and(|d| d.probes_firmware());
+        if self.gen3_firmware.is_some() || !probes {
             return;
         }
         let version = self.gen3_firmware_version();
@@ -479,47 +506,20 @@ impl ApexProTkl2023 {
     }
 
     fn direct_keys(&self) -> &'static [u8] {
-        if self.is_wired_2023() {
-            WIRED_2023_KEYS
-        } else {
-            TKL_KEYS
-        }
+        self.frame().keys
     }
 
     fn direct_packet_length(&self) -> usize {
-        if self.is_wired_2023() {
-            WIRED_2023_PACKET_LENGTH
-        } else if self.is_apex_9() {
-            APEX_9_PACKET_LENGTH
-        } else {
-            APEX_2023_PACKET_LENGTH
-        }
+        self.frame().length
     }
 
-    /// Direct-mode packet ID, or `None` if the model does not speak the 643-byte
-    /// feature-report protocol.
+    /// Direct-mode packet ID, or `None` if the model has no direct frame.
     ///
     /// Verified on Apex Pro TKL Wireless Gen 3 hardware: the dongle (`0x1644`) and
     /// the same keyboard on USB cable (`0x1646`) both answer to the wireless packet
     /// ID `0x61`, while the wired-only Gen 3 model (`0x1642`) uses `0x40`.
     fn direct_packet_id(&self) -> Option<CommandCode> {
-        Some(match self.inner.info().product_id {
-            product_ids::APEX_PRO_TKL_2023_WIRELESS
-            | product_ids::APEX_PRO_TKL_2023_WIRELESS_2
-            | product_ids::APEX_PRO_TKL_WIRELESS_2024_DONGLE
-            | product_ids::APEX_PRO_TKL_WIRELESS_2024 => CommandCode::Apex2023DirectWireless,
-            product_ids::APEX_PRO_TKL if self.gen3_firmware == Some(true) => CommandCode::Apex2023Direct,
-            product_ids::APEX_PRO_TKL_2024
-            | product_ids::APEX_PRO_TKL_2023
-            | product_ids::APEX_9_TKL
-            | product_ids::APEX_9_MINI => CommandCode::Apex2023Direct,
-            product_ids::APEX_PRO
-            | product_ids::APEX_PRO_TKL
-            | product_ids::APEX_7_TKL
-            | product_ids::APEX_5
-            | product_ids::APEX_PRO_2024 => CommandCode::ApexGen1Direct,
-            _ => return None,
-        })
+        self.model_frame().map(|f| f.packet_id)
     }
 
     /// Send the 0x4B initialization feature report required by new protocol.
@@ -586,7 +586,7 @@ impl ApexProTkl2023 {
         let factor = f32::from(self.brightness) / 100.0;
         let shown: Vec<(u8, Color)> = entries.iter().map(|(u, c)| (*u, c.scale(factor))).collect();
         let command = DirectFrameCommand {
-            packet: self.direct_packet_id().unwrap_or(CommandCode::Apex2023Direct),
+            packet: self.frame().packet_id,
             report_len: self.direct_packet_length(),
             entries: &shown,
         };
@@ -1129,7 +1129,7 @@ mod tests {
         assert!(!tkl.needs_init());
         tkl.gen3_firmware = Some(true);
         assert_eq!(tkl.direct_packet_id(), Some(CommandCode::Apex2023Direct));
-        assert!(tkl.needs_init() && !tkl.is_gen1());
+        assert!(tkl.needs_init());
         assert_eq!(tkl.direct_packet_length(), APEX_2023_PACKET_LENGTH);
 
         let mut apex9 = keyboard_for(product_ids::APEX_9_TKL);

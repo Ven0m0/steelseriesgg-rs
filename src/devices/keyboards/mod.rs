@@ -6,6 +6,7 @@ pub mod apex_7_profile;
 pub mod apex_m750;
 pub mod apex_pro_tkl_2023;
 pub mod apex_pro_tkl_2023_profile;
+pub mod models;
 pub mod onboard;
 
 use super::diagnostics::{HidOperation, with_global_diagnostics};

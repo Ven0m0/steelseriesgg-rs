@@ -11,14 +11,12 @@ use super::hid_reports::ConnectionHealth;
 use super::keyboards::apex::{Apex3, Apex3Tkl};
 use super::keyboards::apex_m750::{ApexM750, CONTROL_INTERFACE as APEX_M750_CONTROL_INTERFACE};
 use super::keyboards::apex_pro_tkl_2023::ApexProTkl2023;
+pub use super::keyboards::models::KeyboardClass;
+use super::keyboards::models::keyboard_model;
 use super::keyboards::{GenericKeyboard, Keyboard};
 use super::mice::Mouse;
 use super::mice::modern::{ModernMouse, model_for as mouse_model};
-use super::product_ids::{
-    APEX_3, APEX_3_TKL, APEX_5, APEX_7, APEX_7_TKL, APEX_9_MINI, APEX_9_TKL, APEX_M750, APEX_PRO, APEX_PRO_2024,
-    APEX_PRO_TKL, APEX_PRO_TKL_2023, APEX_PRO_TKL_2023_WIRELESS, APEX_PRO_TKL_2023_WIRELESS_2, APEX_PRO_TKL_2024,
-    APEX_PRO_TKL_WIRELESS_2024, APEX_PRO_TKL_WIRELESS_2024_DONGLE,
-};
+use super::product_ids::{APEX_M750, APEX_PRO_TKL_2023_WIRELESS, APEX_PRO_TKL_2023_WIRELESS_2};
 use super::{
     DeviceInfo, DeviceType, STEELSERIES_CONTROL_USAGE_PAGE, device_name_from_product_id, device_type_from_product_id,
 };
@@ -471,15 +469,7 @@ impl DeviceManager {
         // that only works through the raw feature report path.
         let hid_device = match self.open_device(info) {
             Ok(dev) => dev,
-            Err(e)
-                if matches!(
-                    info.product_id,
-                    APEX_PRO_TKL_2023_WIRELESS
-                        | APEX_PRO_TKL_2023_WIRELESS_2
-                        | APEX_PRO_TKL_WIRELESS_2024_DONGLE
-                        | APEX_PRO_TKL_WIRELESS_2024
-                ) =>
-            {
+            Err(e) if keyboard_model(info.product_id).is_some_and(|m| m.raw_fallback) => {
                 tracing::warn!("hidapi open failed for wireless keyboard (expected): {e}. Using raw hidraw path.");
                 return Ok(Box::new(ApexProTkl2023::new_wireless_raw(info.clone())));
             }
@@ -984,47 +974,11 @@ pub fn print_device_summary(manager: &DeviceManager) {
     }
 }
 
-/// The keyboard class a product ID is built as by [`DeviceManager::open_keyboard`].
-///
-/// Split out so the rule is testable without hardware, because the class is what answers the on-board
-/// profile protocol: [`Keyboard::onboard_codec`] is a property of the class discovery built, so a
-/// keyboard only reads a profile off the board when its product ID is built as the class that speaks
-/// the protocol. `Apex7` is the on-board class, and it is built for the board the frames are known from
-/// and for nothing else - the `0x1614` / `0x1616` / `0x1618` platform siblings keep lighting only and
-/// answer no codec, because nobody has read an answer from them. `0x1614` and `0x1618` are built as
-/// `ApexProTkl2023` for their `[EXPERIMENTAL]` direct lighting frame, which answers no codec either.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum KeyboardClass {
-    Apex3,
-    Apex3Tkl,
-    ApexProTkl2023,
-    Apex7,
-    ApexM750,
-    Generic,
-}
-
+/// The keyboard class a product ID is built as by [`DeviceManager::open_keyboard`], read from its
+/// [`KeyboardModel`](super::keyboards::models::KeyboardModel) row; a PID without a row is `Generic`.
 #[must_use]
 pub fn keyboard_class(product_id: u16) -> KeyboardClass {
-    match product_id {
-        APEX_3 => KeyboardClass::Apex3,
-        APEX_3_TKL => KeyboardClass::Apex3Tkl,
-        APEX_PRO
-        | APEX_PRO_TKL_2023
-        | APEX_PRO_TKL_2023_WIRELESS
-        | APEX_PRO_TKL_2023_WIRELESS_2
-        | APEX_PRO_TKL_2024
-        | APEX_PRO_TKL_WIRELESS_2024_DONGLE
-        | APEX_PRO_TKL_WIRELESS_2024
-        | APEX_9_TKL
-        | APEX_9_MINI
-        | APEX_PRO_TKL
-        | APEX_7_TKL
-        | APEX_5
-        | APEX_PRO_2024 => KeyboardClass::ApexProTkl2023,
-        APEX_7 => KeyboardClass::Apex7,
-        APEX_M750 => KeyboardClass::ApexM750,
-        _ => KeyboardClass::Generic,
-    }
+    keyboard_model(product_id).map_or(KeyboardClass::Generic, |m| m.class)
 }
 
 /// Which candidate an on-board profile read runs on. The decision is split out from
@@ -1070,6 +1024,7 @@ pub enum OnboardKeyboard {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::devices::product_ids::{APEX_3, APEX_3_TKL, APEX_7, APEX_PRO, APEX_PRO_TKL_2023};
 
     fn create_test_device_info(serial: Option<String>) -> DeviceInfo {
         DeviceInfo {
@@ -1461,20 +1416,6 @@ mod tests {
             KeyboardClass::Generic,
             "0x1616 is a platform sibling nobody has read an answer from"
         );
-    }
-
-    #[test]
-    fn keyboard_class_routes_the_experimental_direct_lighting_models() {
-        // [EXPERIMENTAL] Apex 9 pair (0x40 frame), four Gen 1 models (0x3A frame), the original Apex Pro.
-        for pid in [0x1634u16, 0x1620, 0x161C, 0x1618, 0x1614, 0x1640, 0x1610, 0x1628] {
-            assert_eq!(
-                keyboard_class(pid),
-                KeyboardClass::ApexProTkl2023,
-                "product ID {pid:04X}"
-            );
-        }
-        assert_eq!(keyboard_class(0x0616), KeyboardClass::ApexM750);
-        assert_eq!(keyboard_class(0x1612), KeyboardClass::Apex7);
     }
 
     #[test]

@@ -551,33 +551,10 @@ pub fn is_detect_only(product_id: u16) -> bool {
 pub fn device_type_from_product_id(product_id: u16) -> DeviceType {
     use product_ids::*;
 
+    if keyboards::models::keyboard_model(product_id).is_some() {
+        return DeviceType::Keyboard;
+    }
     match product_id {
-        // Keyboards
-        APEX_PRO
-        | APEX_7
-        | APEX_PRO_TKL
-        | APEX_150
-        | APEX_7_TKL
-        | APEX_3
-        | APEX_5
-        | APEX_PRO_MINI
-        | APEX_9_MINI
-        | APEX_3_TKL
-        | APEX_PRO_MINI_WIRELESS_DONGLE
-        | APEX_PRO_MINI_WIRELESS
-        | APEX_PRO_TKL_2023
-        | APEX_PRO_TKL_2023_WIRELESS_2
-        | APEX_PRO_TKL_2023_WIRELESS
-        | APEX_9_TKL
-        | APEX_PRO_2024
-        | APEX_PRO_TKL_2024
-        | APEX_PRO_TKL_WIRELESS_2024_DONGLE
-        | APEX_PRO_TKL_WIRELESS_2024
-        | APEX_PRO_MINI_2024
-        | APEX_5_2024
-        | APEX_7_2024
-        | APEX_M750 => DeviceType::Keyboard,
-
         // Headsets
         ARCTIS_PRO
         | ARCTIS_PRO_WIRELESS
@@ -664,30 +641,10 @@ pub fn device_type_from_product_id(product_id: u16) -> DeviceType {
 pub fn device_name_from_product_id(product_id: u16) -> &'static str {
     use product_ids::*;
 
+    if let Some(model) = keyboards::models::keyboard_model(product_id) {
+        return model.name;
+    }
     match product_id {
-        APEX_PRO => "Apex Pro",
-        APEX_7 => "Apex 7",
-        APEX_PRO_TKL => "Apex Pro TKL",
-        APEX_150 => "Apex 150",
-        APEX_7_TKL => "Apex 7 TKL",
-        APEX_3 => "Apex 3",
-        APEX_5 => "Apex 5",
-        APEX_PRO_MINI => "Apex Pro Mini",
-        APEX_9_MINI => "Apex 9 Mini",
-        APEX_3_TKL => "Apex 3 TKL",
-        APEX_PRO_MINI_WIRELESS_DONGLE => "Apex Pro Mini Wireless (Dongle)",
-        APEX_PRO_MINI_WIRELESS => "Apex Pro Mini Wireless",
-        APEX_PRO_TKL_2023 => "Apex Pro TKL (2023)",
-        APEX_PRO_TKL_2023_WIRELESS | APEX_PRO_TKL_2023_WIRELESS_2 => "Apex Pro TKL (2023) Wireless",
-        APEX_9_TKL => "Apex 9 TKL",
-        APEX_PRO_2024 => "Apex Pro (2024)",
-        APEX_PRO_TKL_2024 => "Apex Pro TKL (2024)",
-        APEX_PRO_TKL_WIRELESS_2024_DONGLE => "Apex Pro TKL Wireless (2024) (Dongle)",
-        APEX_PRO_TKL_WIRELESS_2024 => "Apex Pro TKL Wireless (2024)",
-        APEX_PRO_MINI_2024 => "Apex Pro Mini (2024)",
-        APEX_5_2024 => "Apex 5 (2024)",
-        APEX_7_2024 => "Apex 7 (2024)",
-        APEX_M750 => "Apex M750",
         ARCTIS_PRO => "Arctis Pro",
         ARCTIS_PRO_WIRELESS => "Arctis Pro Wireless",
         ARCTIS_5 => "Arctis 5",

@@ -3,8 +3,8 @@
 //
 // The page encodes and decodes one payload layout, and only some models are on the protocol this
 // crate read back, so it needs both the PID -> model name mapping and a per-model feature set. They
-// live in Rust (`src/devices/mod.rs`, the class table in `src/devices/discovery.rs` and the codec
-// registry in `src/devices/keyboards/onboard.rs`); this script parses those
+// live in Rust (`src/devices/mod.rs`, the keyboard rows in `src/devices/keyboards/models.rs` and the
+// codec registry in `src/devices/keyboards/onboard.rs`); this script parses those
 // source regions and writes `products.generated.js` beside it, which `index.html` loads before
 // `app.js`. The page keeps a hand-mirrored copy as a fallback so opening `index.html` in a checkout
 // where the generator was never run still shows names.
@@ -25,7 +25,7 @@ export const HERE = dirname(fileURLToPath(import.meta.url));
 export const REPO = resolve(HERE, '..', '..');
 export const SOURCES = [
   'src/devices/mod.rs',
-  'src/devices/discovery.rs',
+  'src/devices/keyboards/models.rs',
   'src/devices/keyboards/onboard.rs',
 ];
 export const OUT = join(HERE, 'products.generated.js');
@@ -103,30 +103,21 @@ export function productNames(body, ids) {
 }
 
 /**
- * Product IDs the arm of a class function binds to one class - by default the `KeyboardClass::Apex7`
- * arm of `keyboard_class` in `src/devices/discovery.rs`, which is the on-board family: it is the only
- * class whose keyboard answers `Keyboard::supports_onboard_profile`, and that is what lets
- * `ssgg onboard read` reach a board.
- *
- * Handles both ways the Rust tables name a constant: `product_ids::APEX_7`, and a bare `APEX_7` in a
- * function with `use product_ids::*;`. Comments are stripped first, so a note naming a constant is
- * not read as a family member.
+ * `model(APEX_7, "Apex 7", C::Apex7, ...)` rows of `KEYBOARD_MODELS` in `src/devices/keyboards/models.rs`,
+ * resolved through the constant names to `{ hex, name, class }`. The `Apex7` class is the on-board family:
+ * it is the only class whose keyboard answers `Keyboard::supports_onboard_profile`, and that is what lets
+ * `ssgg onboard read` reach a board. Comments are stripped first, so a note naming a constant is not read
+ * as a row.
  */
-export function familySet(body, ids, arm = 'KeyboardClass::Apex7') {
+export function keyboardModels(block, ids) {
   const byName = new Map(ids.map((e) => [e.name, e]));
-  const source = body.replace(/^\s*\/\/.*$/gm, '');
-  const out = [];
-  let from = 0;
-  for (const m of source.matchAll(/=>\s*([A-Za-z0-9_:]+)/g)) {
-    const pattern = source.slice(from, m.index);
-    from = m.index + m[0].length;
-    if (m[1] !== arm) continue;
-    for (const id of pattern.matchAll(/\b([A-Z][A-Z0-9_]{2,})\b/g)) {
-      const entry = byName.get(id[1]);
-      if (entry && !out.includes(entry.hex)) out.push(entry.hex);
-    }
-  }
-  return out;
+  const source = block.replace(/\/\/.*$/gm, '');
+  const row = /model\(\s*([A-Z0-9_]+)\s*,\s*"([^"]*)"\s*,\s*(?:C|KeyboardClass)::([A-Za-z0-9]+)/g;
+  return [...source.matchAll(row)].map((m) => {
+    const entry = byName.get(m[1]);
+    if (!entry) throw new Error(`a keyboard row names no product ID constant: ${m[1]}`);
+    return { hex: entry.hex, name: m[2], class: m[3] };
+  });
 }
 
 /** `APEX_7 => DeviceType::Keyboard` arms, resolved through the constant names, lowercased. */
@@ -150,26 +141,30 @@ function hexPid(pid) {
 export function collect(repo = REPO) {
   const read = (rel) => readFileSync(join(repo, rel), 'utf8');
   const mod = read('src/devices/mod.rs');
-  const discovery = read('src/devices/discovery.rs');
+  const models = read('src/devices/keyboards/models.rs');
   const onboard = read('src/devices/keyboards/onboard.rs');
 
   const idsBlock = constBlock(mod, 'pub mod product_ids');
   const namesBody = fnBody(mod, 'pub fn device_name_from_product_id');
-  const familyBody = fnBody(discovery, 'pub fn keyboard_class');
+  const modelsBlock = constBlock(models, 'pub const KEYBOARD_MODELS');
   const typeBody = fnBody(mod, 'pub fn device_type_from_product_id');
   const codecsBody = fnBody(onboard, 'pub fn codecs');
-  if (!idsBlock || !namesBody || !familyBody || !typeBody || !codecsBody) {
+  if (!idsBlock || !namesBody || !modelsBlock || !typeBody || !codecsBody) {
     throw new Error(
-      'the tables this script imports are not where it expects: pub mod product_ids and device_name_from_product_id ' +
-        'in src/devices/mod.rs, keyboard_class in src/devices/discovery.rs and codecs in ' +
-        'src/devices/keyboards/onboard.rs',
+      'the tables this script imports are not where it expects: pub mod product_ids, device_name_from_product_id ' +
+        'and device_type_from_product_id in src/devices/mod.rs, KEYBOARD_MODELS in ' +
+        'src/devices/keyboards/models.rs and codecs in src/devices/keyboards/onboard.rs',
     );
   }
 
   const ids = productIds(idsBlock);
-  const { names, fallback: nameFallback } = productNames(namesBody, ids);
-  const onboardPids = familySet(familyBody, ids);
-  const { kinds, fallback: kindFallback } = productKinds(typeBody, ids);
+  // Keyboards come from their rows; the name and type functions keep the headset and mouse arms.
+  const keyboards = keyboardModels(modelsBlock, ids);
+  const { names: otherNames, fallback: nameFallback } = productNames(namesBody, ids);
+  const names = { ...otherNames, ...Object.fromEntries(keyboards.map((k) => [k.hex, k.name])) };
+  const onboardPids = keyboards.filter((k) => k.class === 'Apex7').map((k) => k.hex);
+  const { kinds: otherKinds, fallback: kindFallback } = productKinds(typeBody, ids);
+  const kinds = { ...otherKinds, ...Object.fromEntries(keyboards.map((k) => [k.hex, 'keyboard'])) };
   const codecs = codecModules(codecsBody);
 
   const products = {};
