@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Releases and this changelog are generated automatically from
 [Conventional Commits](https://www.conventionalcommits.org/) by release-please.
 
+## [0.1.11](https://github.com/Ven0m0/steelseriesgg-rs/compare/v0.1.10...v0.1.11) (2026-10-25)
+
+
+### Changed
+
+* update rust crate parking_lot to 0.13.0 ([d38d069](https://github.com/Ven0m0/steelseriesgg-rs/commit/d38d069cc8b0cb5bf3df5fbca74b17f3567b35b1))
+
 ## [0.1.10](https://github.com/Ven0m0/steelseriesgg-rs/compare/v0.1.9...v0.1.10) (2026-10-21)
 
 
