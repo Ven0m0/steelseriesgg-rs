@@ -408,9 +408,15 @@ fn cmd_headset(manager: &DeviceManager, action: HeadsetAction) -> Result<()> {
                 None => println!("ChatMix:   unsupported"),
             }
         }
-        HeadsetAction::Sidetone { level } => {
+        HeadsetAction::Sidetone { level, persistent } => {
             headset.set_sidetone(level)?;
             println!("Sidetone request sent ({}).", level);
+            if persistent {
+                let mut config = Config::load()?;
+                config.headset.sidetone = Some(level);
+                config.save()?;
+                println!("Sidetone saved to config (the daemon re-applies it whenever the headset powers on).");
+            }
         }
         HeadsetAction::AutoOff { minutes } => {
             headset.set_auto_off(minutes)?;

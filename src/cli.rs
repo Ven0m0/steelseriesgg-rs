@@ -503,6 +503,10 @@ pub(crate) enum HeadsetAction {
     Sidetone {
         /// Sidetone level
         level: u8,
+
+        /// Save to config; the daemon re-applies it whenever the headset powers on
+        #[arg(long)]
+        persistent: bool,
     },
 
     /// Set the inactivity auto-off timeout (0 = disabled)

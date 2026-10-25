@@ -18,6 +18,14 @@ pub struct PollRateConfig {
     pub keyboard_hz: Option<u32>,
 }
 
+/// Headset settings the daemon re-applies whenever a headset powers on. Headsets drop them on power-off,
+/// because nothing in `ssgg` sends the headset's own save command.
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+pub struct HeadsetConfig {
+    /// Sidetone level 0-100, as `ssgg headset sidetone` takes it.
+    pub sidetone: Option<u8>,
+}
+
 /// Manual override for HID control-endpoint selection.
 ///
 /// Auto-detection ranks HID collections by usage page (see
@@ -124,6 +132,10 @@ pub struct Config {
 
     /// Manual HID device selection override
     pub device: DeviceConfig,
+
+    /// Headset settings re-applied by the daemon (`ssgg headset ... --persistent`)
+    #[serde(default)]
+    pub headset: HeadsetConfig,
 
     /// Key remapper settings (`ssgg remap`, needs the `remap` feature to run)
     #[serde(default)]
@@ -383,6 +395,23 @@ mod tests {
         assert_eq!(back.remap, config.remap);
         assert_eq!(back.remap.product_id().unwrap(), Some(0x1628));
         assert_eq!(back.remap.bindings().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn headset_section_is_optional_and_round_trips() {
+        let full = toml::to_string_pretty(&Config::default()).unwrap();
+        assert!(!full.contains("sidetone"), "unset settings are not written");
+        let parsed: Config = toml::from_str(&full).unwrap();
+        assert_eq!(parsed.headset, HeadsetConfig::default());
+
+        let config = Config {
+            headset: HeadsetConfig { sidetone: Some(0) },
+            ..Config::default()
+        };
+        let text = toml::to_string_pretty(&config).unwrap();
+        assert!(text.contains("[headset]\nsidetone = 0"), "{text}");
+        let back: Config = toml::from_str(&text).unwrap();
+        assert_eq!(back.headset.sidetone, Some(0));
     }
 
     #[test]
