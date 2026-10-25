@@ -1350,6 +1350,97 @@ mod tests {
         assert_eq!(keyboard_for(product_ids::APEX_7).direct_packet_id(), None);
     }
 
+    /// Pins, for every keyboard PID, the class it is built as, its registry name and type, and the
+    /// direct frame it sends before a firmware probe and after one that reports Gen 3 firmware:
+    /// `(packet id, report length, key count, 0x4B init)`, or `None` without a direct frame.
+    #[test]
+    fn every_keyboard_pid_keeps_its_class_name_and_direct_frame() {
+        use crate::devices::discovery::{KeyboardClass as K, keyboard_class};
+        use crate::devices::{device_name_from_product_id, device_type_from_product_id};
+        use CommandCode::{Apex2023Direct as D40, Apex2023DirectWireless as D61, ApexGen1Direct as D3A};
+
+        type Frame = Option<(CommandCode, usize, usize, bool)>;
+        const GEN1: Frame = Some((D3A, 643, 112, false));
+        const GEN3: Frame = Some((D40, 643, 112, true));
+        const WIRELESS: Frame = Some((D61, 643, 112, true));
+        const APEX_9: Frame = Some((D40, 513, 112, false));
+        const APEX_9_GEN3: Frame = Some((D40, 513, 112, true));
+        const WIRED_2023: Frame = Some((D40, 645, 84, false));
+        let rows: &[(u16, K, &str, Frame, Frame)] = &[
+            (0x1610, K::ApexProTkl2023, "Apex Pro", GEN1, GEN1),
+            (0x1612, K::Apex7, "Apex 7", None, None),
+            (0x1614, K::ApexProTkl2023, "Apex Pro TKL", GEN1, GEN3),
+            (0x1616, K::Generic, "Apex 150", None, None),
+            (0x1618, K::ApexProTkl2023, "Apex 7 TKL", GEN1, GEN1),
+            (0x161A, K::Apex3, "Apex 3", None, None),
+            (0x161C, K::ApexProTkl2023, "Apex 5", GEN1, GEN1),
+            (0x161E, K::Generic, "Apex Pro Mini", None, None),
+            (0x1620, K::ApexProTkl2023, "Apex 9 Mini", APEX_9, APEX_9_GEN3),
+            (0x1622, K::Apex3Tkl, "Apex 3 TKL", None, None),
+            (0x1624, K::Generic, "Apex Pro Mini Wireless (Dongle)", None, None),
+            (0x1626, K::Generic, "Apex Pro Mini Wireless", None, None),
+            (0x1628, K::ApexProTkl2023, "Apex Pro TKL (2023)", WIRED_2023, WIRED_2023),
+            (
+                0x1630,
+                K::ApexProTkl2023,
+                "Apex Pro TKL (2023) Wireless",
+                WIRELESS,
+                WIRELESS,
+            ),
+            (
+                0x1632,
+                K::ApexProTkl2023,
+                "Apex Pro TKL (2023) Wireless",
+                WIRELESS,
+                WIRELESS,
+            ),
+            (0x1634, K::ApexProTkl2023, "Apex 9 TKL", APEX_9, APEX_9_GEN3),
+            (0x1640, K::ApexProTkl2023, "Apex Pro (2024)", GEN1, GEN1),
+            (0x1642, K::ApexProTkl2023, "Apex Pro TKL (2024)", GEN3, GEN3),
+            (
+                0x1644,
+                K::ApexProTkl2023,
+                "Apex Pro TKL Wireless (2024) (Dongle)",
+                WIRELESS,
+                WIRELESS,
+            ),
+            (
+                0x1646,
+                K::ApexProTkl2023,
+                "Apex Pro TKL Wireless (2024)",
+                WIRELESS,
+                WIRELESS,
+            ),
+            (0x1648, K::Generic, "Apex Pro Mini (2024)", None, None),
+            (0x1650, K::Generic, "Apex 5 (2024)", None, None),
+            (0x1652, K::Generic, "Apex 7 (2024)", None, None),
+            (0x0616, K::ApexM750, "Apex M750", None, None),
+        ];
+        let frame = |keyboard: &ApexProTkl2023| -> Frame {
+            keyboard.direct_packet_id().map(|id| {
+                (
+                    id,
+                    keyboard.direct_packet_length(),
+                    keyboard.direct_keys().len(),
+                    keyboard.needs_init(),
+                )
+            })
+        };
+        for &(pid, class, name, before_probe, gen3) in rows {
+            assert_eq!(keyboard_class(pid), class, "{pid:#06x} class");
+            assert_eq!(device_name_from_product_id(pid), name, "{pid:#06x} name");
+            assert_eq!(
+                device_type_from_product_id(pid),
+                DeviceType::Keyboard,
+                "{pid:#06x} type"
+            );
+            let mut keyboard = keyboard_for(pid);
+            assert_eq!(frame(&keyboard), before_probe, "{pid:#06x} frame before a probe");
+            keyboard.gen3_firmware = Some(true);
+            assert_eq!(frame(&keyboard), gen3, "{pid:#06x} frame on Gen 3 firmware");
+        }
+    }
+
     #[test]
     fn key_table_covers_every_led_including_the_logo() {
         assert_eq!(TKL_KEYS.len(), 112);
