@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Releases and this changelog are generated automatically from
 [Conventional Commits](https://www.conventionalcommits.org/) by release-please.
 
+## [0.1.13](https://github.com/Ven0m0/steelseriesgg-rs/compare/v0.1.12...v0.1.13) (2026-10-26)
+
+
+### Changed
+
+* **apex-2023:** keep last-sent colour and threshold frames in one SentFrames store ([c570060](https://github.com/Ven0m0/steelseriesgg-rs/commit/c5700605308b89b06c8e60f8844d4f615dc631e6))
+
 ## [0.1.12](https://github.com/Ven0m0/steelseriesgg-rs/compare/v0.1.11...v0.1.12) (2026-10-25)
 
 
