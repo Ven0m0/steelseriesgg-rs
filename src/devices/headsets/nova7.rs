@@ -196,6 +196,9 @@ pub fn nova7_model(product_id: u16) -> Option<&'static Nova7Model> {
 const STATUS_REPLY_LEN: usize = 6;
 const STATUS_POLL_INTERVAL: Duration = Duration::from_millis(100);
 const STATUS_MAX_QUERIES: usize = 10;
+/// Upper bound on queued input reports dropped before a status query; the Linux hidraw queue holds 64, the rest
+/// is headroom, and the bound keeps a headset that streams reports from stalling the query.
+const STALE_REPORTS_MAX: usize = 256;
 
 fn unsupported(what: &str, info: &DeviceInfo) -> Error {
     Error::DeviceCommunication(format!(
@@ -327,6 +330,13 @@ impl Nova7Headset {
         };
         let device = self.device()?.lock();
         let mut buf = [0u8; 64];
+        // Every open handle gets a copy of every input report, so replies to another program's queries (the
+        // daemon polls every 5 s) queue up here unread. Drop them, or the first reply read could be minutes old.
+        for _ in 0..STALE_REPORTS_MAX {
+            if device.read_timeout(&mut buf, 0)? == 0 {
+                break;
+            }
+        }
         for _ in 0..STATUS_MAX_QUERIES {
             write_padded_report(&device, &report[..len], HEADSET_REPORT_SIZE, false)?;
             let deadline = Instant::now() + STATUS_POLL_INTERVAL;
