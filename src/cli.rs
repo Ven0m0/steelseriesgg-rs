@@ -513,12 +513,20 @@ pub(crate) enum HeadsetAction {
     AutoOff {
         /// Timeout in minutes
         minutes: u8,
+
+        /// Save to config; the daemon re-applies it whenever the headset powers on
+        #[arg(long)]
+        persistent: bool,
     },
 
     /// Set microphone volume (0-100, mapped onto the headset's 8 steps)
     MicVolume {
         /// Microphone volume
         level: u8,
+
+        /// Save to config; the daemon re-applies it whenever the headset powers on
+        #[arg(long)]
+        persistent: bool,
     },
 }
 

@@ -24,6 +24,10 @@ pub struct PollRateConfig {
 pub struct HeadsetConfig {
     /// Sidetone level 0-100, as `ssgg headset sidetone` takes it.
     pub sidetone: Option<u8>,
+    /// Microphone volume 0-100, as `ssgg headset mic-volume` takes it.
+    pub mic_volume: Option<u8>,
+    /// Auto-off timeout in minutes (0 = disabled), as `ssgg headset auto-off` takes it.
+    pub auto_off: Option<u8>,
 }
 
 /// Manual override for HID control-endpoint selection.
@@ -400,18 +404,28 @@ mod tests {
     #[test]
     fn headset_section_is_optional_and_round_trips() {
         let full = toml::to_string_pretty(&Config::default()).unwrap();
-        assert!(!full.contains("sidetone"), "unset settings are not written");
+        for key in ["sidetone", "mic_volume", "auto_off"] {
+            assert!(!full.contains(key), "unset {key} is not written");
+        }
         let parsed: Config = toml::from_str(&full).unwrap();
         assert_eq!(parsed.headset, HeadsetConfig::default());
 
         let config = Config {
-            headset: HeadsetConfig { sidetone: Some(0) },
+            headset: HeadsetConfig {
+                sidetone: Some(0),
+                mic_volume: Some(100),
+                auto_off: Some(10),
+            },
             ..Config::default()
         };
         let text = toml::to_string_pretty(&config).unwrap();
         assert!(text.contains("[headset]\nsidetone = 0"), "{text}");
         let back: Config = toml::from_str(&text).unwrap();
-        assert_eq!(back.headset.sidetone, Some(0));
+        assert_eq!(back.headset, config.headset);
+
+        let only_mic: HeadsetConfig = toml::from_str("mic_volume = 50").unwrap();
+        assert_eq!(only_mic.mic_volume, Some(50));
+        assert_eq!(only_mic.sidetone, None);
     }
 
     #[test]

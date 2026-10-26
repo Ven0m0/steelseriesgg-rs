@@ -382,6 +382,18 @@ fn apply_headset_settings(headset: &mut dyn Headset, info: &DeviceInfo, settings
             Err(e) => warn!("Failed to apply saved sidetone to {}: {}", info.name, e),
         }
     }
+    if let Some(level) = settings.mic_volume {
+        match headset.set_mic_volume(level) {
+            Ok(()) => info!("Applied saved microphone volume {} to {}", level, info.name),
+            Err(e) => warn!("Failed to apply saved microphone volume to {}: {}", info.name, e),
+        }
+    }
+    if let Some(minutes) = settings.auto_off {
+        match headset.set_auto_off(minutes) {
+            Ok(()) => info!("Applied saved auto-off {} min to {}", minutes, info.name),
+            Err(e) => warn!("Failed to apply saved auto-off to {}: {}", info.name, e),
+        }
+    }
 }
 
 async fn setup_hotplug_monitoring(

@@ -412,22 +412,34 @@ fn cmd_headset(manager: &DeviceManager, action: HeadsetAction) -> Result<()> {
             headset.set_sidetone(level)?;
             println!("Sidetone request sent ({}).", level);
             if persistent {
-                let mut config = Config::load()?;
-                config.headset.sidetone = Some(level);
-                config.save()?;
-                println!("Sidetone saved to config (the daemon re-applies it whenever the headset powers on).");
+                save_headset_setting("Sidetone", |config| config.headset.sidetone = Some(level))?;
             }
         }
-        HeadsetAction::AutoOff { minutes } => {
+        HeadsetAction::AutoOff { minutes, persistent } => {
             headset.set_auto_off(minutes)?;
             println!("Auto-off request sent ({} min).", minutes);
+            if persistent {
+                save_headset_setting("Auto-off", |config| config.headset.auto_off = Some(minutes))?;
+            }
         }
-        HeadsetAction::MicVolume { level } => {
+        HeadsetAction::MicVolume { level, persistent } => {
             headset.set_mic_volume(level)?;
             println!("Microphone volume request sent ({}).", level);
+            if persistent {
+                save_headset_setting("Microphone volume", |config| config.headset.mic_volume = Some(level))?;
+            }
         }
     }
 
+    Ok(())
+}
+
+/// Store one `[headset]` value for the daemon, which re-applies the section whenever the headset powers on.
+fn save_headset_setting(what: &str, update: impl FnOnce(&mut Config)) -> Result<()> {
+    let mut config = Config::load()?;
+    update(&mut config);
+    config.save()?;
+    println!("{what} saved to config (the daemon re-applies it whenever the headset powers on).");
     Ok(())
 }
 
