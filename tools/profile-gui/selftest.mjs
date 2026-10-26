@@ -1904,6 +1904,39 @@ ok('index.html loads control.js after live.js with a hidden panel', () => {
     && /id="controlBox"[^>]*hidden/.test(html);
 });
 
+// --- headset tab (headset.js) -----------------------------------------------
+console.log('headset tab, served only by ssgg-gui');
+const headsetSandbox = {};
+vm.runInNewContext(read('tools/profile-gui/headset.js'), headsetSandbox, { filename: 'headset.js' });
+const headset = headsetSandbox.SsggHeadset;
+// `scale_to_wire` in src/devices/headsets/nova7.rs, for a 0-100 level and the top wire value `max`.
+const scaleToWire = (level, max) => Math.floor((level * max + 50) / 100);
+ok('every step of every step count reaches its own wire value and reads back as itself', () => {
+  for (let steps = 2; steps <= 16; steps++) {
+    for (let step = 0; step < steps; step++) {
+      const level = headset.levelForStep(step, steps);
+      if (level < 0 || level > 100 || scaleToWire(level, steps - 1) !== step || headset.stepForLevel(level, steps) !== step) return false;
+    }
+  }
+  return headset.levelForStep(0, 4) === 0 && headset.levelForStep(3, 4) === 100 && headset.levelForStep(1, 4) === 33;
+});
+ok('four sidetone steps are named, other counts are numbered', () => eq(headset.stepLabels(4), ['Off', 'Low', 'Med', 'High'])
+  && eq(headset.stepLabels(3), ['0', '1', '2']));
+ok('ChatMix maps -1..+1 onto 0..100 percent and prints its sign', () => headset.chatMixPercent(-1) === 0
+  && headset.chatMixPercent(0) === 50 && headset.chatMixPercent(1) === 100 && headset.chatMixPercent(3) === 100
+  && headset.chatMixText(-0.7) === '-0.70' && headset.chatMixText(0.02) === '+0.02' && headset.chatMixText(0) === '0.00');
+ok('without the token or a headset the tab stays hidden', async () => {
+  const doc = { getElementById: () => ({ hidden: true }), querySelector: () => null };
+  headsetSandbox.SsggLive = live;
+  return (await headset.mount(doc)) === false;
+});
+ok('index.html loads headset.js after live.js, with the tab bar and the headset view hidden', () => {
+  const html = read('tools/profile-gui/index.html');
+  return html.indexOf('src="live.js"') > 0 && html.indexOf('src="live.js"') < html.indexOf('src="headset.js"')
+    && /id="viewTabs"[^>]*hidden/.test(html) && /id="headsetView"[^>]*hidden/.test(html)
+    && /id="keyboardView"/.test(html) && /\.headset-view\[hidden\]/.test(style);
+});
+
 await Promise.all(pending);
 
 console.log('');

@@ -6,7 +6,7 @@
 //! report number 0 (6 on the Nova Pro family). The save frame `<id> 09` is never sent: it would persist
 //! settings on the headset.
 
-use super::{EqPreset, Headset, HeadsetStatus};
+use super::{EqPreset, Headset, HeadsetCapabilities, HeadsetStatus};
 use crate::devices::hid_reports::{
     HEADSET_REPORT_SIZE, HeadsetBatteryQueryCommand, HeadsetSettingCommand, HeadsetStatusQueryCommand, HidCommand,
     HidDeviceType,
@@ -430,8 +430,22 @@ impl Headset for Nova7Headset {
         self.set_wire_value(CommandCode::HeadsetAutoOff, minutes)
     }
 
+    fn capabilities(&self) -> HeadsetCapabilities {
+        capabilities_of(self.model)
+    }
+
     fn status(&mut self) -> Result<HeadsetStatus> {
         self.query_status()
+    }
+}
+
+fn capabilities_of(model: &Nova7Model) -> HeadsetCapabilities {
+    HeadsetCapabilities {
+        sidetone_steps: if model.sidetone { model.sidetone_max + 1 } else { 0 },
+        mic_volume_steps: model.mic_max - model.mic_min + 1,
+        auto_off: model.auto_off,
+        chat_mix: model.chat_mix,
+        status: model.status != StatusQuery::None,
     }
 }
 
@@ -449,6 +463,30 @@ mod tests {
         let pids: HashSet<u16> = NOVA7_MODELS.iter().map(|m| m.product_id).collect();
         assert_eq!(pids.len(), NOVA7_MODELS.len());
         assert_eq!(NOVA7_MODELS.len(), 34);
+    }
+
+    /// The GUI sends step `i` of `n` as the 0-100 level `round(i * 100 / (n - 1))`; every step must land on
+    /// its own wire value, or a control would skip a level.
+    #[test]
+    fn every_capability_step_reaches_its_wire_value() {
+        // round(step * 100 / top), halves up like JavaScript's Math.round.
+        let level = |step: u8, steps: u8| {
+            let top = u16::from(steps - 1);
+            ((u16::from(step) * 200 + top) / (2 * top)) as u8
+        };
+        for model in NOVA7_MODELS {
+            let caps = capabilities_of(model);
+            assert_eq!(caps.sidetone_steps > 0, model.sidetone, "{:#06x}", model.product_id);
+            for step in 0..caps.sidetone_steps {
+                let wire = scale_to_wire(level(step, caps.sidetone_steps), model.sidetone_max, "sidetone");
+                assert_eq!(wire.ok(), Some(step), "{:#06x} sidetone", model.product_id);
+            }
+            let span = model.mic_max - model.mic_min;
+            for step in 0..caps.mic_volume_steps {
+                let wire = scale_to_wire(level(step, caps.mic_volume_steps), span, "mic");
+                assert_eq!(wire.ok(), Some(step), "{:#06x} mic", model.product_id);
+            }
+        }
     }
 
     // Vectors from `base_arctis_nova_pro_wireless` / `arctis_nova_pro` / `arctis-nova-3`: report id 6,

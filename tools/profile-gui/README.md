@@ -4,7 +4,7 @@ A browser page that reads the JSON dumps `ssgg onboard read` and
 `ssgg onboard decode` write (by default into a file named from the profile name in the
 image: `Config 1` -> `config_1.json`), edits them on a drawn keyboard, and saves
 the JSON back. No build step, no dependencies: plain files
-(`index.html`, `style.css`, `app.js`, `main.js`, `live.js`, `control.js`, the generated `products.generated.js`).
+(`index.html`, `style.css`, `app.js`, `main.js`, `live.js`, `control.js`, `headset.js`, the generated `products.generated.js`).
 
 `read` writes that report directly: it decodes the image it pulled. The per-pull read
 record (`read --report FILE` - chunk headers, framing stats, image hash) is capture telemetry, not a
@@ -49,6 +49,20 @@ The API is not CORS-enabled (the page is same-origin). Each run has a random tok
 being served here; a request needs that token, a `Host` of `127.0.0.1:<port>` or `localhost:<port>`, and no
 foreign `Origin`. Any local process can still fetch the page and the token, as with the GameSense server.
 Colour and brightness are not saved to the device state store, unlike `ssgg rgb`.
+
+### Headset tab (`ssgg-gui`)
+
+When `ssgg-gui` also opens a headset (the first one, as `ssgg headset` does), a **Keyboard / Headset** tab bar
+appears in the header. The headset tab (`headset.js`) shows connection, battery and the ChatMix dial, polled every
+500 ms while the tab is open and the browser tab is visible, and sets sidetone, mic volume and auto-off through
+`/api/headset/*`. Controls the model lacks are left out, using the per-model capabilities from `nova7.rs`.
+**`[EXPERIMENTAL]`**: the calls are the ones `ssgg headset` sends.
+
+The headset cannot report its sidetone, mic volume or auto-off, so the controls start from the values saved in
+the `[headset]` section of `config.toml`, or show "not set". "Re-apply when headset powers on" keeps a value
+there, like `--persistent`, and unticking it removes the saved value; `ssgg daemon` applies the saved values
+whenever the headset turns on. Nothing is saved on the headset itself (its save frame is never sent).
+Running the tab while `ssgg daemon` also polls the headset is untested.
 
 `app.js` and `main.js` are **plain scripts**, not ES modules: a page opened from
 the filesystem has origin `null`, and browsers refuse module scripts there, so
