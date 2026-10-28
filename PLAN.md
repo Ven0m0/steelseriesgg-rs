@@ -175,9 +175,9 @@ Taken on the branch (all `[EXPERIMENTAL]`, none run on hardware):
   macros/text/launch; escape chord LCtrl+RCtrl+LShift+RShift held 2 s. Never run against a real keyboard.
 - Mice, rivalcfg "Modern" family only (24 PIDs: Aerox 3/5/9, Prime Mini/Wireless, Rival 3 Gen 2, Rival 5): DPI, poll
   rate, colour, battery via `ssgg mouse`. No save command anywhere.
-- Headsets: Arctis Nova 7 family (15 PIDs) with sidetone, auto-off, mic volume, status via `ssgg headset`. No save
-  `00 09` is ever sent, so sidetone does not stick on Gen 2 (`0x227E`, 2026-10-25: it falls back to the headset's
-  saved level after a power cycle).
+- Headsets: Arctis Nova 7 protocol family (34 PIDs: Nova 7, Arctis 7+, Nova 4, Nova 5 / Nova 3 Wireless, Nova Pro)
+  with sidetone, auto-off, mic volume, status via `ssgg headset`. No save `00 09` is ever sent, so sidetone does not
+  stick on Gen 2 (`0x227E`, 2026-10-25: it falls back to the headset's saved level after a power cycle).
 - OpenRGB / fork keyboard families: Apex 9 TKL/Mini (`0x40`, 513 bytes, no init), Gen 1 `0x3A` models (Apex 5,
   Apex 7 TKL, Apex Pro TKL, Apex Pro 2024) on the direct path, Apex M750 solid colour (slot-to-key map unknown).
 

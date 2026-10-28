@@ -3,7 +3,7 @@
 //! Provides multi-channel audio mixing with support for:
 //! - Game, Chat, Media, Aux, and Mic channels
 //! - Per-application audio routing
-//! - Streamer mode with separate streaming/monitoring sliders
+//! - Streamer mode with separate streaming/monitoring sliders (the slider volumes are stored, not yet applied)
 
 #[cfg(feature = "audio")]
 pub mod pulse;

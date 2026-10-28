@@ -52,8 +52,8 @@ systemctl --user enable --now ssgg.service
 - Arctis Nova Pro / Arctis Nova Pro Wireless
 - Arctis Nova Pro Omni (PID `0x2290` - pending hardware confirmation)
 - Arctis Nova 5 / Arctis Nova 3 / Arctis Nova 1
-- Arctis Nova 7 family (experimental, `ssgg headset`: status, sidetone, auto-off, mic volume; PID `0x22A1` and 14 others;
-  all four confirmed on the Nova 7 Gen 2 `0x227E`)
+- Arctis Nova 7 family (experimental, `ssgg headset`: status, sidetone, auto-off, mic volume; 34 PIDs, also covering
+  the Arctis 7+, Nova 4, Nova 5 / Nova 3 Wireless and Nova Pro families; all four confirmed on the Nova 7 Gen 2 `0x227E`)
 
 ## Installation
 

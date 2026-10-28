@@ -127,9 +127,11 @@ GG names PID `0x1628` `apex_pro_tkl_2022` regardless of the retail year.
 
 ### Arctis Nova 7 family protocol [EXPERIMENTAL]
 
-Source: two community forks. Code: `src/devices/headsets/nova7.rs` (per-PID table `NOVA7_MODELS`, confirmed PIDs
-in `HARDWARE_CONFIRMED`) and `HeadsetSettingCommand` / `HeadsetStatusQueryCommand` in `src/devices/hid_reports.rs`.
-Every command is Experimental on every PID except the one below (see `.claude/rules/experimental-protocol.md`).
+Source: two community forks and GG's decrypted device specs (`base_arctis_7_plus_tx`, `base_arctis_nova_5_tx`,
+`base_arctis_nova_pro` and others, named in the code comments). Code: `src/devices/headsets/nova7.rs` (per-PID table
+`NOVA7_MODELS`, confirmed PIDs in `HARDWARE_CONFIRMED`) and `HeadsetSettingCommand` / `HeadsetStatusQueryCommand` in
+`src/devices/hid_reports.rs`. Every command is Experimental on every PID except the one below (see
+`.claude/rules/experimental-protocol.md`).
 
 Hardware results, Arctis Nova 7 Gen 2 `0x227E`, Linux, 2026-10-25 (owner test, GG not running):
 
