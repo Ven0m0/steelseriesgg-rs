@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Releases and this changelog are generated automatically from
 [Conventional Commits](https://www.conventionalcommits.org/) by release-please.
 
+## [0.1.14](https://github.com/Ven0m0/steelseriesgg-rs/compare/v0.1.13...v0.1.14) (2026-10-30)
+
+
+### Changed
+
+* update rust crate sysinfo to 0.40.0 ([7267fb3](https://github.com/Ven0m0/steelseriesgg-rs/commit/7267fb3e9e5f954503f06e3f32faaf3fb1ca15a8))
+
 ## [0.1.13](https://github.com/Ven0m0/steelseriesgg-rs/compare/v0.1.12...v0.1.13) (2026-10-26)
 
 
