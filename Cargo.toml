@@ -73,7 +73,7 @@ serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 
 # System information for diagnostics
-sysinfo = "0.39.6"
+sysinfo = "0.40.0"
 tabled = "0.22.0"
 # Native window and event loop for ssgg-gui (feature `desktop`); owns the GTK main loop on Linux
 tao = { version = "0.37.2", optional = true }
