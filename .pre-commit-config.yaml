@@ -14,7 +14,7 @@ repos:
       - id: trailing-whitespace
         args: [--markdown-linebreak-ext=md]
   - repo: https://github.com/python-jsonschema/check-jsonschema
-    rev: 0.38.2
+    rev: 0.39.0
     hooks:
       - id: check-dependabot
       - id: check-github-actions
@@ -23,13 +23,13 @@ repos:
     hooks:
       - id: cargo-fmt
         name: cargo fmt
-        entry: cargo fmt --all --
+        entry: cargo fmt --all -- --check
         language: system
         types: [rust]
         pass_filenames: false
       - id: cargo-clippy
         name: cargo clippy
-        entry: cargo clippy --workspace --all-targets -- -D warnings
+        entry: cargo clippy --workspace --all-targets --locked --all-features --fix --allow-no-vcs -- -D warnings
         language: system
         types: [rust]
         pass_filenames: false
@@ -37,6 +37,13 @@ repos:
       - id: cargo-test
         name: cargo test
         entry: cargo test --locked
+        language: system
+        types: [rust]
+        pass_filenames: false
+        stages: [pre-push]
+      - id: cargo-fix
+        name: cargo fix
+        entry: cargo fix --workspace --allow-no-vcs
         language: system
         types: [rust]
         pass_filenames: false

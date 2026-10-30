@@ -101,7 +101,7 @@ evdev = { version = "0.13.2", optional = true }
 hidapi = { version = "=2.6.7" }
 
 [target.'cfg(unix)'.dependencies]
-rustix = { version = "1.1.5", features = ["process"] }
+rustix = { version = "1.1.6", features = ["process"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-sys = { version = "0.61", features = [
