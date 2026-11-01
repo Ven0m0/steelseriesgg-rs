@@ -53,10 +53,10 @@ Protocol work has three states. Never mix them up or upgrade a status without ha
 | `CommandCode::MousePollRate` / `MousePollRateCommand` | `0x2B` | Experimental — Modern-family mice, community rivalcfg-derived fork, untested (`0x6B` on a receiver PID) |
 | `CommandCode::MouseBattery` / `MouseBatteryQueryCommand` | `0x92` | Experimental — wireless Modern-family mice, community rivalcfg-derived fork, untested (`0xD2` on a receiver PID) |
 | Mouse save to on-board memory (`11 00`) | `0x11` | Not implemented — persistent write, no hardware-confirmed family; `ssgg mouse` has no save action |
-| `CommandCode::HeadsetSidetone` / `HeadsetSettingCommand` | `0x39` | Experimental — Arctis Nova 7 family sidetone `00 39 <0..=3>`, from community forks, untested |
-| `CommandCode::HeadsetMicVolume` / `HeadsetSettingCommand` | `0x37` | Experimental — Arctis Nova 7 family mic volume `00 37 <0..=7>`, from community forks, untested |
-| `CommandCode::HeadsetAutoOff` / `HeadsetSettingCommand` | `0xA3` | Experimental — Arctis Nova 7 family auto-off `00 a3 <minutes>`, from community forks, untested |
-| `CommandCode::HeadsetStatus` / `HeadsetStatusQueryCommand` | `0xB0` | Experimental — Arctis Nova 7 family status query `00 b0` and `b0 …` reply, from community forks, untested |
+| `CommandCode::HeadsetSidetone` / `HeadsetSettingCommand` | `0x39` | Confirmed on `0x227E` only — Arctis Nova 7 Gen 2, Linux, 2026-10-25: `00 39 03` audible sidetone, `00 39 00` none (owner test); falls back to the headset's saved level after a power cycle (no save frame). Steps 1-2 untested. Experimental on every other PID (community forks) |
+| `CommandCode::HeadsetMicVolume` / `HeadsetSettingCommand` | `0x37` | Confirmed on `0x227E` only — Arctis Nova 7 Gen 2, Linux, 2026-10-25: recorded mic level -80 dBFS at `00 37 00`, -39 dBFS at `00 37 07` (alternating takes); sidetone does not follow it. Middle steps untested. Experimental on every other PID (community forks) |
+| `CommandCode::HeadsetAutoOff` / `HeadsetSettingCommand` | `0xA3` | Confirmed on `0x227E` only — Arctis Nova 7 Gen 2, Linux, 2026-10-25: `00 a3 01` turned the headset off after about a minute idle (owner test); `00 a3 00` (disable) sent but not observed. Experimental on every other PID (community forks) |
+| `CommandCode::HeadsetStatus` / `HeadsetStatusQueryCommand` | `0xB0` | Confirmed on `0x227E` only — Arctis Nova 7 Gen 2, Linux, 2026-10-25: percent battery matched an independent reading, charging flipped on USB plug-in, ChatMix read -1.00 / +0.02 / +1.00 at full game / middle / full chat (owner test). Experimental on every other PID (community forks) |
 
 ## Rules
 

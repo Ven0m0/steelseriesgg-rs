@@ -4,7 +4,7 @@ use crate::cli::parse_zone_number;
 use crate::deduped_devices;
 
 use steelseries_gg::Result;
-use steelseries_gg::config::Config;
+use steelseries_gg::config::{Config, HeadsetConfig};
 use steelseries_gg::device_state::{DeviceId, DeviceStateStore, KeyboardState};
 use steelseries_gg::devices::headsets::Headset;
 use steelseries_gg::devices::keyboards::Keyboard;
@@ -30,10 +30,13 @@ pub(crate) async fn cmd_server(port: u16) -> Result<()> {
     Ok(())
 }
 
+/// A headset with its own lock, so its slow HID round trips never hold the daemon-state lock.
+type SharedHeadset = Arc<parking_lot::Mutex<Box<dyn Headset>>>;
+
 /// Daemon state for managing connected devices and RGB controllers.
 pub(crate) struct DaemonState {
     keyboards: HashMap<String, (Box<dyn Keyboard>, RgbController, DeviceInfo)>,
-    headsets: HashMap<String, (Box<dyn Headset>, DeviceInfo)>,
+    headsets: HashMap<String, (SharedHeadset, DeviceInfo)>,
     gamesense_overlays: Arc<HashMap<String, (Color, std::time::Instant)>>, // zone -> (color, expiry)
     /// Device fingerprints for tracking devices across reconnections
     device_fingerprints: HashMap<String, DeviceFingerprint>,
@@ -151,7 +154,10 @@ impl DaemonState {
                         }
 
                         // Store device information
-                        self.headsets.insert(serial.clone(), (headset, info.clone()));
+                        self.headsets.insert(
+                            serial.clone(),
+                            (Arc::new(parking_lot::Mutex::new(headset)), info.clone()),
+                        );
                         self.device_fingerprints.insert(serial, fingerprint.clone());
 
                         info!("Successfully added headset: {}", info.name);
@@ -263,6 +269,7 @@ pub(crate) async fn cmd_daemon(mut manager: DeviceManager) -> Result<()> {
     // Spawn RGB animation loop with adaptive timing and performance monitoring
     let daemon_state_anim = daemon_state.clone();
     let animation_task = tokio::spawn(run_animation_loop(daemon_state_anim));
+    let headset_task = tokio::spawn(run_headset_watch(daemon_state.clone()));
 
     // Set up graceful shutdown on SIGTERM (systemd stop) and SIGINT (Ctrl+C)
     wait_for_shutdown().await?;
@@ -276,6 +283,7 @@ pub(crate) async fn cmd_daemon(mut manager: DeviceManager) -> Result<()> {
 
     // Abort animation task
     animation_task.abort();
+    headset_task.abort();
 
     // Save final device states
     save_final_device_states(daemon_state).await;
@@ -316,6 +324,106 @@ async fn apply_saved_poll_rates(config: &Config) {
                     e
                 );
             }
+        }
+    }
+}
+
+/// How often the daemon asks each headset whether it is on. A wireless dongle stays enumerated while the
+/// headset is off, so hot-plug never sees a power cycle.
+const HEADSET_POLL_INTERVAL: Duration = Duration::from_secs(5);
+
+/// Re-apply the `[headset]` config section whenever a headset turns on, because headsets drop these
+/// settings on power-off. A headset without a status query gets them once, when first seen.
+async fn run_headset_watch(daemon_state: Arc<RwLock<DaemonState>>) {
+    let mut connected: HashMap<String, bool> = HashMap::new();
+    let mut interval = tokio::time::interval(HEADSET_POLL_INTERVAL);
+    interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+    loop {
+        interval.tick().await;
+
+        // A status query to a headset that does not answer blocks for about a second, so it runs on a
+        // blocking thread with only the headset's own lock held; animation and GameSense keep the state lock.
+        let headsets: Vec<(String, SharedHeadset, DeviceInfo)> = daemon_state
+            .read()
+            .await
+            .headsets
+            .iter()
+            .map(|(serial, (headset, info))| (serial.clone(), Arc::clone(headset), info.clone()))
+            .collect();
+        let polled = tokio::task::spawn_blocking(move || {
+            headsets
+                .into_iter()
+                .map(|(serial, headset, info)| {
+                    let status = headset.lock().status();
+                    (serial, headset, info, status)
+                })
+                .collect::<Vec<_>>()
+        })
+        .await;
+        let polled = match polled {
+            Ok(polled) => polled,
+            Err(e) => {
+                warn!("Headset status task failed: {}", e);
+                continue;
+            }
+        };
+
+        let mut came_online = Vec::new();
+        for (serial, headset, info, status) in polled {
+            let now = match status {
+                Ok(status) => status.connected.unwrap_or(true),
+                Err(_) if !connected.contains_key(&serial) => true,
+                Err(e) => {
+                    debug!("Headset status of {} failed: {}", info.name, e);
+                    continue;
+                }
+            };
+            if now && !connected.get(&serial).copied().unwrap_or(false) {
+                came_online.push((headset, info));
+            }
+            connected.insert(serial, now);
+        }
+        if came_online.is_empty() {
+            continue;
+        }
+
+        let settings = match Config::load_async().await {
+            Ok(config) => config.headset,
+            Err(e) => {
+                warn!("Could not load config to re-apply headset settings: {}", e);
+                continue;
+            }
+        };
+        let applied = tokio::task::spawn_blocking(move || {
+            for (headset, info) in came_online {
+                apply_headset_settings(headset.lock().as_mut(), &info, &settings);
+            }
+        })
+        .await;
+        if let Err(e) = applied {
+            warn!("Headset settings task failed: {}", e);
+        }
+    }
+}
+
+fn apply_headset_settings(headset: &mut dyn Headset, info: &DeviceInfo, settings: &HeadsetConfig) {
+    if let Some(level) = settings.sidetone {
+        match headset.set_sidetone(level) {
+            Ok(()) => info!("Applied saved sidetone {} to {}", level, info.name),
+            Err(e) => warn!("Failed to apply saved sidetone to {}: {}", info.name, e),
+        }
+    }
+    if let Some(level) = settings.mic_volume {
+        match headset.set_mic_volume(level) {
+            Ok(()) => info!("Applied saved microphone volume {} to {}", level, info.name),
+            Err(e) => warn!("Failed to apply saved microphone volume to {}: {}", info.name, e),
+        }
+    }
+    if let Some(minutes) = settings.auto_off {
+        match headset.set_auto_off(minutes) {
+            Ok(()) => info!("Applied saved auto-off {} min to {}", minutes, info.name),
+            Err(e) => warn!("Failed to apply saved auto-off to {}: {}", info.name, e),
         }
     }
 }

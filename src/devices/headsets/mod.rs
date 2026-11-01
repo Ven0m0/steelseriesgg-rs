@@ -6,6 +6,7 @@ use super::{Device, DeviceInfo, DeviceType, write_padded_report};
 use crate::{Error, Result};
 use hidapi::HidDevice;
 use parking_lot::Mutex;
+use serde::Serialize;
 use std::sync::Arc;
 
 /// Trait for headset-specific functionality.
@@ -31,6 +32,11 @@ pub trait Headset: Device {
     /// Set auto-off timeout in minutes (0 = disabled).
     fn set_auto_off(&mut self, minutes: u8) -> Result<()>;
 
+    /// Which settings the model takes, so a front end can leave out controls it lacks. The default is none.
+    fn capabilities(&self) -> HeadsetCapabilities {
+        HeadsetCapabilities::default()
+    }
+
     /// Snapshot of battery, link and ChatMix state. The default asks for the battery and ChatMix separately and
     /// reports `connected` and `charging` as unknown.
     fn status(&mut self) -> Result<HeadsetStatus> {
@@ -43,8 +49,20 @@ pub trait Headset: Device {
     }
 }
 
+/// Settings a headset model takes. A step count is the number of distinct levels the headset has, so
+/// `ssgg`'s 0-100 scale maps onto `0..steps`; 0 means the model has no such setting.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize)]
+pub struct HeadsetCapabilities {
+    pub sidetone_steps: u8,
+    pub mic_volume_steps: u8,
+    pub auto_off: bool,
+    pub chat_mix: bool,
+    /// Whether the model answers a status query (battery, connection, charging).
+    pub status: bool,
+}
+
 /// Headset state as far as the protocol reports it; `None` marks a field the headset cannot report.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize)]
 pub struct HeadsetStatus {
     pub connected: Option<bool>,
     pub charging: Option<bool>,

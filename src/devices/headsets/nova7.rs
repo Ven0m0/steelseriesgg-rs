@@ -1,11 +1,12 @@
 //! Headsets using one-byte `<id> <opcode> <value>` frames: Arctis Nova 4/5/7, Nova 3, Nova Pro and Arctis 7+.
 //!
-//! [EXPERIMENTAL] The protocol comes from community forks and GG's decrypted device specs and has not been run
-//! on hardware. Frames are 64-byte output reports on the vendor control collection (usage page `0xFFC0`),
+//! [EXPERIMENTAL] The protocol comes from community forks and GG's decrypted device specs. Status, sidetone, mic
+//! volume and auto-off are confirmed on the PIDs in [`HARDWARE_CONFIRMED`] only; every other model is untested.
+//! Frames are 64-byte output reports on the vendor control collection (usage page `0xFFC0`),
 //! report number 0 (6 on the Nova Pro family). The save frame `<id> 09` is never sent: it would persist
 //! settings on the headset.
 
-use super::{EqPreset, Headset, HeadsetStatus};
+use super::{EqPreset, Headset, HeadsetCapabilities, HeadsetStatus};
 use crate::devices::hid_reports::{
     HEADSET_REPORT_SIZE, HeadsetBatteryQueryCommand, HeadsetSettingCommand, HeadsetStatusQueryCommand, HidCommand,
     HidDeviceType,
@@ -182,6 +183,10 @@ pub const NOVA7_MODELS: &[Nova7Model] = &[
     nova_pro_model(ARCTIS_NOVA_3, false),
 ];
 
+/// PIDs on which status, sidetone, mic volume and auto-off were sent from `ssgg` on hardware and worked: Arctis
+/// Nova 7 Gen 2, Linux, 2026-10-25 (`.claude/rules/experimental-protocol.md`).
+pub const HARDWARE_CONFIRMED: &[u16] = &[ARCTIS_NOVA_7_WIRELESS_GEN2];
+
 /// Look up the Nova 7 behaviour for a product ID; `None` for every other headset.
 pub fn nova7_model(product_id: u16) -> Option<&'static Nova7Model> {
     NOVA7_MODELS.iter().find(|m| m.product_id == product_id)
@@ -191,6 +196,9 @@ pub fn nova7_model(product_id: u16) -> Option<&'static Nova7Model> {
 const STATUS_REPLY_LEN: usize = 6;
 const STATUS_POLL_INTERVAL: Duration = Duration::from_millis(100);
 const STATUS_MAX_QUERIES: usize = 10;
+/// Upper bound on queued input reports dropped before a status query; the Linux hidraw queue holds 64, the rest
+/// is headroom, and the bound keeps a headset that streams reports from stalling the query.
+const STALE_REPORTS_MAX: usize = 256;
 
 fn unsupported(what: &str, info: &DeviceInfo) -> Error {
     Error::DeviceCommunication(format!(
@@ -322,6 +330,13 @@ impl Nova7Headset {
         };
         let device = self.device()?.lock();
         let mut buf = [0u8; 64];
+        // Every open handle gets a copy of every input report, so replies to another program's queries (the
+        // daemon polls every 5 s) queue up here unread. Drop them, or the first reply read could be minutes old.
+        for _ in 0..STALE_REPORTS_MAX {
+            if device.read_timeout(&mut buf, 0)? == 0 {
+                break;
+            }
+        }
         for _ in 0..STATUS_MAX_QUERIES {
             write_padded_report(&device, &report[..len], HEADSET_REPORT_SIZE, false)?;
             let deadline = Instant::now() + STATUS_POLL_INTERVAL;
@@ -415,8 +430,22 @@ impl Headset for Nova7Headset {
         self.set_wire_value(CommandCode::HeadsetAutoOff, minutes)
     }
 
+    fn capabilities(&self) -> HeadsetCapabilities {
+        capabilities_of(self.model)
+    }
+
     fn status(&mut self) -> Result<HeadsetStatus> {
         self.query_status()
+    }
+}
+
+fn capabilities_of(model: &Nova7Model) -> HeadsetCapabilities {
+    HeadsetCapabilities {
+        sidetone_steps: if model.sidetone { model.sidetone_max + 1 } else { 0 },
+        mic_volume_steps: model.mic_max - model.mic_min + 1,
+        auto_off: model.auto_off,
+        chat_mix: model.chat_mix,
+        status: model.status != StatusQuery::None,
     }
 }
 
@@ -434,6 +463,30 @@ mod tests {
         let pids: HashSet<u16> = NOVA7_MODELS.iter().map(|m| m.product_id).collect();
         assert_eq!(pids.len(), NOVA7_MODELS.len());
         assert_eq!(NOVA7_MODELS.len(), 34);
+    }
+
+    /// The GUI sends step `i` of `n` as the 0-100 level `round(i * 100 / (n - 1))`; every step must land on
+    /// its own wire value, or a control would skip a level.
+    #[test]
+    fn every_capability_step_reaches_its_wire_value() {
+        // round(step * 100 / top), halves up like JavaScript's Math.round.
+        let level = |step: u8, steps: u8| {
+            let top = u16::from(steps - 1);
+            ((u16::from(step) * 200 + top) / (2 * top)) as u8
+        };
+        for model in NOVA7_MODELS {
+            let caps = capabilities_of(model);
+            assert_eq!(caps.sidetone_steps > 0, model.sidetone, "{:#06x}", model.product_id);
+            for step in 0..caps.sidetone_steps {
+                let wire = scale_to_wire(level(step, caps.sidetone_steps), model.sidetone_max, "sidetone");
+                assert_eq!(wire.ok(), Some(step), "{:#06x} sidetone", model.product_id);
+            }
+            let span = model.mic_max - model.mic_min;
+            for step in 0..caps.mic_volume_steps {
+                let wire = scale_to_wire(level(step, caps.mic_volume_steps), span, "mic");
+                assert_eq!(wire.ok(), Some(step), "{:#06x} mic", model.product_id);
+            }
+        }
     }
 
     // Vectors from `base_arctis_nova_pro_wireless` / `arctis_nova_pro` / `arctis-nova-3`: report id 6,
@@ -557,6 +610,13 @@ mod tests {
             );
             assert_eq!(m.sidetone, !no_extras.contains(&m.product_id), "{:#06x}", m.product_id);
             assert_eq!(m.chat_mix, m.sidetone, "{:#06x}", m.product_id);
+        }
+    }
+
+    #[test]
+    fn hardware_confirmed_pids_are_in_the_table() {
+        for pid in HARDWARE_CONFIRMED {
+            assert!(nova7_model(*pid).is_some(), "{pid:#06x}");
         }
     }
 

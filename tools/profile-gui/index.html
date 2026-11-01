@@ -10,6 +10,7 @@
 <script src="main.js" defer></script>
 <script src="live.js" defer></script>
 <script src="control.js" defer></script>
+<script src="headset.js" defer></script>
 </head>
 <body>
 <header class="bar">
@@ -28,7 +29,12 @@
     </span>
   </div>
   <div id="tabs" class="tabs"></div>
+  <nav id="viewTabs" class="view-tabs" aria-label="Device" hidden>
+    <button type="button" class="btn seg active" data-view="keyboardView" aria-pressed="true">Keyboard</button>
+    <button type="button" class="btn seg" data-view="headsetView" aria-pressed="false">Headset</button>
+  </nav>
 </header>
+<div id="keyboardView">
 <p id="status" class="status mono"></p>
 <section id="liveBox" class="panel live" hidden></section>
 <section id="controlBox" class="panel live" hidden></section>
@@ -64,5 +70,7 @@
   <span class="mono">function_name</span> in <span class="mono">src/devices/keyboards/apex_7_profile.rs</span>.
   Nothing in app.js writes to a keyboard (only live.js and control.js, served by <span class="mono">ssgg-gui</span>, talk to a device), and <span class="mono">crc_*</span> is never recomputed.
 </footer>
+</div>
+<section id="headsetView" class="headset-view" hidden></section>
 </body>
 </html>

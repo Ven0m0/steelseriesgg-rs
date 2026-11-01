@@ -19,7 +19,7 @@ use wry::{NewWindowResponse, WebViewBuilder};
 
 use steelseries_gg::config::Config;
 use steelseries_gg::devices::DeviceManager;
-use steelseries_gg::gui::{open_first_keyboard, serve};
+use steelseries_gg::gui::{open_first_headset, open_first_keyboard, serve};
 
 /// The page, or a `blob:` URL the page made itself (the "Save a copy" download). Anything else stays out of a
 /// window that holds the live-lighting token.
@@ -46,13 +46,14 @@ fn main() -> Result<()> {
         manager.set_device_override(config.device);
     }
     let keyboard = open_first_keyboard(&manager);
+    let headset = open_first_headset(&manager);
 
     let listener = runtime
         .block_on(tokio::net::TcpListener::bind(("127.0.0.1", 0)))
         .context("could not bind a loopback port")?;
     let port = listener.local_addr()?.port();
     runtime.spawn(async move {
-        if let Err(e) = serve(listener, keyboard).await {
+        if let Err(e) = serve(listener, keyboard, headset).await {
             error!("editor server stopped: {e}");
         }
     });
