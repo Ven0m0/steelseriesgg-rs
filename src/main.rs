@@ -253,7 +253,9 @@ fn cmd_devices(manager: &DeviceManager) -> Result<()> {
 fn warn_if_gg_engine_running() {
     use sysinfo::{ProcessesToUpdate, System};
 
-    let mut sys = System::new();
+    let Ok(mut sys) = System::new() else {
+        return;
+    };
     sys.refresh_processes(ProcessesToUpdate::All, true);
     if sys
         .processes_by_name(std::ffi::OsStr::new("SteelSeriesEngine.exe"))

@@ -150,12 +150,12 @@ pub fn get_recent_errors() -> Vec<ErrorLog> {
 /// This function performs CPU-intensive operations and should be called
 /// within tokio::task::spawn_blocking from async contexts.
 fn collect_system_info_blocking() -> Result<SystemInfo> {
-    let mut sys = System::new();
+    let mut sys = System::new().map_err(|e| Error::Other(format!("could not read system information: {e}")))?;
     sys.refresh_cpu_all();
     sys.refresh_memory();
 
-    let os_name = System::name().unwrap_or_else(|| "Unknown".to_string());
-    let kernel_version = System::kernel_version().unwrap_or_else(|| "Unknown".to_string());
+    let os_name = System::name().unwrap_or_else(|_| "Unknown".to_string());
+    let kernel_version = System::kernel_version().unwrap_or_else(|_| "Unknown".to_string());
     let cpu_count = sys.cpus().len();
     let cpu_brand = sys
         .cpus()
@@ -165,7 +165,7 @@ fn collect_system_info_blocking() -> Result<SystemInfo> {
 
     let total_memory_kb = sys.total_memory();
     let used_memory_kb = sys.used_memory();
-    let uptime_seconds = System::uptime();
+    let uptime_seconds = System::uptime().unwrap_or(0);
 
     debug!(
         "Collected system info: {} {} ({}), {} CPUs, {}KB/{} KB memory",
