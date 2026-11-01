@@ -434,8 +434,11 @@ async fn set_headset(
             .headset
             .as_ref()
             .ok_or((StatusCode::SERVICE_UNAVAILABLE, NO_HEADSET.to_string()))?;
+        // Held through the config update as well: every headset request takes this lock, so two overlapping
+        // requests cannot both load config.toml and have the later save drop the other's value.
+        let mut device = headset.device.lock();
         setting
-            .apply(headset.device.lock().as_mut(), body.value)
+            .apply(device.as_mut(), body.value)
             .map_err(|e| (StatusCode::BAD_GATEWAY, e.to_string()))?;
         let wanted = body.persist.then_some(body.value);
         let save = Config::load().and_then(|mut config| {
