@@ -338,6 +338,8 @@ async fn run_headset_watch(daemon_state: Arc<RwLock<DaemonState>>) {
 
         let came_online: Vec<String> = {
             let mut state = daemon_state.write().await;
+            // A re-plugged dongle must count as newly online, so forget headsets hot-plug removed.
+            connected.retain(|serial, _| state.headsets.contains_key(serial));
             let mut came_online = Vec::new();
             for (serial, (headset, info)) in state.headsets.iter_mut() {
                 let now = match headset.status() {
