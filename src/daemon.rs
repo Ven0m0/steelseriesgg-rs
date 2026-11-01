@@ -30,10 +30,13 @@ pub(crate) async fn cmd_server(port: u16) -> Result<()> {
     Ok(())
 }
 
+/// A headset with its own lock, so its slow HID round trips never hold the daemon-state lock.
+type SharedHeadset = Arc<parking_lot::Mutex<Box<dyn Headset>>>;
+
 /// Daemon state for managing connected devices and RGB controllers.
 pub(crate) struct DaemonState {
     keyboards: HashMap<String, (Box<dyn Keyboard>, RgbController, DeviceInfo)>,
-    headsets: HashMap<String, (Box<dyn Headset>, DeviceInfo)>,
+    headsets: HashMap<String, (SharedHeadset, DeviceInfo)>,
     gamesense_overlays: Arc<HashMap<String, (Color, std::time::Instant)>>, // zone -> (color, expiry)
     /// Device fingerprints for tracking devices across reconnections
     device_fingerprints: HashMap<String, DeviceFingerprint>,
@@ -151,7 +154,10 @@ impl DaemonState {
                         }
 
                         // Store device information
-                        self.headsets.insert(serial.clone(), (headset, info.clone()));
+                        self.headsets.insert(
+                            serial.clone(),
+                            (Arc::new(parking_lot::Mutex::new(headset)), info.clone()),
+                        );
                         self.device_fingerprints.insert(serial, fingerprint.clone());
 
                         info!("Successfully added headset: {}", info.name);
@@ -336,27 +342,48 @@ async fn run_headset_watch(daemon_state: Arc<RwLock<DaemonState>>) {
     loop {
         interval.tick().await;
 
-        let came_online: Vec<String> = {
-            let mut state = daemon_state.write().await;
-            // A re-plugged dongle must count as newly online, so forget headsets hot-plug removed.
-            connected.retain(|serial, _| state.headsets.contains_key(serial));
-            let mut came_online = Vec::new();
-            for (serial, (headset, info)) in state.headsets.iter_mut() {
-                let now = match headset.status() {
-                    Ok(status) => status.connected.unwrap_or(true),
-                    Err(_) if !connected.contains_key(serial) => true,
-                    Err(e) => {
-                        debug!("Headset status of {} failed: {}", info.name, e);
-                        continue;
-                    }
-                };
-                if now && !connected.get(serial).copied().unwrap_or(false) {
-                    came_online.push(serial.clone());
-                }
-                connected.insert(serial.clone(), now);
+        // A status query to a headset that does not answer blocks for about a second, so it runs on a
+        // blocking thread with only the headset's own lock held; animation and GameSense keep the state lock.
+        let headsets: Vec<(String, SharedHeadset, DeviceInfo)> = daemon_state
+            .read()
+            .await
+            .headsets
+            .iter()
+            .map(|(serial, (headset, info))| (serial.clone(), Arc::clone(headset), info.clone()))
+            .collect();
+        let polled = tokio::task::spawn_blocking(move || {
+            headsets
+                .into_iter()
+                .map(|(serial, headset, info)| {
+                    let status = headset.lock().status();
+                    (serial, headset, info, status)
+                })
+                .collect::<Vec<_>>()
+        })
+        .await;
+        let polled = match polled {
+            Ok(polled) => polled,
+            Err(e) => {
+                warn!("Headset status task failed: {}", e);
+                continue;
             }
-            came_online
         };
+
+        let mut came_online = Vec::new();
+        for (serial, headset, info, status) in polled {
+            let now = match status {
+                Ok(status) => status.connected.unwrap_or(true),
+                Err(_) if !connected.contains_key(&serial) => true,
+                Err(e) => {
+                    debug!("Headset status of {} failed: {}", info.name, e);
+                    continue;
+                }
+            };
+            if now && !connected.get(&serial).copied().unwrap_or(false) {
+                came_online.push((headset, info));
+            }
+            connected.insert(serial, now);
+        }
         if came_online.is_empty() {
             continue;
         }
@@ -368,11 +395,14 @@ async fn run_headset_watch(daemon_state: Arc<RwLock<DaemonState>>) {
                 continue;
             }
         };
-        let mut state = daemon_state.write().await;
-        for serial in came_online {
-            if let Some((headset, info)) = state.headsets.get_mut(&serial) {
-                apply_headset_settings(headset.as_mut(), info, &settings);
+        let applied = tokio::task::spawn_blocking(move || {
+            for (headset, info) in came_online {
+                apply_headset_settings(headset.lock().as_mut(), &info, &settings);
             }
+        })
+        .await;
+        if let Err(e) = applied {
+            warn!("Headset settings task failed: {}", e);
         }
     }
 }
