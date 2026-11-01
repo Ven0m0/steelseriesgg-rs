@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Releases and this changelog are generated automatically from
 [Conventional Commits](https://www.conventionalcommits.org/) by release-please.
 
+## [0.1.14](https://github.com/Ven0m0/steelseriesgg-rs/compare/v0.1.13...v0.1.14) (2026-11-01)
+
+
+### Added
+
+* **headset:** import fork headset work (Nova 7 Gen 2 confirmed, persistent settings, GUI tab) ([#316](https://github.com/Ven0m0/steelseriesgg-rs/issues/316)) ([8208f6d](https://github.com/Ven0m0/steelseriesgg-rs/commit/8208f6df0a3c045b39791917caf47383bab8482b))
+
+
+### Fixed
+
+* **renovate:** automerge maintenance updates without approval ([9c44d1b](https://github.com/Ven0m0/steelseriesgg-rs/commit/9c44d1b5d25b36d5b19ab97491a7a47e7e3f3064))
+
+
+### Changed
+
+* update rust crate sysinfo to 0.40.0 ([7267fb3](https://github.com/Ven0m0/steelseriesgg-rs/commit/7267fb3e9e5f954503f06e3f32faaf3fb1ca15a8))
+
 ## [0.1.13](https://github.com/Ven0m0/steelseriesgg-rs/compare/v0.1.12...v0.1.13) (2026-10-26)
 
 
