@@ -2,15 +2,11 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
     "config:recommended",
-    ":configMigration",
     ":preserveSemverRanges",
     "abandonments:recommended",
     "group:all",
     "packages:linters",
-    "schedule:weekly",
     ":dependencyDashboard",
-    ":automergeBranch",
-    ":automergeMinor",
     ":ignoreModulesAndTests",
     "docker:enableMajor",
     "preview:dockerCompose",
@@ -35,22 +31,22 @@
       "abandonmentThreshold": "2 years"
     },
     {
-      "description": "Require dashboard approval for 0.x major bumps",
-      "matchCurrentVersion": "/^0/",
-      "matchUpdateTypes": ["major"],
-      "dependencyDashboardApproval": true,
-      "automerge": false
-    },
-    {
-      "description": "Automerge linters at any time, bypassing weekly schedule",
-      "matchCategories": ["linters"],
-      "schedule": ["at any time"]
-    },
-    {
       "description": "Do not flag the maintained crates.io directories crate as abandoned because the old GitHub mirror is archived",
       "matchManagers": ["cargo"],
       "matchPackageNames": ["directories"],
       "abandonmentThreshold": null
+    },
+    {
+      "description": "Apply all eligible updates directly to the base branch without automatic pull requests",
+      "matchPackageNames": ["*"],
+      "automerge": true,
+      "automergeType": "branch",
+      "ignoreTests": true,
+      "schedule": ["at any time"],
+      "automergeSchedule": ["at any time"],
+      "minimumReleaseAge": "0 days",
+      "dependencyDashboardApproval": false,
+      "prCreation": "approval"
     }
   ],
   "customManagers": [
@@ -102,5 +98,18 @@
       "managerFilePatterns": ["**/{j,t}sconfig.json", "**/{j,t}sconfig.*.json"],
       "matchStrings": ["\"(?<depName>@tsconfig/node(?<major>\\d+))/tsconfig\\.json\""]
     }
-  ]
+  ],
+  "automergeType": "branch",
+  "schedule": ["at any time"],
+  "automergeSchedule": ["at any time"],
+  "minimumReleaseAge": "0 days",
+  "dependencyDashboardApproval": false,
+  "prCreation": "approval",
+  "configMigration": false,
+  "prConcurrentLimit": 0,
+  "prHourlyLimit": 0,
+  "branchConcurrentLimit": 0,
+  "vulnerabilityAlerts": {
+    "prCreation": "approval"
+  }
 }
