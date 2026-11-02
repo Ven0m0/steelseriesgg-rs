@@ -357,6 +357,14 @@ impl KeyMapping {
         self.total_keys = self.key_map.len();
     }
 
+    /// Remove a key mapping.
+    pub fn remove_key(&mut self, key_id: KeyId) {
+        if self.key_map.remove(&key_id).is_some() {
+            self.cached_keys.retain(|&k| k != key_id);
+        }
+        self.total_keys = self.key_map.len();
+    }
+
     /// Get the address for a specific key.
     pub fn get_key_address(&self, key_id: KeyId) -> Option<KeyAddress> {
         self.key_map.get(&key_id).copied()
@@ -430,9 +438,6 @@ impl KeyMappingDatabase {
 
         // Apex Pro (full) - Verified HID codes from SteelSeries GG
         self.add_apex_pro_full_mapping();
-
-        // Apex Pro (2024) - the full-size map above, verified on hardware; must follow it
-        self.add_apex_pro_2024_mapping();
 
         // Apex Pro TKL (original) - Verified HID codes from SteelSeries GG
         self.add_apex_pro_tkl_mapping();
@@ -709,21 +714,16 @@ impl KeyMappingDatabase {
         // SteelSeries key
         mapping.add_key(KeyId::SteelSeriesKey, KeyAddress::new(240));
 
-        self.mappings.insert(product_ids::APEX_PRO, mapping);
-    }
+        // Apex Pro (2024): the same map, confirmed by a sweep of all 106 keys of an ISO-DE board (firmware 4.16.8,
+        // 2026-11-02). Its SteelSeries key sits where Menu would and the 0x3A frame cannot address 101, so Menu
+        // is dropped; the ISO-DE board also has no LED at 49 (ANSI backslash), kept for ANSI boards.
+        let mut pro_2024 = mapping.clone();
+        pro_2024.product_id = product_ids::APEX_PRO_2024;
+        pro_2024.name = "Apex Pro (2024)".to_string();
+        pro_2024.remove_key(KeyId::Menu);
+        self.mappings.insert(product_ids::APEX_PRO_2024, pro_2024);
 
-    /// Add Apex Pro (2024) key mapping: the full-size Apex Pro map under its own product ID, so it has to run
-    /// after [`Self::add_apex_pro_full_mapping`].
-    ///
-    /// A sweep of all 106 keys of an ISO-DE board lit each one at its mapped HID usage (firmware 4.16.8,
-    /// 2026-11-02). That board has no LED at 49 (ANSI backslash) and no Menu key (101).
-    fn add_apex_pro_2024_mapping(&mut self) {
-        let Some(mut mapping) = self.mappings.get(&product_ids::APEX_PRO).cloned() else {
-            return;
-        };
-        mapping.product_id = product_ids::APEX_PRO_2024;
-        mapping.name = "Apex Pro (2024)".to_string();
-        self.mappings.insert(product_ids::APEX_PRO_2024, mapping);
+        self.mappings.insert(product_ids::APEX_PRO, mapping);
     }
 
     /// Add Apex Pro TKL (original) key mapping with verified HID codes.
@@ -803,7 +803,12 @@ mod tests {
         let apex_pro = db.get_mapping(product_ids::APEX_PRO).expect("0x1610 mapping");
         assert_eq!(apex_pro.product_id, product_ids::APEX_PRO);
         assert_eq!(apex_pro.name, "Apex Pro");
-        assert_eq!(mapping.key_map, apex_pro.key_map);
+        assert_eq!(mapping.get_key_address(KeyId::Menu), None);
+        assert!(!mapping.get_all_keys().contains(&KeyId::Menu));
+        assert_eq!(mapping.total_keys, apex_pro.total_keys - 1);
+        let mut without_menu = apex_pro.key_map.clone();
+        without_menu.remove(&KeyId::Menu);
+        assert_eq!(mapping.key_map, without_menu);
         assert_eq!(mapping.supported_hid_codes, apex_pro.supported_hid_codes);
     }
 
