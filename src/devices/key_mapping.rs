@@ -431,6 +431,9 @@ impl KeyMappingDatabase {
         // Apex Pro (full) - Verified HID codes from SteelSeries GG
         self.add_apex_pro_full_mapping();
 
+        // Apex Pro (2024) - the full-size map above, verified on hardware; must follow it
+        self.add_apex_pro_2024_mapping();
+
         // Apex Pro TKL (original) - Verified HID codes from SteelSeries GG
         self.add_apex_pro_tkl_mapping();
     }
@@ -709,6 +712,20 @@ impl KeyMappingDatabase {
         self.mappings.insert(product_ids::APEX_PRO, mapping);
     }
 
+    /// Add Apex Pro (2024) key mapping: the full-size Apex Pro map under its own product ID, so it has to run
+    /// after [`Self::add_apex_pro_full_mapping`].
+    ///
+    /// A sweep of all 106 keys of an ISO-DE board lit each one at its mapped HID usage (firmware 4.16.8,
+    /// 2026-11-02). That board has no LED at 49 (ANSI backslash) and no Menu key (101).
+    fn add_apex_pro_2024_mapping(&mut self) {
+        let Some(mut mapping) = self.mappings.get(&product_ids::APEX_PRO).cloned() else {
+            return;
+        };
+        mapping.product_id = product_ids::APEX_PRO_2024;
+        mapping.name = "Apex Pro (2024)".to_string();
+        self.mappings.insert(product_ids::APEX_PRO_2024, mapping);
+    }
+
     /// Add Apex Pro TKL (original) key mapping with verified HID codes.
     fn add_apex_pro_tkl_mapping(&mut self) {
         // Original Apex Pro TKL uses same HID codes as 2023 model
@@ -766,6 +783,28 @@ mod tests {
         // Test from_hid alias
         let addr2 = KeyAddress::from_hid(0x1E); // HID code for '1'
         assert_eq!(addr2.hid_code, 0x1E);
+    }
+
+    #[test]
+    fn apex_pro_2024_uses_the_full_size_map() {
+        let db = KeyMappingDatabase::new();
+        let mapping = db.get_mapping(product_ids::APEX_PRO_2024).expect("0x1640 mapping");
+        assert_eq!(mapping.product_id, product_ids::APEX_PRO_2024);
+        assert_eq!(mapping.name, "Apex Pro (2024)");
+        assert_eq!(mapping.layout, KeyboardLayout::FullSize);
+        for (key, usage) in [
+            (KeyId::A, 0x04),
+            (KeyId::NumLock, 0x53),
+            (KeyId::NumEnter, 0x58),
+            (KeyId::Num0, 0x62),
+        ] {
+            assert_eq!(mapping.get_key_address(key), Some(KeyAddress::new(usage)), "{key:?}");
+        }
+        let apex_pro = db.get_mapping(product_ids::APEX_PRO).expect("0x1610 mapping");
+        assert_eq!(apex_pro.product_id, product_ids::APEX_PRO);
+        assert_eq!(apex_pro.name, "Apex Pro");
+        assert_eq!(mapping.key_map, apex_pro.key_map);
+        assert_eq!(mapping.supported_hid_codes, apex_pro.supported_hid_codes);
     }
 
     #[test]
