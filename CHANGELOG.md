@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Releases and this changelog are generated automatically from
 [Conventional Commits](https://www.conventionalcommits.org/) by release-please.
 
+## [0.1.15](https://github.com/Ven0m0/steelseriesgg-rs/compare/v0.1.14...v0.1.15) (2026-11-02)
+
+
+### Added
+
+* **keyboards:** enable per-key RGB on the Apex Pro (2024) 0x1640 ([#318](https://github.com/Ven0m0/steelseriesgg-rs/issues/318)) ([fb1748f](https://github.com/Ven0m0/steelseriesgg-rs/commit/fb1748fc6704a420fb7bb6529a1b547d2d6aedde))
+
+
+### Fixed
+
+* **keyboards:** build the 0x1640 key map with the Apex Pro map and drop its unaddressable Menu key ([88bc309](https://github.com/Ven0m0/steelseriesgg-rs/commit/88bc3098176918320338527228d57466aa178b24))
+
+
+### Documentation
+
+* **plan:** mark Apex Pro 2024 0x1640 hardware test done ([#318](https://github.com/Ven0m0/steelseriesgg-rs/issues/318)) ([2d0f183](https://github.com/Ven0m0/steelseriesgg-rs/commit/2d0f18308a493b98f4cd488dd363963902075b8d))
+
 ## [0.1.14](https://github.com/Ven0m0/steelseriesgg-rs/compare/v0.1.13...v0.1.14) (2026-11-01)
 
 
