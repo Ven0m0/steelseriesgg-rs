@@ -210,8 +210,8 @@ only per `.claude/rules/experimental-protocol.md`.
 - **[HW, outside]** Apex 3 TKL `0x1622` (#173/#257): `ssgg -d rgb color FF0000`, `rgb off`, `rgb brightness 50` with the
   new no-APPLY behaviour.
 - **[HW, outside]** #283 `0x1610`, #276 (`0x1858` `ssgg mouse`, `0x22A1` `ssgg headset`, `0x0616` `rgb color`),
-  Apex 9 (`0x1634`, `0x1620`), Apex 5 / Apex 7 TKL / Apex Pro TKL / Apex Pro 2024 (`0x161C`, `0x1618`, `0x1614`,
-  `0x1640`), other Nova 7 PIDs (`0x227E` done 2026-10-25: status, sidetone, mic volume, auto-off work), other
+  Apex 9 (`0x1634`, `0x1620`), Apex 5 / Apex 7 TKL / Apex Pro TKL (`0x161C`, `0x1618`, `0x1614`; Apex Pro
+  2024 `0x1640` done 2026-11-02, #318), other Nova 7 PIDs (`0x227E` done 2026-10-25: status, sidetone, mic volume, auto-off work), other
   Modern-family mice.
 - **[HW, Linux]** `ssgg remap run` on a real keyboard, including the escape chord and unplug behaviour.
 
