@@ -532,16 +532,38 @@ fn cli_allowed(args: &[String]) -> bool {
     }
 }
 
-/// The `ssgg` binary: the sibling of `ssgg-gui` in the desktop app.
+/// The CLI file stem that ships beside a GUI stem in the release assets: `ssgg-gui-windows-x86_64-v3` pairs with
+/// `ssgg-windows-x86_64-v3`. A bare `ssgg-gui` has no suffix to carry over.
+fn release_cli_stem(gui_stem: &str) -> Option<String> {
+    let rest = gui_stem.strip_prefix("ssgg-gui")?;
+    (!rest.is_empty()).then(|| format!("ssgg{rest}"))
+}
+
+/// The `ssgg` binary. Tried in order: this process, the sibling of `ssgg-gui` under its release name (the
+/// Windows download is not renamed) or as plain `ssgg`, then `PATH` (the README tells users to move a renamed
+/// `ssgg.exe` there).
 fn ssgg_exe() -> Option<PathBuf> {
     let me = std::env::current_exe().ok()?;
-    if me.file_stem()? == "ssgg" {
+    let stem = me.file_stem()?.to_str();
+    if stem == Some("ssgg") {
         return Some(me);
     }
-    let sibling = me
-        .with_file_name("ssgg")
-        .with_extension(std::env::consts::EXE_EXTENSION);
-    sibling.is_file().then_some(sibling)
+    let with_ext = |name: &str| {
+        let mut path = me.with_file_name(name);
+        path.set_extension(std::env::consts::EXE_EXTENSION);
+        path
+    };
+    let release = stem.and_then(release_cli_stem).map(|s| with_ext(&s));
+    let plain = with_ext("ssgg");
+    let on_path = std::env::var_os("PATH")
+        .into_iter()
+        .flat_map(|paths| std::env::split_paths(&paths).collect::<Vec<_>>())
+        .map(|dir| dir.join(plain.file_name().unwrap_or_default()));
+    release
+        .into_iter()
+        .chain(std::iter::once(plain.clone()))
+        .chain(on_path)
+        .find(|candidate| candidate.is_file())
 }
 
 fn drain(pipe: impl std::io::Read + Send + 'static) -> std::thread::JoinHandle<String> {
@@ -626,6 +648,20 @@ mod tests {
             assert!(!cli_allowed(&args(&[blocked])), "{blocked}");
         }
         assert!(!cli_allowed(&[]));
+    }
+
+    #[test]
+    fn the_release_gui_name_maps_to_the_release_cli_name() {
+        assert_eq!(
+            release_cli_stem("ssgg-gui-windows-x86_64-v3").as_deref(),
+            Some("ssgg-windows-x86_64-v3")
+        );
+        assert_eq!(
+            release_cli_stem("ssgg-gui-windows-x86_64").as_deref(),
+            Some("ssgg-windows-x86_64")
+        );
+        assert_eq!(release_cli_stem("ssgg-gui"), None);
+        assert_eq!(release_cli_stem("other"), None);
     }
 
     use axum::http::HeaderValue;

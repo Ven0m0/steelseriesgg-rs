@@ -1,1 +1,1 @@
-check out and implement "https://github.com/FreyTobias/steelseriesgg-rs"
+- [ ] find out what the cause of the problem in issue #317 is "https://github.com/Ven0m0/steelseriesgg-rs/issues/317" and fix it

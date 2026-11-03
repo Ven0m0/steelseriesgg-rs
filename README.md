@@ -178,6 +178,10 @@ Rename-Item .\ssgg-windows-x86_64.exe ssgg.exe
 
 Move `ssgg.exe` to a folder on your `PATH` to run it from anywhere.
 
+`ssgg-gui-windows-x86_64.exe` is the windowed editor. Its device panel runs the `ssgg` CLI found next to it
+(under the release name or as `ssgg.exe`) or on your `PATH`, so keep the two downloads together or put `ssgg.exe`
+on `PATH`.
+
 **Build from source**: install [rustup](https://rustup.rs) and the Visual Studio Build Tools with the
 "Desktop development with C++" workload (the `x86_64-pc-windows-msvc` target needs the MSVC linker), then:
 
