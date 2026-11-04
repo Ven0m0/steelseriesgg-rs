@@ -31,6 +31,12 @@
       "abandonmentThreshold": "2 years"
     },
     {
+      "description": "oxc must match the version minify-html depends on (one copy in the build, and every 0.x minor breaks the build.rs API); raise this cap together with minify-html",
+      "matchManagers": ["cargo"],
+      "matchPackageNames": ["oxc_*"],
+      "allowedVersions": "<0.96"
+    },
+    {
       "description": "Do not flag the maintained crates.io directories crate as abandoned because the old GitHub mirror is archived",
       "matchManagers": ["cargo"],
       "matchPackageNames": ["directories"],
