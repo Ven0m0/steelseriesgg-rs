@@ -37,15 +37,16 @@ use crate::devices::{DeviceManager, DeviceType};
 use crate::rgb::Color;
 use crate::{Error, Result};
 
-const INDEX_HTML: &str = include_str!("../tools/profile-gui/index.html");
-const APP_JS: &str = include_str!("../tools/profile-gui/app.js");
-const LIVE_JS: &str = include_str!("../tools/profile-gui/live.js");
-const MAIN_JS: &str = include_str!("../tools/profile-gui/main.js");
-const PRODUCTS_JS: &str = include_str!("../tools/profile-gui/products.generated.js");
-const STYLE_CSS: &str = include_str!("../tools/profile-gui/style.css");
+// `build.rs` copies these from `tools/profile-gui`, minified under the `desktop` feature.
+const INDEX_HTML: &str = include_str!(concat!(env!("OUT_DIR"), "/index.html"));
+const APP_JS: &str = include_str!(concat!(env!("OUT_DIR"), "/app.js"));
+const LIVE_JS: &str = include_str!(concat!(env!("OUT_DIR"), "/live.js"));
+const MAIN_JS: &str = include_str!(concat!(env!("OUT_DIR"), "/main.js"));
+const PRODUCTS_JS: &str = include_str!(concat!(env!("OUT_DIR"), "/products.generated.js"));
+const STYLE_CSS: &str = include_str!(concat!(env!("OUT_DIR"), "/style.css"));
 
-const CONTROL_JS: &str = include_str!("../tools/profile-gui/control.js");
-const HEADSET_JS: &str = include_str!("../tools/profile-gui/headset.js");
+const CONTROL_JS: &str = include_str!(concat!(env!("OUT_DIR"), "/control.js"));
+const HEADSET_JS: &str = include_str!(concat!(env!("OUT_DIR"), "/headset.js"));
 
 /// Subcommands the control panel may run. Left out because they never return or reopen this server:
 /// `gui`, `server`, `daemon`, `status`, `hid-logs`, `fuzz`; `remap` is allowed for `list` only (`run` grabs the keyboard).
@@ -700,6 +701,22 @@ mod tests {
             !same_origin(&headers(&[("host", "127.0.0.1:8765"), ("origin", "null")]), 8765),
             "file:// page"
         );
+    }
+
+    #[test]
+    fn embedded_index_keeps_the_token_slot_and_every_asset() {
+        assert_eq!(INDEX_HTML.matches("</head>").count(), 1);
+        for asset in [
+            "style.css",
+            "products.generated.js",
+            "app.js",
+            "main.js",
+            "live.js",
+            "control.js",
+            "headset.js",
+        ] {
+            assert!(INDEX_HTML.contains(asset), "{asset}");
+        }
     }
 
     #[test]

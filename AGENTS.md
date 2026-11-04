@@ -86,7 +86,7 @@ this is expected, CI builds and lints `audio` on Linux only.
 | `audio` | AudioMixer, PulseAudio/PipeWire backend | `libpulse-dev` |
 | `sonar` | SonarClient HTTP integration | — (reqwest already in tree) |
 | `remap` | `ssgg remap run`: evdev key remapper (Linux only) | `evdev` (Linux target), `rustix/event` |
-| `desktop` | `ssgg-gui`: native window around the profile editor | `wry`, `tao`; Linux needs `libwebkit2gtk-4.1-dev`, `libgtk-3-dev` |
+| `desktop` | `ssgg-gui`: native window around the profile editor (`build.rs` minifies its HTML/CSS/JS) | `wry`, `tao`; build-deps `minify-html`, `oxc_*`, `lightningcss`; Linux needs `libwebkit2gtk-4.1-dev`, `libgtk-3-dev` |
 
 `audio`, `sonar`, `remap` and `desktop` are independent; do not couple them. Experimental protocol paths are not feature-gated; they carry
 `[EXPERIMENTAL]` labels instead (see `.claude/rules/experimental-protocol.md`).

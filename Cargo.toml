@@ -40,7 +40,17 @@ sonar = ["dep:reqwest"]
 # Linux-only evdev key remapper (grab + uinput); independent of audio and sonar
 remap = ["dep:evdev", "rustix/event"]
 # Native window around the profile editor (`ssgg-gui`): WebView2 on Windows, WebKitGTK (Wayland via GTK) on Linux
-desktop = ["dep:wry", "dep:tao"]
+desktop = [
+    "dep:wry",
+    "dep:tao",
+    "dep:minify-html",
+    "dep:lightningcss",
+    "dep:oxc_allocator",
+    "dep:oxc_codegen",
+    "dep:oxc_minifier",
+    "dep:oxc_parser",
+    "dep:oxc_span",
+]
 
 [dependencies]
 anyhow = "1.0.104"
@@ -113,6 +123,17 @@ windows-sys = { version = "0.61", features = [
 
 [dev-dependencies]
 tempfile = "3.27.0"
+
+# build.rs minifies the profile editor that `ssgg-gui` embeds. Versions follow minify-html's own oxc and
+# lightningcss requirements so the build pulls one copy of each.
+[build-dependencies]
+lightningcss = { version = "1.0.0-alpha.68", optional = true }
+minify-html = { version = "0.18.1", optional = true }
+oxc_allocator = { version = "0.95", optional = true }
+oxc_codegen = { version = "0.95", optional = true }
+oxc_minifier = { version = "0.95", optional = true }
+oxc_parser = { version = "0.95", optional = true }
+oxc_span = { version = "0.95", optional = true }
 
 [profile.release]
 strip = true           # Remove debug symbols
