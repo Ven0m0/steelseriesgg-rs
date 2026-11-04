@@ -31,10 +31,10 @@
       "abandonmentThreshold": "2 years"
     },
     {
-      "description": "oxc must match the version minify-html depends on (one copy in the build, and every 0.x minor breaks the build.rs API); raise this cap together with minify-html",
+      "description": "The build.rs minifiers are locked: oxc and lightningcss must match minify-html's own versions (one copy each), and every oxc 0.x minor breaks the build.rs API. Bump them together by hand",
       "matchManagers": ["cargo"],
-      "matchPackageNames": ["oxc_*"],
-      "allowedVersions": "<0.96"
+      "matchPackageNames": ["oxc_*", "minify-html", "lightningcss"],
+      "enabled": false
     },
     {
       "description": "Do not flag the maintained crates.io directories crate as abandoned because the old GitHub mirror is archived",
