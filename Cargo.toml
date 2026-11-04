@@ -129,11 +129,11 @@ tempfile = "3.27.0"
 [build-dependencies]
 lightningcss = { version = "1.0.0-alpha.68", optional = true }
 minify-html = { version = "0.18.1", optional = true }
-oxc_allocator = { version = "0.95", optional = true }
-oxc_codegen = { version = "0.95", optional = true }
-oxc_minifier = { version = "0.95", optional = true }
-oxc_parser = { version = "0.95", optional = true }
-oxc_span = { version = "0.95", optional = true }
+oxc_allocator = { version = "0.157", optional = true }
+oxc_codegen = { version = "0.157", optional = true }
+oxc_minifier = { version = "0.157", optional = true }
+oxc_parser = { version = "0.157", optional = true }
+oxc_span = { version = "0.157", optional = true }
 
 [profile.release]
 strip = true           # Remove debug symbols
