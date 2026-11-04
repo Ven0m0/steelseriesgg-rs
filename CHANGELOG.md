@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Releases and this changelog are generated automatically from
 [Conventional Commits](https://www.conventionalcommits.org/) by release-please.
 
+## [0.1.17](https://github.com/Ven0m0/steelseriesgg-rs/compare/v0.1.16...v0.1.17) (2026-11-04)
+
+
+### Fixed
+
+* **deps:** pin oxc to 0.95 to match minify-html and fix release build ([7ae1c46](https://github.com/Ven0m0/steelseriesgg-rs/commit/7ae1c4654767123e4980f1ace71292d8afae500f))
+
 ## [0.1.16](https://github.com/Ven0m0/steelseriesgg-rs/compare/v0.1.15...v0.1.16) (2026-11-04)
 
 
