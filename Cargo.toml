@@ -132,7 +132,7 @@ minify-html = { version = "0.18.1", optional = true }
 oxc_allocator = { version = "0.95", optional = true }
 oxc_codegen = { version = "0.95", optional = true }
 oxc_minifier = { version = "0.95", optional = true }
-oxc_parser = { version = "0.95", optional = true }
+oxc_parser = { version = "0.156", optional = true }
 oxc_span = { version = "0.95", optional = true }
 
 [profile.release]
