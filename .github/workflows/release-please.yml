@@ -118,9 +118,16 @@ jobs:
         run: |
           rm -f ssgg-debug-*.pkg.tar.zst
           mv ssgg-[0-9]*-x86_64.pkg.tar.zst "ssgg-linux-x86_64${{ matrix.suffix }}.pkg.tar.zst"
+      - name: Extract standalone binaries
+        # Same names as the Windows assets so ssgg-gui finds its sibling CLI (see release_cli_stem in src/gui.rs).
+        # They link the Arch libwebkit2gtk-4.1 / gtk3 the package depends on.
+        run: |
+          bsdtar -xf "ssgg-linux-x86_64${{ matrix.suffix }}.pkg.tar.zst" usr/bin/ssgg usr/bin/ssgg-gui
+          mv usr/bin/ssgg "ssgg-linux-x86_64${{ matrix.suffix }}"
+          mv usr/bin/ssgg-gui "ssgg-gui-linux-x86_64${{ matrix.suffix }}"
       - name: Compute SHA-256
         run: |
-          sha256sum "ssgg-linux-x86_64${{ matrix.suffix }}.pkg.tar.zst" > "sha256sums-linux${{ matrix.suffix }}.txt"
+          sha256sum "ssgg-linux-x86_64${{ matrix.suffix }}.pkg.tar.zst" "ssgg-linux-x86_64${{ matrix.suffix }}" "ssgg-gui-linux-x86_64${{ matrix.suffix }}" > "sha256sums-linux${{ matrix.suffix }}.txt"
           cat "sha256sums-linux${{ matrix.suffix }}.txt"
       - name: Upload to release
         env:
@@ -128,6 +135,8 @@ jobs:
         run: |
           gh release upload "${{ needs.create-tag.outputs.tag_name || needs.release-please.outputs.tag_name }}" \
             "ssgg-linux-x86_64${{ matrix.suffix }}.pkg.tar.zst" \
+            "ssgg-linux-x86_64${{ matrix.suffix }}" \
+            "ssgg-gui-linux-x86_64${{ matrix.suffix }}" \
             "sha256sums-linux${{ matrix.suffix }}.txt" \
             --clobber
 
