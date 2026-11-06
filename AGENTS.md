@@ -162,7 +162,7 @@ Gotchas:
   (`SteelSeriesGG.exe` alone exits with code 2).
 - Never launch GUI capture prompters with `-WindowStyle Hidden`; it hides the form.
 - `ctx_execute_file` refuses paths outside the project; run analysis scripts with `python -I <script> <args>`.
-- Capture artifacts live outside the repo in `C:\Users\Ven0m0\gg-capture-artifacts\`: `blobs.bin` / `blobs3.bin`
+- Capture artifacts live outside the repo in `%USERPROFILE%\gg-capture-artifacts\`: `blobs.bin` / `blobs3.bin`
   (12,500-byte profile blobs, 8 distinct) and `profile_crc_check.py <blob files>`. The original pcaps are gone.
 
 ---

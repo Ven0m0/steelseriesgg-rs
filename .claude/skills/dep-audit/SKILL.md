@@ -1,7 +1,7 @@
 ---
 name: dep-audit
 description: Audit Cargo.toml/Cargo.lock for vulnerable, duplicated, or unjustified dependencies. Use when adding a dependency, before a release, or when asked to check for supply-chain issues or outdated crates.
-allowed-tools: Read Grep Glob Bash
+allowed-tools: Read Grep Glob Bash(cargo *) Bash(git diff *) Bash(rg *)
 ---
 
 Run a dependency supply-chain check for steelseriesgg-rs. Report findings, do not fix anything unless asked.

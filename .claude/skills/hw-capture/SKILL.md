@@ -12,7 +12,7 @@ Collect wire evidence of what GG does. Observe only: never modify GG, its files,
 
 1. Say which question the capture answers. Pick one method below; do not run all three.
 2. Keyboard captures record every key press. Tell the user not to type passwords or private text.
-3. Output goes outside the repo (`C:\Users\Ven0m0\gg-capture-artifacts\`), never into `src/` or `docs/`.
+3. Output goes outside the repo (`%USERPROFILE%\gg-capture-artifacts\`), never into `src/` or `docs/`.
 
 ## A. Wire capture (USBPcap + tshark)
 
