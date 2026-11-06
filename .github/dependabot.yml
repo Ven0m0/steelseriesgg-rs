@@ -109,6 +109,11 @@ updates:
       - dependencies
       - rust
     open-pull-requests-limit: 10
+    # build.rs minifiers are locked by hand, see renovate.json
+    ignore:
+      - dependency-name: "oxc_*"
+      - dependency-name: "minify-html"
+      - dependency-name: "lightningcss"
     groups:
       cargo-all:
         patterns: ["*"]

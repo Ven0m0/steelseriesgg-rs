@@ -1,1 +1,1 @@
-- [ ] find out what the cause of the problem in issue #317 is "https://github.com/Ven0m0/steelseriesgg-rs/issues/317" and fix it
+- [x] find out what the cause of the problem in issue #317 is "https://github.com/Ven0m0/steelseriesgg-rs/issues/317" and fix it (cause: Renovate pushed the breaking sysinfo 0.40 bump to main without CI; code fixed in 8208f6d, Renovate now gated on CI)
