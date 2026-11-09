@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Releases and this changelog are generated automatically from
 [Conventional Commits](https://www.conventionalcommits.org/) by release-please.
 
+## [0.1.18](https://github.com/Ven0m0/steelseriesgg-rs/compare/v0.1.17...v0.1.18) (2026-11-09)
+
+
+### Changed
+
+* bump toml from 1.1.8+spec-1.1.0 to 1.2.0+spec-1.1.0 in the cargo-all group ([#328](https://github.com/Ven0m0/steelseriesgg-rs/issues/328)) ([026622f](https://github.com/Ven0m0/steelseriesgg-rs/commit/026622ffff6f6446917c093742f4995dcebef9e2))
+
 ## [0.1.17](https://github.com/Ven0m0/steelseriesgg-rs/compare/v0.1.16...v0.1.17) (2026-11-04)
 
 
