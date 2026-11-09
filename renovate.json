@@ -30,7 +30,7 @@
       "abandonmentThreshold": "2 years"
     },
     {
-      "description": "The build.rs minifiers are locked: oxc and lightningcss must match minify-html's own versions (one copy each), and every oxc 0.x minor breaks the build.rs API. Bump them together by hand",
+      "description": "The build.rs minifiers are bumped by hand: lightningcss matches minify-html's version (one copy), oxc is ahead of minify-html's own oxc 0.95 on purpose, and every oxc 0.x minor breaks the build.rs API",
       "matchManagers": ["cargo"],
       "matchPackageNames": ["oxc_*", "minify-html", "lightningcss"],
       "enabled": false

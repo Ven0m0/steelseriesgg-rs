@@ -60,3 +60,6 @@ handoff.md
 # Device dumps (profile blobs, captures); keep them outside the repo
 *.bin
 !tools/profile-gui/examples/*.bin
+
+# headroom local state
+.headroom/

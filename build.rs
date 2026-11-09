@@ -55,13 +55,14 @@ fn minify_js(source: &str) -> Result<String, String> {
     // Classic `<script defer>` files share one global scope, so they parse as scripts: top-level names stay
     // as written (`MangleOptions::top_level` is off) and other files can still call them.
     let parsed = Parser::new(&allocator, source, SourceType::cjs()).parse();
-    if let Some(error) = parsed.errors.first() {
+    if let Some(error) = parsed.diagnostics.first() {
         return Err(error.to_string());
     }
     let mut program = parsed.program;
     let minified = Minifier::new(MinifierOptions {
         mangle: Some(MangleOptions::default()),
         compress: Some(CompressOptions::safest()),
+        mangle_properties: None,
     })
     .minify(&allocator, &mut program);
     Ok(Codegen::new()
