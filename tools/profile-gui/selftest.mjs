@@ -23,11 +23,14 @@ import { installFakeDom, loadApp } from './fake-dom.mjs';
 // before app.js, so the suite does the same before it loads app.js. vm.runInThisContext runs the file
 // text as a classic script without an eval'd string (no dynamic-code call site for a scanner to flag).
 const sync = await import('./sync-products.mjs');
+// SSGG_GUI_DIR points the two scripts at the minified copies build.rs writes under the `desktop` feature, so CI
+// runs this whole suite against what `ssgg-gui` ships. Everything else (style, examples, Rust tables) stays on the sources.
+const JS_DIR = process.env.SSGG_GUI_DIR ?? import.meta.dirname;
 const productSrc = readFileSync(`${import.meta.dirname}/products.generated.js`, 'utf8');
-vm.runInThisContext(productSrc, { filename: `${import.meta.dirname}/products.generated.js` });
+vm.runInThisContext(readFileSync(`${JS_DIR}/products.generated.js`, 'utf8'), { filename: `${JS_DIR}/products.generated.js` });
 
 installFakeDom();
-const app = loadApp(import.meta.dirname);
+const app = loadApp(JS_DIR);
 const EX = `${import.meta.dirname}/examples`;
 const style = readFileSync(`${import.meta.dirname}/style.css`, 'utf8');
 
@@ -348,7 +351,7 @@ ok('every model Rust names is imported with that name', () => {
 ok('without the import the page says the registry was not imported', () => {
   const saved = globalThis.SsggProducts;
   delete globalThis.SsggProducts;
-  const bare = loadApp(import.meta.dirname);
+  const bare = loadApp(JS_DIR);
   const line = bare.deviceFeatures(0x1612).join(' | ');
   globalThis.SsggProducts = saved;
   return bare.PRODUCTS === null && /device registry: not imported/.test(line)
@@ -1936,6 +1939,13 @@ ok('index.html loads headset.js after live.js, with the tab bar and the headset 
     && /id="viewTabs"[^>]*hidden/.test(html) && /id="headsetView"[^>]*hidden/.test(html)
     && /id="keyboardView"/.test(html) && /\.headset-view\[hidden\]/.test(style);
 });
+
+if (process.env.SSGG_GUI_DIR) {
+  // A copy that is not smaller means the minifier did not run, and the run above proved nothing about it.
+  const original = readFileSync(`${import.meta.dirname}/app.js`, 'utf8').length;
+  ok('SSGG_GUI_DIR holds a minified app.js, not a copy of the source', () => app.source.length < original * 0.8,
+    () => [app.source.length, original]);
+}
 
 await Promise.all(pending);
 

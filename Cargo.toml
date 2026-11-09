@@ -124,16 +124,19 @@ windows-sys = { version = "0.61", features = [
 [dev-dependencies]
 tempfile = "3.27.0"
 
-# build.rs minifies the profile editor that `ssgg-gui` embeds. lightningcss matches minify-html's version so the
-# build pulls one copy. oxc is newer than the oxc 0.95 that minify-html pins, so desktop builds compile two oxc copies.
+# build.rs minifies the profile editor that `ssgg-gui` embeds. Exact pins: every oxc 0.x minor and lightningcss
+# alpha breaks the build.rs API, and `=` keeps `cargo update` / `cargo upgrade` / lock-file maintenance off them.
+# lightningcss matches minify-html's version (one copy); oxc is ahead of minify-html's own oxc 0.95 on purpose,
+# so desktop builds compile two oxc copies. Renovate bumps them together in one PR that never automerges
+# (renovate.json); fix build.rs on that PR until the CI desktop build is green.
 [build-dependencies]
-lightningcss = { version = "1.0.0-alpha.68", optional = true }
-minify-html = { version = "0.18.1", optional = true }
-oxc_allocator = { version = "0.157", optional = true }
-oxc_codegen = { version = "0.157", optional = true }
-oxc_minifier = { version = "0.157", optional = true }
-oxc_parser = { version = "0.157", optional = true }
-oxc_span = { version = "0.157", optional = true }
+lightningcss = { version = "=1.0.0-alpha.72", optional = true }
+minify-html = { version = "=0.18.1", optional = true }
+oxc_allocator = { version = "=0.157.0", optional = true }
+oxc_codegen = { version = "=0.157.0", optional = true }
+oxc_minifier = { version = "=0.157.0", optional = true }
+oxc_parser = { version = "=0.157.0", optional = true }
+oxc_span = { version = "=0.157.0", optional = true }
 
 [profile.release]
 strip = true           # Remove debug symbols

@@ -109,7 +109,7 @@ updates:
       - dependencies
       - rust
     open-pull-requests-limit: 10
-    # build.rs minifiers are locked by hand, see renovate.json
+    # build.rs minifiers move together in one Renovate PR, see renovate.json
     ignore:
       - dependency-name: "oxc_*"
       - dependency-name: "minify-html"

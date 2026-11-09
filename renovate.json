@@ -30,12 +30,6 @@
       "abandonmentThreshold": "2 years"
     },
     {
-      "description": "The build.rs minifiers are bumped by hand: lightningcss matches minify-html's version (one copy), oxc is ahead of minify-html's own oxc 0.95 on purpose, and every oxc 0.x minor breaks the build.rs API",
-      "matchManagers": ["cargo"],
-      "matchPackageNames": ["oxc_*", "minify-html", "lightningcss"],
-      "enabled": false
-    },
-    {
       "description": "Do not flag the maintained crates.io directories crate as abandoned because the old GitHub mirror is archived",
       "matchManagers": ["cargo"],
       "matchPackageNames": ["directories"],
@@ -73,6 +67,15 @@
       "dependencyDashboardApproval": false,
       "recreateWhen": "always",
       "pruneBranchAfterAutomerge": true
+    },
+    {
+      "description": "The build.rs minifiers are exact-pinned in Cargo.toml and move together in one PR that never automerges: every oxc 0.x minor and lightningcss alpha can break the build.rs API, so a red desktop build in CI stops the bump and the build.rs fix is pushed onto that PR. Keep this rule last, the catch-all automerge rule above would override it otherwise",
+      "matchManagers": ["cargo"],
+      "matchPackageNames": ["oxc_*", "minify-html", "lightningcss"],
+      "groupName": "build.rs minifiers",
+      "automerge": false,
+      "prCreation": "immediate",
+      "dependencyDashboardApproval": false
     }
   ],
   "customManagers": [
