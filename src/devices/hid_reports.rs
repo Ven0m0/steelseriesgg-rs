@@ -911,8 +911,20 @@ pub enum Apex2022DisplayCommand<'a> {
     ClearDirect,
     /// `00 1F 81 <640 bytes>`, feature report (GG `oled_direct_write`). The pixel packing is not in the spec.
     Oled(&'a [u8; 640]),
+    /// `00 38 83 00 <640 bytes>`, feature report: the on-board OLED image. This is the frame GG sends when the
+    /// OLED image is changed in its UI (USBPcap, `0x1628`, firmware 1.19.7, 2026-11-10: `1F 82` first, then this,
+    /// then an on-board profile rewrite); the 640 bytes GG sent render as a 128x40 picture row-major, 16 bytes per
+    /// row, MSB = leftmost pixel. Wire byte `0x38` is [`CommandCode::AnalogKeys`]. Not yet replayed from `ssgg`.
+    OnboardImage(&'a [u8; 640]),
     /// `00 1F 82`, output report (GG `oled_reset_direct_write`): hand the OLED back to the firmware.
     OledReset,
+}
+
+impl Apex2022DisplayCommand<'_> {
+    /// Whether the frame is a feature report (`true`) or an output report.
+    pub fn is_feature(&self) -> bool {
+        matches!(self, Self::Oled(_) | Self::OnboardImage(_))
+    }
 }
 
 impl HidCommand for Apex2022DisplayCommand<'_> {
@@ -920,12 +932,13 @@ impl HidCommand for Apex2022DisplayCommand<'_> {
         match self {
             Self::ClearDirect => CommandCode::Apex2023DirectClear,
             Self::Oled(_) | Self::OledReset => CommandCode::Apex2023Oled,
+            Self::OnboardImage(_) => CommandCode::AnalogKeys,
         }
     }
 
     fn serialize(&self, buffer: &mut [u8], _device_type: HidDeviceType) -> Result<usize> {
         let len = match self {
-            Self::Oled(_) => PROFILE_CHUNK_REPORT_SIZE,
+            Self::Oled(_) | Self::OnboardImage(_) => PROFILE_CHUNK_REPORT_SIZE,
             Self::ClearDirect | Self::OledReset => KEYBOARD_REPORT_SIZE,
         };
         check_report_buffer(buffer, len)?;
@@ -939,6 +952,10 @@ impl HidCommand for Apex2022DisplayCommand<'_> {
                 report[3..3 + bitmap.len()].copy_from_slice(&bitmap[..]);
             }
             Self::OledReset => report[2] = 0x82,
+            Self::OnboardImage(bitmap) => {
+                report[2] = 0x83;
+                report[4..4 + bitmap.len()].copy_from_slice(&bitmap[..]);
+            }
         }
         Ok(len)
     }
@@ -952,6 +969,7 @@ impl HidCommand for Apex2022DisplayCommand<'_> {
             Self::ClearDirect => "Leave direct-mode lighting".to_string(),
             Self::Oled(_) => "OLED direct write, 640 bytes".to_string(),
             Self::OledReset => "OLED reset to firmware".to_string(),
+            Self::OnboardImage(_) => "OLED on-board image, 640 bytes".to_string(),
         }
     }
 }
@@ -4478,6 +4496,14 @@ mod tests {
         assert_eq!(&oled[..4], &[0x00, 0x1F, 0x81, 0xAB]);
         assert_eq!(oled[642], 0xCD);
         assert!(oled[643..].iter().all(|&b| b == 0));
+        // GG's captured on-board image frame (2026-11-10): `38 83 00` then the 640 bytes, 644 wire bytes.
+        let onboard = keyboard_report(Apex2022DisplayCommand::OnboardImage(&bitmap));
+        assert_eq!(onboard.len(), 645);
+        assert_eq!(&onboard[..5], &[0x00, 0x38, 0x83, 0x00, 0xAB]);
+        assert_eq!(onboard[643], 0xCD);
+        assert_eq!(onboard[644], 0);
+        assert!(Apex2022DisplayCommand::OnboardImage(&bitmap).is_feature());
+        assert!(!Apex2022DisplayCommand::OledReset.is_feature());
     }
 
     // Vectors from GG's `apex_3` spec: `set_led_colors` and `global_brightness`, 33-byte output reports.

@@ -182,9 +182,11 @@ pub(crate) async fn cmd_oled(manager: &DeviceManager, action: OledAction) -> Res
         }
         OledAction::Reset { .. } => None,
     };
-    let command = bitmap
-        .as_ref()
-        .map_or(Apex2022DisplayCommand::OledReset, Apex2022DisplayCommand::Oled);
+    let command = match (&bitmap, &action) {
+        (Some(frame), OledAction::Show { onboard: true, .. }) => Apex2022DisplayCommand::OnboardImage(frame),
+        (Some(frame), _) => Apex2022DisplayCommand::Oled(frame),
+        (None, _) => Apex2022DisplayCommand::OledReset,
+    };
     let (OledAction::Show { dry_run, .. } | OledAction::TestPattern { dry_run, .. } | OledAction::Reset { dry_run }) =
         action;
 

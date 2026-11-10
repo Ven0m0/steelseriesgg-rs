@@ -1,7 +1,8 @@
 //! `[EXPERIMENTAL]` Apex Pro TKL 2023 (`0x1628`) 128x40 monochrome OLED frames: file parsing and pixel packing
-//! for [`Apex2022DisplayCommand::Oled`](crate::devices::hid_reports::Apex2022DisplayCommand::Oled). How the board
-//! maps the 640 bytes onto pixels is not in GG's device spec; both [`OledPacking`] layouts are guesses, untested
-//! on hardware.
+//! for [`Apex2022DisplayCommand::Oled`](crate::devices::hid_reports::Apex2022DisplayCommand::Oled) and
+//! [`OnboardImage`](crate::devices::hid_reports::Apex2022DisplayCommand::OnboardImage). The spec does not say
+//! how the board maps the 640 bytes onto pixels; the image GG sent on 2026-11-10 (USBPcap, `0x1628`) renders as
+//! a picture only as [`OledPacking::Row`], so that is the default. Neither layout is replayed from `ssgg` yet.
 
 use crate::{Error, Result};
 
@@ -10,7 +11,7 @@ pub const OLED_HEIGHT: usize = 40;
 /// One bit per pixel.
 pub const OLED_FRAME_LEN: usize = OLED_WIDTH * OLED_HEIGHT / 8;
 
-/// `[EXPERIMENTAL]` Byte layout of an OLED frame, untested on hardware.
+/// `[EXPERIMENTAL]` Byte layout of an OLED frame; `Row` matches GG's captured image, nothing is replayed yet.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum OledPacking {
     /// SSD1306 pages: byte `page * 128 + column`, bit `n` = pixel row `page * 8 + n` (LSB = top pixel of the page).

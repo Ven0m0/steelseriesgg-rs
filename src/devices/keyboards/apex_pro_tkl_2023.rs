@@ -756,7 +756,7 @@ impl ApexProTkl2023 {
         self.require_wired_2023("this display command")?;
         let mut buf = vec![0u8; PROFILE_CHUNK_REPORT_SIZE];
         let size = HidReportBuilder::new(HidDeviceType::Keyboard).build_report(command, &mut buf)?;
-        self.send_report(&buf[..size], matches!(command, Apex2022DisplayCommand::Oled(_)))
+        self.send_report(&buf[..size], command.is_feature())
     }
 
     /// Read one on-board profile slot (0-4) with the spec's `83 01` chunk read. Read only: nothing here writes
