@@ -157,6 +157,28 @@ pub enum CommandCode {
     /// [EXPERIMENTAL] OLED direct write / reset (`00 1F 81|82`), see [`Apex2022DisplayCommand`]. From GG's
     /// decrypted device spec, never sent from `ssgg` on hardware.
     Apex2023Oled = 0x1F,
+    /// [EXPERIMENTAL] Live key-binding write of the 2022-firmware Apex boards (`00 36 <layer> <count> ...`), see
+    /// [`KeyMappingCommand`]. From GG's decrypted device spec, never sent from `ssgg` on hardware.
+    KeyMappingWrite = 0x36,
+    /// [EXPERIMENTAL] Key-binding read request (`00 B6 <layer> <count> ...`), see [`KeyMappingReadCommand`]. From
+    /// GG's decrypted device spec, never sent from `ssgg` on hardware.
+    KeyMappingRead = 0xB6,
+    /// [EXPERIMENTAL] SteelSeries (meta) key assignment (`00 35 <hid>`), see [`MetaToggleCommand`]. From GG's
+    /// decrypted device spec, never sent from `ssgg` on hardware.
+    MetaToggle = 0x35,
+    /// [EXPERIMENTAL] On-board macro data read, see [`MacroReadCommand`]. A tag, never a wire byte: the wire
+    /// opcode is 0xB7, which already belongs to [`CommandCode::HeadsetProBattery`]. From GG's decrypted device
+    /// spec, never sent from `ssgg` on hardware.
+    MacroRead = 0xFA,
+    /// [EXPERIMENTAL] Physical layout query, see [`DeviceQueryCommand::Layout`]. A tag, never a wire byte: the
+    /// wire opcode is 0xF2, already the tag of [`CommandCode::MouseDpi`]. From GG's decrypted device spec.
+    DeviceLayout = 0xFB,
+    /// [EXPERIMENTAL] Region query, see [`DeviceQueryCommand::Region`]. A tag, never a wire byte: the wire
+    /// opcode is 0xF5, already the tag of [`CommandCode::Apex3Lighting`]. From GG's decrypted device spec.
+    DeviceRegion = 0xFC,
+    /// [EXPERIMENTAL] Region write (`00 75 <region>`), see [`RegionWriteCommand`]. Writes flash. From GG's
+    /// decrypted device spec, never sent from `ssgg` on hardware.
+    RegionWrite = 0x75,
 }
 
 impl fmt::Display for CommandCode {
@@ -200,6 +222,13 @@ impl fmt::Display for CommandCode {
             CommandCode::Gen3ProfileRead => write!(f, "GEN3_PROFILE_READ"),
             CommandCode::Apex2023DirectClear => write!(f, "APEX2023_DIRECT_CLEAR"),
             CommandCode::Apex2023Oled => write!(f, "APEX2023_OLED_EXPERIMENTAL"),
+            CommandCode::KeyMappingWrite => write!(f, "KEY_MAPPING_WRITE_EXPERIMENTAL"),
+            CommandCode::KeyMappingRead => write!(f, "KEY_MAPPING_READ_EXPERIMENTAL"),
+            CommandCode::MetaToggle => write!(f, "META_TOGGLE_EXPERIMENTAL"),
+            CommandCode::MacroRead => write!(f, "MACRO_READ_EXPERIMENTAL"),
+            CommandCode::DeviceLayout => write!(f, "DEVICE_LAYOUT_EXPERIMENTAL"),
+            CommandCode::DeviceRegion => write!(f, "DEVICE_REGION_EXPERIMENTAL"),
+            CommandCode::RegionWrite => write!(f, "REGION_WRITE_EXPERIMENTAL"),
         }
     }
 }
@@ -241,6 +270,10 @@ impl CommandCode {
             0x38 => Some(CommandCode::AnalogKeys),
             0x41 => Some(CommandCode::Apex2023DirectClear),
             0x1F => Some(CommandCode::Apex2023Oled),
+            0x36 => Some(CommandCode::KeyMappingWrite),
+            0xB6 => Some(CommandCode::KeyMappingRead),
+            0x35 => Some(CommandCode::MetaToggle),
+            0x75 => Some(CommandCode::RegionWrite),
             _ => None,
         }
     }
@@ -835,6 +868,321 @@ impl HidCommand for AnalogKeyCommand<'_> {
             Self::RapidTapEnable(on) => format!("Rapid tap {}", if *on { "on" } else { "off" }),
             Self::RapidTapPairs(pairs) => format!("Rapid tap pairs, {} pairs", pairs.len()),
         }
+    }
+}
+
+/// [EXPERIMENTAL] One key binding of the 2022-firmware Apex boards (GG `button_mapping`), 6 bytes on the wire:
+/// `(HID usage, function, key codes)`.
+pub type KeyBinding = (u8, u8, [u8; 4]);
+
+/// Reject a bad layer, or an empty, oversized, zero or repeated key list, of a key-mapping frame.
+fn check_mapping_keys(layer: u8, keys: impl ExactSizeIterator<Item = u8>) -> Result<()> {
+    if layer > 2 {
+        return Err(Error::InvalidConfig(format!(
+            "mapping layer {layer} is not 0 (base), 1 (meta) or 2 (second)"
+        )));
+    }
+    if keys.len() == 0 || keys.len() > KeyMappingCommand::MAX_KEYS {
+        return Err(Error::InvalidConfig(format!(
+            "a key-mapping report carries 1-{} keys, got {}",
+            KeyMappingCommand::MAX_KEYS,
+            keys.len()
+        )));
+    }
+    let mut seen = [false; 256];
+    for hid in keys {
+        if hid == 0 || std::mem::replace(&mut seen[usize::from(hid)], true) {
+            return Err(Error::InvalidConfig(format!(
+                "HID usage {hid:#04x} is zero or listed twice"
+            )));
+        }
+    }
+    Ok(())
+}
+
+/// [EXPERIMENTAL] Live key-binding write of the 2022-firmware Apex boards (GG `write-button-mappings`), a feature
+/// report: `00 36 <layer> <count> (hid function kc0 kc1 kc2 kc3) x count`, at most [`Self::MAX_KEYS`] keys per
+/// report. Layer 0 = base, 1 = meta (behind the SteelSeries key), 2 = second actuation. From GG's decrypted device
+/// spec (`base_apex_2022_wired`, 2026-11-10), never sent from `ssgg` on hardware; GG did not send it for a binding
+/// change on `0x1628` in the 2026-11-10 capture (it rewrote the on-board profile instead). Whether a binding
+/// survives a power cycle is unknown.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct KeyMappingCommand<'a> {
+    pub layer: u8,
+    pub entries: &'a [KeyBinding],
+}
+
+impl KeyMappingCommand<'_> {
+    /// Keys per report: `(feature-report-size - 5) / 6` (GG `button-mapping-keys-per-chunk`).
+    pub const MAX_KEYS: usize = (PROFILE_CHUNK_REPORT_SIZE - 5) / 6;
+}
+
+impl HidCommand for KeyMappingCommand<'_> {
+    fn command_code(&self) -> CommandCode {
+        CommandCode::KeyMappingWrite
+    }
+
+    fn serialize(&self, buffer: &mut [u8], _device_type: HidDeviceType) -> Result<usize> {
+        self.validate()?;
+        check_report_buffer(buffer, PROFILE_CHUNK_REPORT_SIZE)?;
+        let report = &mut buffer[..PROFILE_CHUNK_REPORT_SIZE];
+        report.fill(0);
+        report[1..4].copy_from_slice(&[CommandCode::KeyMappingWrite as u8, self.layer, self.entries.len() as u8]);
+        let (slots, _) = report[4..].as_chunks_mut::<6>();
+        for (slot, &(hid, function, codes)) in slots.iter_mut().zip(self.entries) {
+            *slot = [hid, function, codes[0], codes[1], codes[2], codes[3]];
+        }
+        Ok(PROFILE_CHUNK_REPORT_SIZE)
+    }
+
+    fn validate(&self) -> Result<()> {
+        check_mapping_keys(self.layer, self.entries.iter().map(|e| e.0))
+    }
+
+    fn description(&self) -> String {
+        format!("Key mapping write, layer {}, {} keys", self.layer, self.entries.len())
+    }
+}
+
+/// [EXPERIMENTAL] Key-binding read request (GG `read-button-mappings`), a feature report:
+/// `00 B6 <layer> <count> (hid 0 0 0 0 0) x count`, answered by a feature-report read holding
+/// [`Self::REPLY_HEADER_LEN`] header bytes, then `(hid function kc0 kc1 kc2 kc3) x count`. From GG's decrypted
+/// device spec (`base_apex_2022_wired`, 2026-11-10), never sent from `ssgg` on hardware; GG did not send it on
+/// `0x1628` in the 2026-11-10 capture.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct KeyMappingReadCommand<'a> {
+    pub layer: u8,
+    pub keys: &'a [u8],
+}
+
+impl KeyMappingReadCommand<'_> {
+    /// Reply bytes in front of the bindings (GG's chunk specifier `(5 636 0)`). The spec calls them the
+    /// payload header plus an error byte but does not give their order, so `ssgg` does not interpret them.
+    pub const REPLY_HEADER_LEN: usize = 5;
+}
+
+impl HidCommand for KeyMappingReadCommand<'_> {
+    fn command_code(&self) -> CommandCode {
+        CommandCode::KeyMappingRead
+    }
+
+    fn serialize(&self, buffer: &mut [u8], _device_type: HidDeviceType) -> Result<usize> {
+        self.validate()?;
+        check_report_buffer(buffer, PROFILE_CHUNK_REPORT_SIZE)?;
+        let report = &mut buffer[..PROFILE_CHUNK_REPORT_SIZE];
+        report.fill(0);
+        report[1..4].copy_from_slice(&[CommandCode::KeyMappingRead as u8, self.layer, self.keys.len() as u8]);
+        let (slots, _) = report[4..].as_chunks_mut::<6>();
+        for (slot, &hid) in slots.iter_mut().zip(self.keys) {
+            slot[0] = hid;
+        }
+        Ok(PROFILE_CHUNK_REPORT_SIZE)
+    }
+
+    fn validate(&self) -> Result<()> {
+        check_mapping_keys(self.layer, self.keys.iter().copied())
+    }
+
+    fn description(&self) -> String {
+        format!("Key mapping read, layer {}, {} keys", self.layer, self.keys.len())
+    }
+}
+
+/// [EXPERIMENTAL] Assign the SteelSeries (meta) key, an output report: `00 35 <hid>` (GG `meta_toggle_hid`;
+/// GG uses `0xF0`). From GG's decrypted device spec (`base_apex_2022_wired`, 2026-11-10), never sent from `ssgg`
+/// on hardware; GG did not send it on `0x1628` in the 2026-11-10 capture.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MetaToggleCommand {
+    pub hid: u8,
+}
+
+impl HidCommand for MetaToggleCommand {
+    fn command_code(&self) -> CommandCode {
+        CommandCode::MetaToggle
+    }
+
+    fn serialize(&self, buffer: &mut [u8], _device_type: HidDeviceType) -> Result<usize> {
+        self.validate()?;
+        check_report_buffer(buffer, KEYBOARD_REPORT_SIZE)?;
+        let report = &mut buffer[..KEYBOARD_REPORT_SIZE];
+        report.fill(0);
+        report[1..3].copy_from_slice(&[CommandCode::MetaToggle as u8, self.hid]);
+        Ok(KEYBOARD_REPORT_SIZE)
+    }
+
+    fn validate(&self) -> Result<()> {
+        if self.hid == 0 {
+            return Err(Error::InvalidConfig(
+                "the meta key needs a non-zero HID usage".to_string(),
+            ));
+        }
+        Ok(())
+    }
+
+    fn description(&self) -> String {
+        format!("Meta key {:#04x}", self.hid)
+    }
+}
+
+/// [EXPERIMENTAL] One chunk of the on-board macro data read (GG `read_macro_data`), a feature report:
+/// `00 B7 <offset u16 LE> <length u16 LE>`, both counted in 4-byte events, answered by a feature-report read whose
+/// data starts behind [`Self::REPLY_HEADER_LEN`] bytes. Read only. From GG's decrypted device spec
+/// (`base_apex_2022_wired`, 2026-11-10), never sent from `ssgg` on hardware; GG did not send it on `0x1628` in
+/// the 2026-11-10 capture.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MacroReadCommand {
+    pub offset_events: u16,
+    pub len_events: u16,
+}
+
+impl MacroReadCommand {
+    /// Bytes of macro data on the board (GG `macro-data-size`).
+    pub const DATA_LEN: usize = 9600;
+    /// Bytes per macro event.
+    pub const EVENT_LEN: usize = 4;
+    /// Events per chunk GG reads: 600 bytes (`macro-data-chunk-size`), so 16 chunks.
+    pub const CHUNK_EVENTS: u16 = 150;
+    /// Reply bytes in front of the data (GG's chunk specifier `(7 600 0)`); their meaning is not in the spec.
+    pub const REPLY_HEADER_LEN: usize = 7;
+    /// The opcode on the wire (the [`CommandCode`] is a tag).
+    pub const WIRE_BYTE: u8 = 0xB7;
+}
+
+impl HidCommand for MacroReadCommand {
+    fn command_code(&self) -> CommandCode {
+        CommandCode::MacroRead
+    }
+
+    fn serialize(&self, buffer: &mut [u8], _device_type: HidDeviceType) -> Result<usize> {
+        self.validate()?;
+        check_report_buffer(buffer, PROFILE_CHUNK_REPORT_SIZE)?;
+        let report = &mut buffer[..PROFILE_CHUNK_REPORT_SIZE];
+        report.fill(0);
+        report[1] = Self::WIRE_BYTE;
+        report[2..4].copy_from_slice(&self.offset_events.to_le_bytes());
+        report[4..6].copy_from_slice(&self.len_events.to_le_bytes());
+        Ok(PROFILE_CHUNK_REPORT_SIZE)
+    }
+
+    fn validate(&self) -> Result<()> {
+        let max_events = (PROFILE_CHUNK_REPORT_SIZE - Self::REPLY_HEADER_LEN) / Self::EVENT_LEN;
+        let end = usize::from(self.offset_events) + usize::from(self.len_events);
+        if self.len_events == 0 || usize::from(self.len_events) > max_events || end * Self::EVENT_LEN > Self::DATA_LEN {
+            return Err(Error::InvalidConfig(format!(
+                "macro read of {} events at event {}: a reply carries 1-{max_events}, the data holds {}",
+                self.len_events,
+                self.offset_events,
+                Self::DATA_LEN / Self::EVENT_LEN
+            )));
+        }
+        Ok(())
+    }
+
+    fn description(&self) -> String {
+        format!(
+            "Macro data read: {} events at event {}",
+            self.len_events, self.offset_events
+        )
+    }
+}
+
+/// [EXPERIMENTAL] Layout or region query, an output report `00 F2` / `00 F5` (GG `read_layout` / `read_region`),
+/// answered on the input endpoint by `00 <F2|F5> <error 0|1> <id>`. From GG's decrypted device spec
+/// (`base_apex_2022_wired`, 2026-11-10); GG sent both at startup on `0x1628` in the 2026-11-10 capture, `ssgg`
+/// never has.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DeviceQueryCommand {
+    Layout,
+    Region,
+}
+
+impl DeviceQueryCommand {
+    /// Layout ids GG's init maps to a default region, with the spec's comment as name. The spec's
+    /// `read_layout` declares `(range 0x00 0x02)` yet the same file maps id 3 to Japan.
+    pub const LAYOUTS: [(u8, &'static str); 3] = [(0, "US"), (1, "European"), (3, "Japan")];
+
+    /// The opcode on the wire (the [`CommandCode`] is a tag).
+    pub fn wire_byte(self) -> u8 {
+        match self {
+            Self::Layout => 0xF2,
+            Self::Region => 0xF5,
+        }
+    }
+}
+
+impl HidCommand for DeviceQueryCommand {
+    fn command_code(&self) -> CommandCode {
+        match self {
+            Self::Layout => CommandCode::DeviceLayout,
+            Self::Region => CommandCode::DeviceRegion,
+        }
+    }
+
+    fn serialize(&self, buffer: &mut [u8], _device_type: HidDeviceType) -> Result<usize> {
+        check_report_buffer(buffer, KEYBOARD_REPORT_SIZE)?;
+        let report = &mut buffer[..KEYBOARD_REPORT_SIZE];
+        report.fill(0);
+        report[1] = self.wire_byte();
+        Ok(KEYBOARD_REPORT_SIZE)
+    }
+
+    fn validate(&self) -> Result<()> {
+        Ok(())
+    }
+
+    fn description(&self) -> String {
+        format!("{self:?} query")
+    }
+}
+
+/// [EXPERIMENTAL] Region write, an output report `00 75 <region>` (GG `write_region_id`). **Writes flash**: GG
+/// sends it only when the region changes. From GG's decrypted device spec (`base_apex_2022_wired`, 2026-11-10),
+/// never sent from `ssgg` on hardware.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RegionWriteCommand {
+    pub region: u8,
+}
+
+impl RegionWriteCommand {
+    /// Region ids GG's region transform names. The spec's `read_region` declares `(range 0x00 0x02)`, which
+    /// none of these but 1 fits; the names are the ones the spec gives.
+    pub const REGIONS: [(u8, &'static str); 7] = [
+        (1, "us"),
+        (3, "uk"),
+        (4, "germany"),
+        (6, "france"),
+        (10, "nordic"),
+        (13, "japan"),
+        (20, "turkish"),
+    ];
+}
+
+impl HidCommand for RegionWriteCommand {
+    fn command_code(&self) -> CommandCode {
+        CommandCode::RegionWrite
+    }
+
+    fn serialize(&self, buffer: &mut [u8], _device_type: HidDeviceType) -> Result<usize> {
+        self.validate()?;
+        check_report_buffer(buffer, KEYBOARD_REPORT_SIZE)?;
+        let report = &mut buffer[..KEYBOARD_REPORT_SIZE];
+        report.fill(0);
+        report[1..3].copy_from_slice(&[CommandCode::RegionWrite as u8, self.region]);
+        Ok(KEYBOARD_REPORT_SIZE)
+    }
+
+    fn validate(&self) -> Result<()> {
+        if !Self::REGIONS.iter().any(|&(id, _)| id == self.region) {
+            return Err(Error::InvalidConfig(format!(
+                "region {} is not one GG's spec names (1, 3, 4, 6, 10, 13, 20)",
+                self.region
+            )));
+        }
+        Ok(())
+    }
+
+    fn description(&self) -> String {
+        format!("Region write {}", self.region)
     }
 }
 
@@ -4539,5 +4887,115 @@ mod tests {
             assert_eq!(CommandCode::from_report_byte(code as u8), Some(code));
         }
         assert_eq!(CommandCode::from_report_byte(0xF4), None);
+    }
+
+    // Vectors from GG's `base_apex_2022_wired` spec: `write-button-mappings`, `read-button-mappings`.
+    #[test]
+    fn key_mapping_frames_follow_the_spec_layout() {
+        let entries = [(0x04, 0x51, [0x04, 0, 0, 0]), (0xF0, 0x62, [0; 4])];
+        let write = keyboard_report(KeyMappingCommand {
+            layer: 1,
+            entries: &entries,
+        });
+        assert_eq!(write.len(), 645);
+        assert_eq!(
+            &write[..16],
+            &[
+                0x00, 0x36, 0x01, 0x02, 0x04, 0x51, 0x04, 0, 0, 0, 0xF0, 0x62, 0, 0, 0, 0
+            ]
+        );
+        assert!(write[16..].iter().all(|&b| b == 0));
+
+        let read = keyboard_report(KeyMappingReadCommand {
+            layer: 2,
+            keys: &[0x04, 0x05],
+        });
+        assert_eq!(read.len(), 645);
+        assert_eq!(
+            &read[..16],
+            &[0x00, 0xB6, 0x02, 0x02, 0x04, 0, 0, 0, 0, 0, 0x05, 0, 0, 0, 0, 0]
+        );
+        assert!(read[16..].iter().all(|&b| b == 0));
+
+        assert_eq!(KeyMappingCommand::MAX_KEYS, 106);
+        let full: Vec<KeyBinding> = (1..=106).map(|hid| (hid, 0, [0; 4])).collect();
+        let last = keyboard_report(KeyMappingCommand {
+            layer: 0,
+            entries: &full,
+        });
+        assert_eq!(&last[4 + 105 * 6..4 + 106 * 6], &[106, 0, 0, 0, 0, 0]);
+
+        let mut buffer = vec![0u8; PROFILE_CHUNK_REPORT_SIZE];
+        let builder = HidReportBuilder::new(HidDeviceType::Keyboard);
+        let too_many: Vec<KeyBinding> = (1..=107).map(|hid| (hid, 0, [0; 4])).collect();
+        for (layer, entries) in [
+            (0, &too_many[..]),
+            (0, &[][..]),
+            (3, &full[..1]),
+            (0, &[(0x04, 0, [0; 4]), (0x04, 0, [0; 4])][..]),
+            (0, &[(0x00, 0, [0; 4])][..]),
+        ] {
+            let bad = KeyMappingCommand { layer, entries };
+            assert!(builder.build_report(bad, &mut buffer).is_err(), "{bad:?}");
+        }
+        let bad_read = KeyMappingReadCommand { layer: 0, keys: &[] };
+        assert!(builder.build_report(bad_read, &mut buffer).is_err());
+    }
+
+    #[test]
+    fn meta_macro_layout_and_region_frames_follow_the_spec_layout() {
+        let meta = keyboard_report(MetaToggleCommand { hid: 0xF0 });
+        assert_eq!((meta.len(), &meta[..4]), (65, &[0x00, 0x35, 0xF0, 0x00][..]));
+
+        let chunk = keyboard_report(MacroReadCommand {
+            offset_events: 150 * 15,
+            len_events: MacroReadCommand::CHUNK_EVENTS,
+        });
+        assert_eq!(chunk.len(), 645);
+        assert_eq!(&chunk[..6], &[0x00, 0xB7, 0xCA, 0x08, 0x96, 0x00]);
+        assert!(chunk[6..].iter().all(|&b| b == 0));
+        assert_eq!(
+            MacroReadCommand::DATA_LEN / (usize::from(MacroReadCommand::CHUNK_EVENTS) * MacroReadCommand::EVENT_LEN),
+            16
+        );
+
+        let layout = keyboard_report(DeviceQueryCommand::Layout);
+        assert_eq!((layout.len(), &layout[..3]), (65, &[0x00, 0xF2, 0x00][..]));
+        let region = keyboard_report(DeviceQueryCommand::Region);
+        assert_eq!(&region[..3], &[0x00, 0xF5, 0x00]);
+        let write = keyboard_report(RegionWriteCommand { region: 4 });
+        assert_eq!((write.len(), &write[..3]), (65, &[0x00, 0x75, 0x04][..]));
+
+        let mut buffer = vec![0u8; PROFILE_CHUNK_REPORT_SIZE];
+        let builder = HidReportBuilder::new(HidDeviceType::Keyboard);
+        assert!(builder.build_report(MetaToggleCommand { hid: 0 }, &mut buffer).is_err());
+        assert!(
+            builder
+                .build_report(RegionWriteCommand { region: 2 }, &mut buffer)
+                .is_err()
+        );
+        for (offset_events, len_events) in [(0, 0), (0, 160), (2300, 150)] {
+            let bad = MacroReadCommand {
+                offset_events,
+                len_events,
+            };
+            assert!(builder.build_report(bad, &mut buffer).is_err(), "{bad:?}");
+        }
+    }
+
+    #[test]
+    fn key_mapping_wire_codes_round_trip_and_the_tags_do_not() {
+        for code in [
+            CommandCode::KeyMappingWrite,
+            CommandCode::KeyMappingRead,
+            CommandCode::MetaToggle,
+            CommandCode::RegionWrite,
+        ] {
+            assert_eq!(CommandCode::from_report_byte(code as u8), Some(code));
+            assert!(code.to_string().ends_with("_EXPERIMENTAL"));
+        }
+        for tag in [0xFA, 0xFB, 0xFC] {
+            assert_eq!(CommandCode::from_report_byte(tag), None);
+        }
     }
 }

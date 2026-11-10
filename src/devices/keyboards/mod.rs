@@ -6,6 +6,7 @@ pub mod apex_7_profile;
 pub mod apex_m750;
 pub mod apex_pro_tkl_2023;
 pub mod apex_pro_tkl_2023_profile;
+pub mod key_action;
 pub mod models;
 pub mod oled;
 pub mod onboard;
