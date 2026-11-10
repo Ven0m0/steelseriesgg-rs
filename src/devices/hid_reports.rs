@@ -150,8 +150,9 @@ pub enum CommandCode {
     /// byte: the wire header is `83 01`, and 0x83 already belongs to [`CommandCode::OnboardBufferRead`] (legacy
     /// header `83 00`). From GG's decrypted device spec, never sent from `ssgg` on hardware.
     Gen3ProfileRead = 0xF4,
-    /// [EXPERIMENTAL] Leave direct-mode lighting (`00 41`, GG `clear_direct_write`), see
-    /// [`Apex2022DisplayCommand`]. From GG's decrypted device spec, never sent from `ssgg` on hardware.
+    /// Leave direct-mode lighting (`00 41`, GG `clear_direct_write`), see [`Apex2022DisplayCommand`]. From GG's
+    /// decrypted device spec; confirmed on `0x1628` (fw 1.19.7, 2026-11-10): the board returned to its stored
+    /// lighting after `ssgg rgb release`.
     Apex2023DirectClear = 0x41,
     /// [EXPERIMENTAL] OLED direct write / reset (`00 1F 81|82`), see [`Apex2022DisplayCommand`]. From GG's
     /// decrypted device spec, never sent from `ssgg` on hardware.
@@ -197,7 +198,7 @@ impl fmt::Display for CommandCode {
             CommandCode::Apex3Lighting => write!(f, "APEX_3_LIGHTING_EXPERIMENTAL"),
             CommandCode::AnalogKeys => write!(f, "ANALOG_KEYS_EXPERIMENTAL"),
             CommandCode::Gen3ProfileRead => write!(f, "GEN3_PROFILE_READ"),
-            CommandCode::Apex2023DirectClear => write!(f, "APEX2023_DIRECT_CLEAR_EXPERIMENTAL"),
+            CommandCode::Apex2023DirectClear => write!(f, "APEX2023_DIRECT_CLEAR"),
             CommandCode::Apex2023Oled => write!(f, "APEX2023_OLED_EXPERIMENTAL"),
         }
     }
@@ -907,7 +908,8 @@ impl HidCommand for Gen3ProfileReadCommand {
 /// (`base_apex_2022_wired`, `apex_pro_tkl_2022`, 2026-10-24); never sent from `ssgg` on hardware.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Apex2022DisplayCommand<'a> {
-    /// `00 41`, output report (GG `clear_direct_write`): leave direct-mode lighting.
+    /// `00 41`, output report (GG `clear_direct_write`): leave direct-mode lighting. Confirmed on `0x1628`
+    /// (2026-11-10).
     ClearDirect,
     /// `00 1F 81 <640 bytes>`, feature report (GG `oled_direct_write`). The pixel packing is not in the spec.
     Oled(&'a [u8; 640]),

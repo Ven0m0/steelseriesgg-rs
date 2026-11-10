@@ -474,7 +474,7 @@ pub(crate) enum RgbAction {
     },
 
     /// Apex Pro TKL 2023 (0x1628): leave direct-mode lighting so the board shows its stored profile again
-    /// (`00 41` from GG's device spec; EXPERIMENTAL, untested on hardware)
+    /// (`00 41` from GG's device spec; confirmed on hardware 2026-11-10)
     Release,
 }
 
