@@ -107,7 +107,7 @@ pub(crate) const WIRED_2023_FRAME: DirectFrame = DirectFrame {
 ///   blanks) lists the same 68 usages in the same order, an independent check of every slot (2026-10-25).
 ///
 /// The checksum at offset 12320 is solved (`apex_pro_tkl_2023_profile`), but writing the blob stays blocked:
-/// the spec's read-back (`read_gen3_profile`) is untested on hardware.
+/// the write chain (`02 01`, `03 01`, `B1`) is untested; the read-back (`read_gen3_profile`) is confirmed (2026-11-10).
 pub const WIRED_2023_PROFILE_SLOTS: [u8; 68] = [
     // ` 1 2 3 4 5 6 7 8 9 0 - = Yen
     0x35, 0x1E, 0x1F, 0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x2D, 0x2E, 0x89,
@@ -348,7 +348,7 @@ fn key_actuation_setting_in(
     merge_actuation(&base, layer, changes)
 }
 
-/// [EXPERIMENTAL] What a Gen3 on-board profile read collected: the firmware poll answer, the 3-byte header of
+/// What a Gen3 on-board profile read collected: the firmware poll answer, the 3-byte header of
 /// every chunk reply (meaning unknown, recorded for the hardware check), and the reassembled profile blob.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Gen3ProfileRead {
@@ -740,8 +740,8 @@ impl ApexProTkl2023 {
         self.send_report(&buf[..size], matches!(command, Apex2022DisplayCommand::Oled(_)))
     }
 
-    /// [EXPERIMENTAL] Read one on-board profile slot (0-4) with the spec's `83 01` chunk read. Read only:
-    /// nothing here writes to the board. Untested on hardware.
+    /// Read one on-board profile slot (0-4) with the spec's `83 01` chunk read. Read only: nothing here writes
+    /// to the board. Confirmed on `0x1628` (firmware 1.19.7, 2026-11-10): all five slots, CRC matching.
     pub fn read_gen3_profile(&mut self, slot: u8) -> Result<Gen3ProfileRead> {
         self.require_wired_2023("the Gen3 on-board profile read")?;
         let requests = gen3_read_requests(slot)?;

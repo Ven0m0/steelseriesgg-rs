@@ -146,7 +146,7 @@ pub enum CommandCode {
     /// [EXPERIMENTAL] Live analog-key settings of the 2022-firmware Apex boards (`00 38 <sub>`), see
     /// [`AnalogKeyCommand`]. From GG's decrypted device spec, never sent from `ssgg` on hardware.
     AnalogKeys = 0x38,
-    /// [EXPERIMENTAL] 2022-firmware on-board profile read, see [`Gen3ProfileReadCommand`]. A tag, never a wire
+    /// 2022-firmware on-board profile read, see [`Gen3ProfileReadCommand`]. A tag, never a wire
     /// byte: the wire header is `83 01`, and 0x83 already belongs to [`CommandCode::OnboardBufferRead`] (legacy
     /// header `83 00`). From GG's decrypted device spec, never sent from `ssgg` on hardware.
     Gen3ProfileRead = 0xF4,
@@ -196,7 +196,7 @@ impl fmt::Display for CommandCode {
             CommandCode::MouseColor => write!(f, "MOUSE_COLOR_EXPERIMENTAL"),
             CommandCode::Apex3Lighting => write!(f, "APEX_3_LIGHTING_EXPERIMENTAL"),
             CommandCode::AnalogKeys => write!(f, "ANALOG_KEYS_EXPERIMENTAL"),
-            CommandCode::Gen3ProfileRead => write!(f, "GEN3_PROFILE_READ_EXPERIMENTAL"),
+            CommandCode::Gen3ProfileRead => write!(f, "GEN3_PROFILE_READ"),
             CommandCode::Apex2023DirectClear => write!(f, "APEX2023_DIRECT_CLEAR_EXPERIMENTAL"),
             CommandCode::Apex2023Oled => write!(f, "APEX2023_OLED_EXPERIMENTAL"),
         }
@@ -837,11 +837,11 @@ impl HidCommand for AnalogKeyCommand<'_> {
     }
 }
 
-/// [EXPERIMENTAL] One chunk of the 2022-firmware on-board profile **read** (GG `flashfs-read-payload`):
+/// One chunk of the 2022-firmware on-board profile **read** (GG `flashfs-read-payload`):
 /// `00 | 83 01 | fs id | size u16 LE | offset u32 LE | zero padding` in a 645-byte feature report, answered
 /// by a feature-report read whose data starts behind a 3-byte header. File id of profile slot N is `0x80 + N`.
 /// Read only. Spec-derived (`base_apex_2022_wired` `read_onboard_profile_N`, 2026-10-24); the byte order
-/// matches GG's captured `03 01 80` write chunks of the same family. Never sent from `ssgg` on hardware.
+/// matches GG's captured `03 01 80` write chunks of the same family. Confirmed on `0x1628` (firmware 1.19.7, 2026-11-10): all five slots read back with a matching CRC, reply header `00 83 00`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Gen3ProfileReadCommand {
     pub fs_id: u8,

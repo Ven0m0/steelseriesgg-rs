@@ -233,7 +233,7 @@ pub trait Keyboard: Device {
         ))
     }
 
-    /// [EXPERIMENTAL] Read-only Gen3 on-board profile read of one slot (0-4). Wired Apex Pro TKL 2023 only;
+    /// Read-only Gen3 on-board profile read of one slot (0-4). Wired Apex Pro TKL 2023 only;
     /// other keyboards return an error.
     fn read_gen3_profile(&mut self, _slot: u8) -> Result<apex_pro_tkl_2023::Gen3ProfileRead> {
         Err(Error::DeviceCommunication(

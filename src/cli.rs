@@ -247,15 +247,15 @@ pub(crate) enum OnboardAction {
     /// changes what the keyboard is running right now.** Hardware-confirmed on an Apex 7.
     Load(OnboardLoadArgs),
 
-    /// EXPERIMENTAL, untested on hardware: read one profile slot of the wired Apex Pro TKL 2023 (0x1628)
-    /// with the chunked read from GG's device spec. Read-only; nothing is written to the keyboard.
+    /// Read one profile slot of the wired Apex Pro TKL 2023 (0x1628) with the chunked read from GG's device
+    /// spec. Read-only; nothing is written to the keyboard. Confirmed on hardware (firmware 1.19.7, 2026-11-10).
     Gen3Read(OnboardGen3ReadArgs),
 }
 
 /// A read-only Gen3 on-board profile read.
 #[derive(clap::Args)]
 pub(crate) struct OnboardGen3ReadArgs {
-    /// Profile slot, 0-4 (GG's Config 1 is assumed to be slot 0; unverified)
+    /// Profile slot, 0-4 (slot 0 read back as GG's first config, 2026-11-10)
     #[arg(short, long, default_value = "0")]
     pub(crate) slot: u8,
 
