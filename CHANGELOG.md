@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Releases and this changelog are generated automatically from
 [Conventional Commits](https://www.conventionalcommits.org/) by release-please.
 
+## [0.1.19](https://github.com/Ven0m0/steelseriesgg-rs/compare/v0.1.18...v0.1.19) (2026-11-10)
+
+
+### Changed
+
+* update build.rs minifiers to v0.158.0 ([#330](https://github.com/Ven0m0/steelseriesgg-rs/issues/330)) ([46aa0cb](https://github.com/Ven0m0/steelseriesgg-rs/commit/46aa0cb69009296db9d3603dce77cfbf482aa5e0))
+
 ## [0.1.18](https://github.com/Ven0m0/steelseriesgg-rs/compare/v0.1.17...v0.1.18) (2026-11-09)
 
 
