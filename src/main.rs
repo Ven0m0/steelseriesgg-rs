@@ -30,7 +30,7 @@ use steelseries_gg::devices::{
     discovery::print_device_summary,
 };
 use steelseries_gg::profiles::{KeyboardProfile, Profile, ProfileManager};
-use steelseries_gg::rgb::{Color, Effect, WaveDirection};
+use steelseries_gg::rgb::{Color, DIRECT_FRAME_INTERVAL, Effect, RgbController, WaveDirection};
 use steelseries_gg::{Error, Result};
 
 use colored::Colorize;
@@ -340,9 +340,27 @@ async fn cmd_rgb(manager: &DeviceManager, action: RgbAction) -> Result<()> {
 
             println!("Setting effect: {:?}", effect);
             // Persist effect to state store
-            state_store.update_keyboard_effect(device_id, effect)?;
-            // Note: Full effect implementation would require a background loop
-            println!("(Note: Animated effects require running as daemon)");
+            state_store.update_keyboard_effect(device_id, effect.clone())?;
+            let Some(keys) = keyboard.direct_frame_keys() else {
+                println!("(Note: Animated effects require running as daemon)");
+                return Ok(());
+            };
+            println!("Rendering per key until Ctrl-C [EXPERIMENTAL]; stop the daemon first, both would stream frames");
+            let mut controller = RgbController::new(0);
+            controller.set_effect(effect);
+            let mut ticks = tokio::time::interval(DIRECT_FRAME_INTERVAL);
+            let ctrl_c = tokio::signal::ctrl_c();
+            tokio::pin!(ctrl_c);
+            loop {
+                tokio::select! {
+                    stopped = &mut ctrl_c => {
+                        stopped?;
+                        break;
+                    }
+                    _ = ticks.tick() => keyboard.stream_direct_frame(&controller.compute_key_colors(keys)).await?,
+                }
+            }
+            println!("Stopped; the board keeps the last frame (`ssgg rgb release` hands 0x1628 back to its profile)");
         }
 
         RgbAction::Off => {

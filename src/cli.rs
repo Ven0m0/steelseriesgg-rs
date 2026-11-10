@@ -452,7 +452,9 @@ pub(crate) enum RgbAction {
         level: u8,
     },
 
-    /// Set a lighting effect
+    /// Set a lighting effect. On a direct-mode keyboard (Apex Pro TKL 2023 and the other Apex Pro direct models)
+    /// it renders the effect per key in the foreground, 25 frames a second, until Ctrl-C (EXPERIMENTAL); on
+    /// other keyboards it is saved for the daemon to animate
     Effect {
         /// Effect name: static, breathing, spectrum, wave, off
         name: String,

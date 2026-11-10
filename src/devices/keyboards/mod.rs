@@ -101,6 +101,21 @@ pub trait Keyboard: Device {
         Ok(())
     }
 
+    /// [EXPERIMENTAL] HID usages of the keys one direct-mode frame carries, on keyboards lit by streaming whole
+    /// frames (the Apex Pro direct models); `None` on zone keyboards.
+    fn direct_frame_keys(&self) -> Option<&'static [u8]> {
+        None
+    }
+
+    /// [EXPERIMENTAL] Send one animation frame to a direct-mode keyboard: `(usage, colour)` for the keys of
+    /// [`Keyboard::direct_frame_keys`], unlisted keys black. Unlike `set_key_colors_direct` the frame is not
+    /// saved as the base of later per-key changes, so streaming does not write to disk every tick.
+    async fn stream_direct_frame(&mut self, _colors: &[(u8, Color)]) -> Result<()> {
+        Err(Error::DeviceCommunication(
+            "direct-mode frames are not supported by this keyboard".to_string(),
+        ))
+    }
+
     // === Zone-based RGB Fallback ===
 
     /// Get zone mapping information for this keyboard.

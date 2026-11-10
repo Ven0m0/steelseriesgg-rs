@@ -7,14 +7,16 @@ use steelseries_gg::Result;
 use steelseries_gg::config::{Config, HeadsetConfig};
 use steelseries_gg::device_state::{DeviceId, DeviceStateStore, KeyboardState};
 use steelseries_gg::devices::headsets::Headset;
+use steelseries_gg::devices::hid_reports::Apex2022DisplayCommand;
 use steelseries_gg::devices::keyboards::Keyboard;
 use steelseries_gg::devices::{
     DeviceInfo, DeviceManager, DeviceType,
     discovery::{DeviceFingerprint, HotPlugEvent, print_device_summary},
+    product_ids,
 };
 use steelseries_gg::gamesense::GameSenseServer;
 use steelseries_gg::profiles::ProfileManager;
-use steelseries_gg::rgb::{Color, Effect, RgbController};
+use steelseries_gg::rgb::{Color, DIRECT_FRAME_INTERVAL, Effect, RgbController};
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -281,9 +283,15 @@ pub(crate) async fn cmd_daemon(mut manager: DeviceManager) -> Result<()> {
         info!("Stopped hot-plug monitoring");
     }
 
-    // Abort animation task
+    // Abort animation task, and wait for it so no frame follows the release below
     animation_task.abort();
     headset_task.abort();
+    if let Err(e) = animation_task.await
+        && !e.is_cancelled()
+    {
+        warn!("Animation loop ended with an error: {e}");
+    }
+    release_direct_lighting(&daemon_state).await;
 
     // Save final device states
     save_final_device_states(daemon_state).await;
@@ -611,10 +619,18 @@ async fn run_animation_loop(daemon_state_anim: Arc<RwLock<DaemonState>>) {
     // Reusable buffer for RGB data to avoid allocations every frame
     // Stores (serial, colors) for each keyboard
     let mut frame_data_buffer: Vec<(String, Vec<Color>)> = Vec::new();
+    // Direct-frame keyboards get one whole per-key frame per tick, capped at DIRECT_FRAME_INTERVAL.
+    let mut direct_frames: Vec<(String, Vec<(u8, Color)>)> = Vec::new();
+    let mut last_direct_frame: Option<Instant> = None;
 
     loop {
         let frame_start = Instant::now();
         interval.tick().await;
+        let direct_due = last_direct_frame.is_none_or(|t| t.elapsed() >= DIRECT_FRAME_INTERVAL);
+        if direct_due {
+            last_direct_frame = Some(Instant::now());
+        }
+        direct_frames.clear();
 
         // Determine current effect complexity by examining active effects
         let current_complexity = {
@@ -677,7 +693,14 @@ async fn run_animation_loop(daemon_state_anim: Arc<RwLock<DaemonState>>) {
             }
 
             let mut count = 0;
-            for (serial, (_, controller, _)) in state.keyboards.iter_mut() {
+            for (serial, (keyboard, controller, _)) in state.keyboards.iter_mut() {
+                if let Some(keys) = keyboard.direct_frame_keys() {
+                    if direct_due {
+                        direct_frames.push((serial.clone(), controller.compute_key_colors(keys)));
+                    }
+                    continue;
+                }
+
                 // Safety check, though resize above ensures capacity
                 if count >= frame_data_buffer.len() {
                     break;
@@ -741,6 +764,27 @@ async fn run_animation_loop(daemon_state_anim: Arc<RwLock<DaemonState>>) {
                 }
 
                 // Reinsert the keyboard entry after the async operation completes
+                let mut state = daemon_state_anim.write().await;
+                state.keyboards.insert(owned_serial, (keyboard, controller, other));
+            }
+        }
+
+        for (serial, key_colors) in direct_frames.iter_mut() {
+            // A whole-board GameSense overlay recolours every key; numbered zones do not exist on these boards.
+            for (zone, (overlay_color, _)) in overlays.iter() {
+                if parse_zone_number(zone).is_none() {
+                    key_colors.iter_mut().for_each(|(_, c)| *c = *overlay_color);
+                }
+            }
+
+            let keyboard_entry = {
+                let mut state = daemon_state_anim.write().await;
+                state.keyboards.remove_entry(serial.as_str())
+            };
+            if let Some((owned_serial, (mut keyboard, controller, other))) = keyboard_entry {
+                if let Err(e) = keyboard.stream_direct_frame(key_colors).await {
+                    tracing::warn!("Failed to update keyboard {}: {}", serial, e);
+                }
                 let mut state = daemon_state_anim.write().await;
                 state.keyboards.insert(owned_serial, (keyboard, controller, other));
             }
@@ -814,6 +858,22 @@ async fn wait_for_shutdown() -> Result<()> {
     }
 
     Ok(())
+}
+
+/// [EXPERIMENTAL] Hand the wired Apex Pro TKL 2023 (`0x1628`, the only model that defines `00 41`) back to its
+/// on-board lighting, so it does not hold the last streamed frame after the daemon exits. Untested on hardware;
+/// a failure is logged, not fatal.
+async fn release_direct_lighting(daemon_state: &RwLock<DaemonState>) {
+    let mut state = daemon_state.write().await;
+    for (keyboard, _, info) in state.keyboards.values_mut() {
+        if info.product_id != product_ids::APEX_PRO_TKL_2023 {
+            continue;
+        }
+        match keyboard.send_display_command(Apex2022DisplayCommand::ClearDirect) {
+            Ok(()) => info!("Released direct-mode lighting on {}", info.name),
+            Err(e) => warn!("Could not release direct-mode lighting on {}: {}", info.name, e),
+        }
+    }
 }
 
 async fn save_final_device_states(daemon_state: Arc<RwLock<DaemonState>>) {

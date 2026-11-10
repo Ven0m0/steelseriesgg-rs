@@ -277,8 +277,23 @@ impl SentFrames {
         self.save(&Self::thresholds_name(layer), &bytes);
     }
 
+    /// The software brightness (0-100) last set for `product_id`; 100 when none was saved.
+    fn brightness(&self, product_id: u16) -> u8 {
+        self.load(&Self::brightness_name(product_id))
+            .and_then(|bytes| bytes.first().copied())
+            .map_or(100, |level| level.min(100))
+    }
+
+    fn save_brightness(&self, product_id: u16, level: u8) {
+        self.save(&Self::brightness_name(product_id), &[level]);
+    }
+
     fn colours_name(product_id: u16) -> String {
         format!("direct-frame-{product_id:04x}.bin")
+    }
+
+    fn brightness_name(product_id: u16) -> String {
+        format!("direct-brightness-{product_id:04x}.bin")
     }
 
     fn thresholds_name(layer: HallLayer) -> String {
@@ -293,15 +308,15 @@ impl SentFrames {
         std::fs::read(self.0.join(name)).ok()
     }
 
-    /// Best effort: a failed save only costs the next per-key change its merge base, so it is logged and
-    /// not propagated.
+    /// Best effort: a failed save only costs the next per-key change its merge base (or the next run its
+    /// brightness), so it is logged and not propagated.
     fn save(&self, name: &str, bytes: &[u8]) {
         let path = self.0.join(name);
         let saved = std::fs::create_dir_all(&self.0)
             .map_err(crate::Error::from)
             .and_then(|()| crate::fs_utils::secure_write(&path, bytes));
         if let Err(e) = saved {
-            tracing::warn!("Could not save the last-sent frame to {}: {e}", path.display());
+            tracing::warn!("Could not save {}: {e}", path.display());
         }
     }
 }
@@ -468,27 +483,23 @@ impl ApexProTkl2023 {
     /// Product ID for Apex Pro TKL 2023.
     pub const PRODUCT_ID: u16 = 0x1628;
 
-    /// Create from a generic keyboard.
+    /// Create from a generic keyboard; the software brightness is the level last saved for this model.
     pub fn new(keyboard: GenericKeyboard) -> Self {
+        let sent = SentFrames::in_config();
+        let brightness = sent.as_ref().map_or(100, |s| s.brightness(keyboard.info().product_id));
         Self {
             inner: keyboard,
             initialized_new_protocol: false,
             gen3_firmware: None,
-            brightness: 100,
-            sent: SentFrames::in_config(),
+            brightness,
+            sent,
         }
     }
 
     /// Create for wireless model without a hidapi device handle.
     /// Uses raw hidraw feature reports only.
     pub fn new_wireless_raw(info: DeviceInfo) -> Self {
-        Self {
-            inner: GenericKeyboard::new_without_device(info),
-            initialized_new_protocol: false,
-            gen3_firmware: None,
-            brightness: 100,
-            sent: SentFrames::in_config(),
-        }
+        Self::new(GenericKeyboard::new_without_device(info))
     }
 
     /// Whether this device uses the new 2023 per-key direct protocol.
@@ -567,15 +578,22 @@ impl ApexProTkl2023 {
         Ok(())
     }
 
-    /// Send one direct-mode feature report covering every key in `direct_keys()`.
+    /// Send one direct-mode feature report covering every key in `direct_keys()`, and save it as the base of
+    /// later per-key changes.
     fn send_direct_frame(&mut self, color_for: impl Fn(u8) -> Color) -> Result<()> {
+        let entries = self.write_direct_frame(color_for)?;
+        self.save_last_frame(&entries);
+        Ok(())
+    }
+
+    /// Send one direct-mode feature report covering every key in `direct_keys()`; returns its unscaled entries.
+    fn write_direct_frame(&mut self, color_for: impl Fn(u8) -> Color) -> Result<Vec<(u8, Color)>> {
         self.probe_firmware();
         self.ensure_new_protocol_init()?;
         let entries = self.direct_entries(color_for);
         let buf = self.frame_for(&entries)?;
         self.inner.send_feature(&buf, buf.len())?;
-        self.save_last_frame(&entries);
-        Ok(())
+        Ok(entries)
     }
 
     /// Remember the requested (unscaled) entries of a frame that reached the board, so repeated
@@ -617,12 +635,13 @@ impl ApexProTkl2023 {
     }
 
     /// [EXPERIMENTAL] No brightness command is known for the direct models (GG scales colours in
-    /// software), so remember the level and resend the last frame at it; later frames are scaled too.
-    /// shortcut: the level lives in this process only, so a later `ssgg` run sends full-brightness
-    /// colours until it sets brightness again; upgrade by persisting it next to the last frame once
-    /// the daemon stops pre-scaling through `RgbController`.
+    /// software), so save the level next to the last frame and resend that frame at it; later frames, in
+    /// this run and later ones, are scaled too.
     fn set_direct_brightness(&mut self, level: u8) -> Result<()> {
         self.brightness = level.min(100);
+        if let Some(sent) = &self.sent {
+            sent.save_brightness(self.inner.info().product_id, self.brightness);
+        }
         let previous = self.load_last_frame();
         if previous.is_empty() {
             tracing::warn!("No saved frame to dim; the level applies to the next frame");
@@ -905,6 +924,20 @@ crate::impl_keyboard_with_delegation!(ApexProTkl2023, {
         self.send_direct_key_colors(&usages)
     }
 
+    fn direct_frame_keys(&self) -> Option<&'static [u8]> {
+        self.uses_new_protocol().then(|| self.frame().keys)
+    }
+
+    async fn stream_direct_frame(&mut self, colors: &[(u8, Color)]) -> Result<()> {
+        if !self.uses_new_protocol() {
+            return Err(crate::Error::DeviceCommunication(
+                "direct-mode frames are not supported by this keyboard".to_string(),
+            ));
+        }
+        self.write_direct_frame(|usage| per_key_color(colors, &[], usage))
+            .map(drop)
+    }
+
     fn read_actuation_point(&mut self) -> Result<u8> {
         self.inner.read_actuation_point()
     }
@@ -962,7 +995,69 @@ mod tests {
             manufacturer: Some("SteelSeries".to_string()),
             path: "/test/device/path".to_string(),
         };
-        ApexProTkl2023::new_wireless_raw(info)
+        // Tests never read or write the user's saved frames and brightness.
+        let mut keyboard = ApexProTkl2023::new_wireless_raw(info);
+        keyboard.brightness = 100;
+        keyboard.sent = None;
+        keyboard
+    }
+
+    #[test]
+    fn tkl_key_grid_holds_exactly_the_wired_2023_keys() {
+        let mut grid: Vec<u8> = crate::devices::key_mapping::TKL_KEY_GRID
+            .iter()
+            .flatten()
+            .copied()
+            .filter(|&u| u != 0)
+            .collect();
+        let mut keys = WIRED_2023_KEYS.to_vec();
+        grid.sort_unstable();
+        keys.sort_unstable();
+        assert_eq!(grid, keys);
+    }
+
+    #[test]
+    fn wired_2023_effect_frame_colours_each_key_by_position() {
+        let keyboard = keyboard_for(product_ids::APEX_PRO_TKL_2023);
+        let effect = crate::rgb::Effect::Wave {
+            colors: vec![Color::RED, Color::BLUE],
+            speed: 0.0,
+            direction: crate::rgb::WaveDirection::LeftToRight,
+        };
+        let rendered = crate::rgb::EffectEngine::new(effect, 0).compute_keys(keyboard.direct_frame_keys().unwrap());
+        let frame = keyboard
+            .frame_for(&keyboard.direct_entries(|usage| per_key_color(&rendered, &[], usage)))
+            .unwrap();
+
+        assert_eq!(&frame[..3], &[0x00, 0x40, 0x54]);
+        let entries = frame[3..3 + WIRED_2023_KEYS.len() * 4].as_chunks::<4>().0;
+        for (entry, (usage, colour)) in entries.iter().zip(&rendered) {
+            assert_eq!(entry[0], *usage);
+            assert_eq!(&entry[1..], &[colour.r, colour.g, colour.b], "usage {usage:#04x}");
+        }
+        let colour_of = |usage: u8| entries.iter().find(|e| e[0] == usage).map(|e| [e[1], e[2], e[3]]);
+        // Left column red; F7 (column 8 of 17) near the end of the red-to-blue blend.
+        assert_eq!(colour_of(0x29), Some([255, 0, 0]));
+        assert_eq!(colour_of(0xE0), Some([255, 0, 0]));
+        let f7 = colour_of(0x40).unwrap();
+        assert!(f7[2] > 200 && f7[0] < 50, "F7 {f7:?}");
+    }
+
+    #[test]
+    fn direct_brightness_persists_per_product_id() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = SentFrames(dir.path().join("ssgg"));
+        assert_eq!(store.brightness(product_ids::APEX_PRO_TKL_2023), 100);
+
+        let mut keyboard = keyboard_for(product_ids::APEX_PRO_TKL_2023);
+        keyboard.sent = Some(SentFrames(dir.path().join("ssgg")));
+        // No saved frame, so nothing is sent; the level is still saved.
+        keyboard.set_direct_brightness(30).unwrap();
+        assert_eq!(store.brightness(product_ids::APEX_PRO_TKL_2023), 30);
+        assert_eq!(store.brightness(product_ids::APEX_PRO_TKL_2024), 100);
+
+        store.save_brightness(product_ids::APEX_PRO_TKL_2024, 250);
+        assert_eq!(store.brightness(product_ids::APEX_PRO_TKL_2024), 100);
     }
 
     #[test]
