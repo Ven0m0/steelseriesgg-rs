@@ -92,7 +92,7 @@ tao = { version = "0.37.2", optional = true }
 thiserror = "2.0.21"
 # Async runtime - only include needed features to reduce binary size
 tokio = { version = "1.54.1", default-features = false, features = ["rt-multi-thread", "macros", "signal", "fs"] }
-toml = "1.1.8"
+toml = "1.2.1"
 tower-http = { version = "0.7.1", default-features = false, features = ["cors"] }
 
 # Logging
@@ -100,7 +100,7 @@ tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 # Webview for ssgg-gui (feature `desktop`): WebView2 / WebKitGTK. Pulls the gtk-rs 0.18 stack on Linux
 # (RUSTSEC-2024-0370 proc-macro-error, RUSTSEC-2024-0429 glib: unfixable here, desktop builds only)
-wry = { version = "0.57.1", optional = true }
+wry = { version = "0.57.2", optional = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 hidapi = { version = "=2.6.7", default-features = false, features = ["linux-native-basic-udev"] }

@@ -48,8 +48,9 @@ const STYLE_CSS: &str = include_str!(concat!(env!("OUT_DIR"), "/style.css"));
 const CONTROL_JS: &str = include_str!(concat!(env!("OUT_DIR"), "/control.js"));
 const HEADSET_JS: &str = include_str!(concat!(env!("OUT_DIR"), "/headset.js"));
 
-/// Subcommands the control panel may run. Left out because they never return or reopen this server:
-/// `gui`, `server`, `daemon`, `status`, `hid-logs`, `fuzz`; `remap` is allowed for `list` only (`run` grabs the keyboard).
+/// Subcommands the control panel may run. The ones that only return when stopped (`server`, `daemon`,
+/// `remap run`) are allowed too: the panel kills a run after `CLI_TIMEOUT`, so they behave as a
+/// 60-second window. Left out: `gui` (would start a second server) and `fuzz`.
 const CLI_COMMANDS: &[&str] = &[
     "devices",
     "rgb",
@@ -67,6 +68,9 @@ const CLI_COMMANDS: &[&str] = &[
     "bug-report",
     "test-device",
     "verify-performance",
+    "server",
+    "daemon",
+    "status",
 ];
 const CLI_TIMEOUT: Duration = Duration::from_secs(60);
 const CLI_OUTPUT_MAX: u64 = 256 * 1024;
@@ -527,7 +531,7 @@ struct CliBody {
 
 fn cli_allowed(args: &[String]) -> bool {
     match args.first().map(String::as_str) {
-        Some("remap") => args.get(1).map(String::as_str) == Some("list"),
+        Some("remap") => matches!(args.get(1).map(String::as_str), Some("list" | "run")),
         Some(command) => CLI_COMMANDS.contains(&command),
         None => false,
     }
@@ -640,14 +644,18 @@ mod tests {
     use super::*;
 
     #[test]
-    fn only_listed_subcommands_run_and_remap_only_lists() {
+    fn only_listed_subcommands_and_known_remap_actions_run() {
         let args = |parts: &[&str]| parts.iter().map(|s| s.to_string()).collect::<Vec<_>>();
         assert!(cli_allowed(&args(&["actuation", "set", "1.0"])));
         assert!(cli_allowed(&args(&["remap", "list"])));
-        assert!(!cli_allowed(&args(&["remap", "run"])));
-        for blocked in ["gui", "daemon", "server", "status", "hid-logs", "fuzz", "--debug"] {
+        assert!(cli_allowed(&args(&["remap", "run"])));
+        for long_running in ["daemon", "server", "status"] {
+            assert!(cli_allowed(&args(&[long_running])), "{long_running}");
+        }
+        for blocked in ["gui", "fuzz", "--debug", "remap", "hid-logs"] {
             assert!(!cli_allowed(&args(&[blocked])), "{blocked}");
         }
+        assert!(!cli_allowed(&args(&["remap", "stop"])));
         assert!(!cli_allowed(&[]));
     }
 

@@ -1901,6 +1901,20 @@ ok('every ssgg action the CLI has for actuation is in the panel', () => {
   const have = control.GROUPS.flatMap(([, list]) => list).filter((c) => c.args[0] === 'actuation').map((c) => c.args[1]).sort();
   return eq(have, ['clear-second', 'rapid-tap', 'rapid-tap-pairs', 'rapid-trigger', 'release-mode', 'set', 'set-key', 'set-value']);
 });
+ok('the commands that only return when stopped are in the panel, and each one says what stops it', () => {
+  const long = control.GROUPS.find(([title]) => /Long-running/.test(title));
+  const have = long[1].map((c) => c.args.join(' ')).sort();
+  return eq(have, ['daemon', 'remap run', 'server'])
+    && long[1].every((c) => typeof c.note === 'string' && c.note.length > 20)
+    && eq(control.buildArgs(controlCmd('remap', 'run'), []), ['remap', 'run'])
+    && eq(control.buildArgs(controlCmd('server'), ['27302']), ['server', '--port', '27302']);
+});
+ok('validate and verify-performance can export their report', () => {
+  const validate = control.buildArgs(controlCmd('validate'), ['', '30', 'out.json', true]);
+  const verify = control.buildArgs(controlCmd('verify-performance'), ['30', 'breathing', 'perf.json']);
+  return eq(validate, ['validate', '--timeout', '30', '--output', 'out.json', '--json'])
+    && eq(verify, ['verify-performance', '--duration', '30', '--effect', 'breathing', '--output', 'perf.json']);
+});
 ok('index.html loads control.js after live.js with a hidden panel', () => {
   const html = read('tools/profile-gui/index.html');
   return html.indexOf('src="live.js"') > 0 && html.indexOf('src="live.js"') < html.indexOf('src="control.js"')

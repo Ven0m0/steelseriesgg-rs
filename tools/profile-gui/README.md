@@ -64,6 +64,33 @@ there, like `--persistent`, and unticking it removes the saved value; `ssgg daem
 whenever the headset turns on. Nothing is saved on the headset itself (its save frame is never sent).
 Running the tab while `ssgg daemon` also polls the headset is untested.
 
+### Device control panel (`ssgg-gui`)
+
+The page carries a **Device control** panel (`control.js`): one form per `ssgg` subcommand, from `rgb`
+and `actuation` to `onboard`, `validate` and `sonar`, grouped the way `--help` groups them. It appears
+only when `ssgg-gui` served the page, because a form sends its arguments to `/api/cli`, which runs the
+same `ssgg` binary and returns stdout, stderr and the exit code. The arguments are the CLI's own, so
+`clap` validates them before anything reaches a device: a typo comes back as the error `ssgg` would
+have printed instead of being ignored.
+
+Three rules shape the panel:
+
+- **Only listed subcommands run.** The list is `CLI_COMMANDS` in `src/gui.rs`. `gui` is left out (it
+  would start a second server on a new port) and so is `fuzz`, which is a development tool. `remap` is
+  limited to `list` and `run`.
+- **A run is killed after 60 seconds** (`CLI_TIMEOUT`). That is why the commands that only return when
+  stopped have their own group at the end: `remap run`, `server` and `daemon`.
+  Each form says what ends the command, and the output shown is the first 60 seconds of it. `status`
+  prints one table when piped, so it sits under Devices; `hid-logs` is not offered because it only
+  counts HID operations of its own process. For a long remap session or a GameSense server, run those from a terminal; the panel's window is
+  a way to try them, not a way to keep them alive.
+- **Entries that change the device or system settings** (deleting a profile, writing an on-board
+  profile, running a config slot, setting a polling rate) arm on the first click and run on the
+  second. `--dry-run` is offered wherever the CLI has it, and `validate` and `verify-performance`
+  accept the same `--output` file the CLI does.
+
+**`[EXPERIMENTAL]`**: as with every other panel, a board that ignores a command still answers success.
+
 `app.js` and `main.js` are **plain scripts**, not ES modules: a page opened from
 the filesystem has origin `null`, and browsers refuse module scripts there, so
 `index.html` loads them with `<script src=... defer>` in order and `app.js`

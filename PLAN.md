@@ -1,6 +1,6 @@
 # PLAN: next steps
 
-Single backlog for steelseriesgg-rs. Replaces the old `PLAN.md`, `TODO.md` and `handoff.md`.
+Single backlog for steelseriesgg-rs. Replaces the earlier backlog and work-order documents.
 Last reviewed 2026-10-21 against branch `feat/backlog-2026-10` (software-only round: everything below marked
 "untested" has no hardware result yet).
 
@@ -94,7 +94,7 @@ none is expected to turn up without new firmware.
    (`00 83 01 <fs-id> <size> <offset>`, fs-id `0x80 + slot`). The "no read-back, `0x2D` only" reading below came from
    a one-minute live trace and is therefore not conclusive. The items below stay valid as history until a
    hardware test settles it.
-   **Implemented 2026-10-25, owed hardware tests H1/H2 in `handoff.md`:** `ssgg actuation set|set-value|clear-second|
+   **Implemented 2026-10-25, owed hardware tests H1/H2 (see P8, "Reconstructed from `HANDOFF.md`"):** `ssgg actuation set|set-value|clear-second|
    release-mode|rapid-trigger|rapid-tap|rapid-tap-pairs` send the `38 6x` frames on `0x1628` (every analog key;
    `--dry-run` prints the bytes; 0.1-4.0 mm from GG's table; `set 0.1` confirmed on hardware 2026-10-25), and `ssgg onboard gen3-read`
    reads one slot read-only and checks the CRC at 12320. The spec also names three of the init frames in item 3:
@@ -214,6 +214,15 @@ only per `.claude/rules/experimental-protocol.md`.
   2024 `0x1640` done 2026-11-02, #318), other Nova 7 PIDs (`0x227E` done 2026-10-25: status, sidetone, mic volume, auto-off work), other
   Modern-family mice.
 - **[HW, Linux]** `ssgg remap run` on a real keyboard, including the escape chord and unplug behaviour.
+
+### Reconstructed from `HANDOFF.md` (2026-11-10)
+
+The 2026-11-10 work order rebuilt what was still owed after the earlier work-order text was deleted. What the repo can still state:
+
+- **R1** (frames shifted one byte, `00 00 <cmd>`): fixed 2026-10-25 in the legacy keyboard output path, which now sends the report as built (`00 <cmd>`). Every hardware result collected through that path before the fix came from shifted frames.
+- **R2** (Old Apex `0x1202` / `0x1206` driver mode around lighting): read from GG's device specs, not taken; nothing in `ssgg` sends either frame.
+- **H1/H2** (`ssgg actuation ...`): `set 0.1` confirmed on `0x1628` (Windows, fw 1.19.7) 2026-10-25. Open: every other distance, layer `02`, `set-key`, the `38 62` / `38 65` / `38 67` frames, Linux, and persistence across power cycles.
+- **R3-R5 and H3-H5**: the original text is gone and could not be recovered. They are named here as unrecoverable rather than guessed at.
 
 ---
 

@@ -180,6 +180,192 @@ Over about one minute, including the owner opening the keyboard's actuation sett
   engine's live, already-decoded state (as above) answered the open questions here without needing to break
   the encryption.
 
+## Engine to HID transport (2026-11-10)
+
+Static disassembly only, no process attached: engine `SteelSeriesEngine.exe` (Go, sha256
+`F1C32B85...C582`), HID shim `SSEdevice.dll` (sha256 `D56EC159...F8C0`), both from GG vcs
+`70d240b7`, installed 2026-11-02. The live-trace attempt at the end is separate and produced nothing.
+
+`HIDDLL.dll` (2016 build, sha256 `EDF32A6A...DA25`) is not on the keyboard path. `SSEdevice.dll`
+imports no `HT_*` symbol from it; it opens the device with `CreateFileW` and runs its own overlapped
+I/O. `DeviceLib_SendCommand` (export, `0x180004f10`) is what the Go side reaches through cgo
+(`_Cfunc_DeviceLib_SendCommand`).
+
+### Transport name to chunk type
+
+The transport names that appear in the device specs are registered as golisp constants in
+`device/support.InitHIDCommandChunkTypeConstants` (VA `0x140492c20`) and
+`InitSSECommandChunkTypeConstants` (next function, size `0x12e0`). Each entry is
+`MakeSymbol(name)` -> `newobject(int64)` -> `mov qword [rax], imm` -> define, and an absent `imm`
+store means the constant is `0`. The HID table:
+
+| Value | Name | Value | Name |
+|-------|------|-------|------|
+| `0x00` | `HIDIO` | `0x07` | `HIDFEATUREREADONLY` |
+| `0x01` | `HIDFEATURE` | `0x08` | `CNXT_OWB_WRITE` |
+| `0x02` | `HIDNOW` | `0x09` | `CNXT_OWB_READ` |
+| `0x03` | `HIDREADONLY` | `0x0a` | `SSFWSTATUS` |
+| `0x04` | `HIDSLEEP` | `0x0b` | `HIDIONOFAIL` |
+| `0x05` | `HIDCONFIG` | `0x0c` | `SS_OWB_WRITE` |
+| `0x06` | (not registered) | `0x0d` | (not registered) |
+| `0x0e` | `HIDFEATUREOUTINPUTIN` | `0x0f` | (not registered) |
+| `0x10` | `HIDOUTPUTFEATUREIN` | | |
+
+`SSFWFIZZ` (`0x1f`), `SSFW` (`0x03`), `SSFWLEGACY` (`0x0d`), `SSFWGENERIC` (`0x16`),
+`HOLTEKFW` (`0x15`) and the rest of the firmware names come from the second table and never touch the
+HID dispatch below.
+
+### Chunk type to Win32 call
+
+`DeviceLib::HandleHIDCmd` (`0x180008e00`) takes the 32-bit chunk type, clears bit 31 (`btr`),
+rejects anything above `0x10`, and jumps through the table at `0x180009188`. Types that share the
+second-table entry `0x180008eb6` pick an operation kind from `0x1800091cc`; types with their own
+case use a dedicated writer (one-wire, `SSFWSTATUS`, `HIDCONFIG`).
+
+Bit 31 of the chunk type selects the transport object's write method (`[vtbl+0x28]`) instead of its
+read method (`[vtbl+0x20]`). `ApiChunk.Serialize` (`0x14048c0c0`) is where the engine sets that bit,
+from the byte at `+0x18` of the chunk. The read method is the function at `0x180056000` with its kind
+table at `0x1800563a4`; the write method is `0x1800563f0` with its kind table at `0x180056840`. Both
+end in the same four calls, each guarded on a report length cached in the device object:
+
+| Type | Transport | Kind | Read | Write |
+|------|-----------|------|------|-------|
+| `0x00` | `HIDIO` | 0 | `ReadFile`, size == input length | `WriteFile`, size == output length |
+| `0x01` | `HIDFEATURE` | 1 | `DeviceIoControl 0xB0192`, size <= feature length | `0xB0191`, size == feature length |
+| `0x02` | `HIDNOW` | 2 | `HidD_GetInputReport`, size <= input length | `WriteFile` |
+| `0x03` | `HIDREADONLY` | 3 | `ReadFile` | rejected, `0xbeefbeef` |
+| `0x04` | `HIDSLEEP` | 0 | as `HIDIO` | as `HIDIO` |
+| `0x05` | `HIDCONFIG` | - | `[vtbl+0x38]`, payload 12 or 16 bytes only | same |
+| `0x07` | `HIDFEATUREREADONLY` | 4 | `DeviceIoControl 0xB0192` | rejected, `0xbeefbeef` |
+| `0x08` | `CNXT_OWB_WRITE` | - | `DeviceLib::WriteOneWirePacket` | - |
+| `0x09` | `CNXT_OWB_READ` | - | case `0x1800090e0` | - |
+| `0x0a` | `SSFWSTATUS` | - | case `0x180009148` | - |
+| `0x0b` | `HIDIONOFAIL` | 5 | rejected | `WriteFile`, failures swallowed |
+| `0x0c` | `SS_OWB_WRITE` | - | case `0x180009075` | - |
+| `0x0d` | (not registered) | 6 | returns success, no I/O | same |
+| `0x0e` | `HIDFEATUREOUTINPUTIN` | 7 | `ReadFile` | `DeviceIoControl 0xB0191` |
+| `0x0f` | (not registered) | 8 | `DeviceIoControl 0xB0192` | `0xB0191` |
+| `0x10` | `HIDOUTPUTFEATUREIN` | 9 | `DeviceIoControl 0xB0192` | `WriteFile` |
+
+`0xB0191` is `IOCTL_HID_SET_FEATURE` and `0xB0192` is `IOCTL_HID_GET_FEATURE`. Failure codes seen on
+the paths: `0xbad512e` (size mismatch), `0xfeadfa11` (I/O failed), `0xbeefbeef` (device not found, or
+a transport that has no such direction). Every call is overlapped: `CreateEventW`, the call, then on
+`ERROR_IO_PENDING` (997) `WaitForSingleObject` with the object's timeout at `+0x1a8` and
+`GetOverlappedResult`.
+
+The `HIDFEATUREOUTINPUTIN` row is the one that explains the mixed specs: it reads with a plain
+`ReadFile` and writes with `SET_FEATURE`, which is exactly the shape of the `read_button_mappings`
+style APIs that write a request as a feature report and then wait for the answer on the input pipe.
+
+### Report lengths
+
+All guards test against three dwords in the device object, filled directly from `HIDP_CAPS` right
+after `HidP_GetCaps` at `0x180053e6e`:
+
+```
+0x180053e9c  movzx eax, word [rsp+0x64] ; caps.InputReportByteLength
+0x180053ea1  mov   dword [rsi+0x60], eax
+0x180053ea4  movzx eax, word [rsp+0x66] ; caps.OutputReportByteLength
+0x180053ea9  mov   dword [rsi+0x64], eax
+0x180053eac  movzx eax, word [rsp+0x68] ; caps.FeatureReportByteLength
+0x180053eb1  mov   dword [rsi+0x68], eax
+```
+
+These are the Windows HID caps, so they include the report-ID byte. On `0x1628` the specs define a
+65-byte input and output report and a 645-byte feature report, and the corresponding caps are 65 and
+645. The guards are exact equality on the write path (`jz`), so the chunk payload must already be
+padded to the caps length before the call. The padding site was not identified; the specs' `(size N)`
+chunk field is the payload size, not the buffer size.
+
+### What this settles
+
+- `HIDFEATURE` frames leave as `IOCTL_HID_SET_FEATURE`, which is what the earlier capture saw on the
+  wire as `SET_REPORT` wValue `0x0300`, 645 bytes on `0x1628`. `HIDIO` frames leave as a plain
+  `WriteFile` on the output report, which matches the 64-byte output reports listed above.
+- `HIDREADONLY`, `HIDFEATUREREADONLY` and `HIDIONOFAIL` explain the spec vocabulary: a read-only
+  transport cannot be written at all, and a `HIDIONOFAIL` write is sent with the result ignored.
+- ssgg's own path (`HidReportBuilder` plus `write`/`send_feature_report`) is the same two calls, so
+  the transport layer is not where any remaining difference between GG and ssgg lives.
+- Two transports are already tied to frames captured from GG on 2026-10-25 (see "Hardware results",
+  below): `00 38 61 <68 keys>` arrived as `IOCTL_HID_SET_FEATURE`, 645 bytes (`HIDFEATURE`), and
+  `38 66 01` / `38 66 00` arrived on `WriteFile` as output reports (`HIDIO`). The remaining transports
+  in the table are static only.
+
+### Live trace attempt, same day
+
+Frida 17 (Python) attached read-only to `SteelSeriesEngine.exe` (PID 14204) and
+`SteelSeriesPrism.exe` (PID 14132), hooking `DeviceIoControl` (only `0xB0191`/`0xB0192`) and
+`WriteFile`, over 6, 10, 12, 14 and 25 second windows, with three media-key presses (volume up,
+next, previous) during two of them. Result: **zero HID calls from either process**, so GG touches the
+keyboard only on a real state change. A round of GG UI interaction is still needed to tie each
+transport to a captured frame; that is the open part of this section.
+
+### Which process owns the lighting
+
+`SteelSeriesEngine.exe` is the only GG process that can reach the keyboard:
+
+| Process | Binary | HID capability |
+|---------|--------|----------------|
+| `SteelSeriesEngine.exe` | Go, imports `ssedevice.dll` (43 functions) | owns the device path |
+| `SteelSeriesPrism.exe` | Go 1.24.3, `github.com/steelseries/prismSync`, same vcs revision `70d240b7` | imports only `kernel32.dll`, `msvcrt.dll`, `user32.dll`; no `hid.dll`, no `SSEdevice.dll` |
+| `SteelSeriesGG.exe` | Electron host | no HID import; drives the engine over its local HTTP API |
+
+Prism therefore computes screen-sync colours and hands them over: the engine carries the receiving side
+(`driver.(*RealPrismSyncer)`, `frontend.handleUpdatePrismSync*`, `models/prism_sync`), and the engine's own
+symbol table has no per-frame renderer (no animation or re-render loop, only `SetBaseEffect` /
+`SetTriggeredEffect` style configuration writes). A living colour effect on the board is the engine writing
+direct-mode frames; Prism is the colour source, not the writer.
+
+## Live trace, 2026-11-10 (engine `70d240b7`)
+
+Read-only Frida attach to `SteelSeriesEngine.exe` (PID 14204), hooks on `DeviceIoControl` (only the
+two HID codes), `WriteFile` and `ReadFile`, across two action rounds while the owner changed settings
+in the GG window. Payloads are read with `readByteArray`; `new Uint8Array(ptr, off, len)` silently
+returns length 0 in Frida 17.24.3, which costs a whole round if used.
+
+The engine is silent on HID while nothing changes: idle windows of 6, 10, 12, 14, 25 and 40 s
+produced no HID call at all, so every frame below comes from an owner action.
+
+### Frames captured
+
+All keyboard traffic is on one handle (a 65-byte output report device) and every write is exactly 65
+bytes, zero-padded after the command bytes:
+
+| Frame | Count | Meaning |
+|-------|-------|---------|
+| `00 38 66 01 ...` | 1 | Rapid Tap on |
+| `00 38 66 00 ...` | 1 | Rapid Tap off |
+| `00 02 01 80 ...` | 8 | sequence head |
+| `00 b1 00 ...` | 8 | profile chunk write, zero payload |
+| `00 b2 00 ...` | 8 | `load_profile` |
+| `00 34 00 ...` | 8 | `set_profile_volatile` |
+| `00 90 00 00 ...` | 8 | firmware-version poll |
+
+The last five repeat as a group about every 2.5 s for the whole action window, and each `90 00` is
+followed by a read of GG's own 81-byte device JSON (`{"firmware_version": "1.19.7", "device_name":
+"apex_pro_tkl_2022"}`). That group is a refresh loop, not a user frame: it fires whether or not
+anything changed, and the profile bytes in `b1` are all zero.
+
+### What was not seen
+
+No `IOCTL_HID_SET_FEATURE` and no `IOCTL_HID_GET_FEATURE` at all, therefore no 644-byte or 645-byte
+feature report in either round: no `00 38 61` (actuation), no `00 40` (per-key), no `00 24`
+(brightness), no `00 1f 81`/`00 1f 82` (OLED), no `00 35`, no `00 f2`, no profile `00 03` chunk with
+data, and no `00 41` clear. The only user-driven frames in two full rounds of nine UI actions were the
+two Rapid Tap toggles.
+
+Two readings fit, and this trace does not separate them: either the UI edits were no-ops relative to
+the board's current state (GG sends a value only when it changes), or this build applies lighting and
+actuation through the on-board profile rather than direct feature frames. The 2026-10-25 capture, from
+engine build `c1b8e182`, did contain a 645-byte `00 38 61` sent as a feature report, so the second
+reading would mean behaviour changed between builds.
+
+One correction to the instrumentation plan: `DeviceIoControl` and `WriteFile` sit below the transport
+layer. `SSEdevice.dll` exports `DeviceLib_SendCommand(unsigned int deviceID, unsigned int cmdType,
+unsigned char *data, unsigned int len)` at `0x180004f10`, and `cmdType` is the chunk type from the
+transport table above, so hooking that one function shows every logical command with its transport
+(HIDIO, HIDFEATURE, ...) before any Win32 call. That is the hook to use for the next round.
+
 ## Open questions
 
 1. ~~Checksum at blob offset 12320.~~ Solved 2026-10-15 (see "Checksum").

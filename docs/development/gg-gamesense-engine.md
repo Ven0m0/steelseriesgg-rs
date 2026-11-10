@@ -1,7 +1,7 @@
 # GG engine GameSense surface (static read)
 
 Read-only static analysis of `apps\engine\SteelSeriesEngine.exe` (Go, sha256 `c1b8e182...0ec1`, the build
-`handoff.md` section 1 describes), 2026-10-25. Two passes: a byte scan for printable strings (route-like paths
+installed on 2026-10-25). Two passes: a byte scan for printable strings (route-like paths
 and Go symbol names), then REA `search_strings` over Ghidra 12.1.4's defined-string inventory once the analysis
 could finish (it needs more than REA's default 330 s: `REA_GHIDRA_STARTUP_TIMEOUT_MS` and Claude Code's
 `MCP_TOOL_TIMEOUT` were raised). Nothing was run, attached or modified. Tags: **observed** = the string is in

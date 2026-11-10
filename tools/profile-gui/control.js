@@ -1,6 +1,7 @@
-// Device control panel: every `ssgg` subcommand that returns, as a form. Each entry is the argv of the CLI
-// command plus its fields, and Run sends that argv to `/api/cli`, which runs the real binary - so the page can
-// never do more than the CLI does. Like live.js it appears only when `ssgg-gui` served the page.
+// Device control panel: every `ssgg` subcommand, as a form. Each entry is the argv of the CLI command plus its
+// fields, and Run sends that argv to `/api/cli`, which runs the real binary - so the page can never do more than
+// the CLI does. Commands that run until stopped have their own group and are killed after 60 s. Like live.js it
+// appears only when `ssgg-gui` served the page.
 // Plain script (not a module) for the same reason app.js is.
 'use strict';
 
@@ -46,7 +47,8 @@
     ]],
     ['Devices', [
       cmd('List devices', ['devices']),
-      cmd('Validate', ['validate'], [check('benchmark', '--benchmark'), num('timeout (s)', 30, { flag: '--timeout' }), check('JSON', '--json')]),
+      cmd('Status', ['status'], [pick('device filter', ['all', 'keyboard', 'headset'], { flag: '--device' })]),
+      cmd('Validate', ['validate'], [check('benchmark', '--benchmark'), num('timeout (s)', 30, { flag: '--timeout' }), text('export file', '', { flag: '--output', optional: true }), check('JSON', '--json')]),
       cmd('Test device', ['test-device'], [text('device name or path', ''), check('benchmark', '--benchmark'), check('verbose', '--verbose')]),
       cmd('Bug report', ['bug-report'], [text('output file', 'ssgg_bug_report.json', { flag: '--output' }), check('include HID logs', '--include-hid-logs')]),
     ]],
@@ -108,10 +110,15 @@
       cmd('Disable', ['performance', 'disable']),
       cmd('Cleanup', ['performance', 'cleanup']),
       cmd('Benchmark', ['performance', 'benchmark'], [num('duration (s)', 10, { flag: '--duration' })]),
-      cmd('Verify RGB performance', ['verify-performance'], [num('duration (s)', 30, { flag: '--duration' }), text('effect', 'breathing', { flag: '--effect' })]),
+      cmd('Verify RGB performance', ['verify-performance'], [num('duration (s)', 30, { flag: '--duration' }), text('effect', 'breathing', { flag: '--effect' }), text('export file', '', { flag: '--output', optional: true })]),
     ]],
     ['Key remapper', [
       cmd('List bindings', ['remap', 'list']),
+    ]],
+    ['Long-running commands (stopped after 60 s)', [
+      cmd('Remap keys (grabs the keyboard)', ['remap', 'run'], [], { note: 'Runs until Ctrl-C or the escape chord. The panel stops it after 60 s, so use the CLI for a long session.', danger: true }),
+      cmd('GameSense server', ['server'], [num('port', 27301, { flag: '--port' })], { note: 'Serves GameSense on that port until stopped.' }),
+      cmd('Daemon', ['daemon'], [], { note: 'Runs the device daemon until stopped.' }),
     ]],
   ];
 
@@ -185,6 +192,7 @@
       ]));
       form.replaceChildren(...rows);
       if (current().danger) form.append(node('p', { className: 'mono note', textContent: 'This changes the device or system settings: the first click arms the button, the second runs it.' }));
+      if (current().note) form.append(node('p', { className: 'mono note', textContent: current().note }));
     }
 
     run.addEventListener('click', async () => {
