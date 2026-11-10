@@ -476,13 +476,29 @@ pub(crate) enum RgbAction {
     Release,
 }
 
-/// Apex Pro TKL 2023 (0x1628) OLED, from GG's device spec. EXPERIMENTAL, untested on hardware; the pixel
-/// packing of the 640 bytes is not in the spec.
+/// Apex Pro TKL 2023 (0x1628) 128x40 OLED, from GG's device spec. EXPERIMENTAL, untested on hardware; the pixel
+/// packing of the 640 bytes is not in the spec, so --packing is a guess.
 #[derive(Subcommand)]
 pub(crate) enum OledAction {
-    /// Send a raw 640-byte frame file to the OLED
+    /// Show a 128x40 image: a binary PBM (P4) file, packed per --packing, or a raw 640-byte frame sent as is
     Show {
         file: PathBuf,
+        /// [EXPERIMENTAL, untested] PBM pixel packing: `page` = SSD1306 pages (byte page*128 + column, LSB = top
+        /// pixel of the page), `row` = row-major (byte row*16 + column/8, MSB = leftmost pixel)
+        #[arg(long, default_value = "page", value_parser = clap::builder::PossibleValuesParser::new(["page", "row"]))]
+        packing: String,
+        /// Print the report instead of sending it; no keyboard is opened
+        #[arg(long)]
+        dry_run: bool,
+    },
+
+    /// Send a frame whose first 16 bytes are 0xFF and the rest 0: under page packing it lights a 16x8 block top
+    /// left, under row packing a one-pixel line across the top
+    TestPattern {
+        /// [EXPERIMENTAL, untested] Packing to describe the expected result for; the frame is the same for both
+        #[arg(long, default_value = "page", value_parser = clap::builder::PossibleValuesParser::new(["page", "row"]))]
+        packing: String,
+        /// Print the report instead of sending it; no keyboard is opened
         #[arg(long)]
         dry_run: bool,
     },

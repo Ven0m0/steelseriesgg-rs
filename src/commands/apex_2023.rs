@@ -5,6 +5,7 @@ use steelseries_gg::devices::hid_reports::{
     Apex2022DisplayCommand, HallLayer, HidReportBuilder, PROFILE_CHUNK_REPORT_SIZE,
 };
 use steelseries_gg::devices::keyboards::apex_pro_tkl_2023::{AnalogSetting, analog_report, key_actuation_setting};
+use steelseries_gg::devices::keyboards::oled::{self, OledPacking};
 use steelseries_gg::devices::{DeviceManager, DeviceType, HidDeviceType, KeyMappingDatabase, product_ids};
 use steelseries_gg::{Error, Result};
 
@@ -155,25 +156,37 @@ pub(crate) async fn cmd_actuation(manager: &DeviceManager, action: ActuationActi
 }
 
 pub(crate) async fn cmd_oled(manager: &DeviceManager, action: OledAction) -> Result<()> {
+    let packing = |name: &str| {
+        if name == "row" {
+            OledPacking::Row
+        } else {
+            OledPacking::Page
+        }
+    };
     let bitmap: Option<[u8; 640]> = match &action {
-        OledAction::Show { file, .. } => {
+        OledAction::Show {
+            file, packing: name, ..
+        } => {
             let bytes = tokio::fs::read(file)
                 .await
                 .map_err(|e| Error::Other(format!("read {}: {e}", file.display())))?;
-            Some(bytes.as_slice().try_into().map_err(|_| {
-                Error::InvalidConfig(format!(
-                    "{} is {} bytes, an OLED frame is 640",
-                    file.display(),
-                    bytes.len()
-                ))
-            })?)
+            Some(oled::frame_from_file(&bytes, packing(name))?)
+        }
+        OledAction::TestPattern { packing: name, .. } => {
+            let expected = match packing(name) {
+                OledPacking::Page => "a 16x8 block top left",
+                OledPacking::Row => "a one-pixel line across the top",
+            };
+            println!("Test pattern: if the packing is {name} [EXPERIMENTAL], expect {expected}");
+            Some(oled::test_pattern())
         }
         OledAction::Reset { .. } => None,
     };
     let command = bitmap
         .as_ref()
         .map_or(Apex2022DisplayCommand::OledReset, Apex2022DisplayCommand::Oled);
-    let (OledAction::Show { dry_run, .. } | OledAction::Reset { dry_run }) = action;
+    let (OledAction::Show { dry_run, .. } | OledAction::TestPattern { dry_run, .. } | OledAction::Reset { dry_run }) =
+        action;
 
     if dry_run {
         let mut buf = vec![0u8; PROFILE_CHUNK_REPORT_SIZE];
