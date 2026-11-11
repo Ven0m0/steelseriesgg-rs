@@ -6,7 +6,8 @@
 //! `apex_9_tkl`, `apex_9_mini`, all on `base_apex_2022_wired`; read 2026-11-11). Only `0x1628` is confirmed on
 //! hardware; every other row is untested. A feature a row does not list is refused rather than sent in another
 //! board's shape: the commands in `hid_reports` are sized for a 645-byte feature report, so a 513-byte board gets
-//! its direct lighting frame and the 2-byte `00 41` release and nothing else until those commands take a report size.
+//! only its direct lighting frame until those commands take a report size. The `00 41` release is allowed only
+//! on the hardware-confirmed `0x1628`.
 
 use super::apex_pro_tkl_2023::WIRED_2023_KEYS;
 use super::key_action::MAPPING_KEYS;
@@ -53,9 +54,8 @@ pub struct ModelCaps {
     /// 2024 boards' device schema and firmware range differ from the `0x1628`'s (schema 8 from firmware 1.19.0), so
     /// "same structs" only holds on matching firmware; the read is allowed and its result is not interpreted.
     pub profile_read: bool,
-    /// Whether the spec defines `clear_direct_write` (`00 41`) for the board: it sits in the shared
-    /// `base_apex_2022_wired`, which every row includes. The report is a 2-byte output report, so it fits the
-    /// 513-byte boards too; the output report size of those boards is unverified.
+    /// Whether `clear_direct_write` (`00 41`) is confirmed on this board. The shared spec defines it for all
+    /// rows, but the output report shape has only been verified on `0x1628`.
     pub clear_direct: bool,
     /// Whether `36` key-mapping writes are allowed: only `0x1628`, the board the whole write path was built on.
     /// The other rows may read mappings but their writes stay unwired, as the rules file requires of writes that
@@ -120,7 +120,7 @@ const fn pro_tkl_2024(product_id: u16) -> ModelCaps {
         spec_lighting_keys: &TKL_2024_LIGHTING_KEYS,
         live_analog: false,
         profile_read: true,
-        clear_direct: true,
+        clear_direct: false,
         mapping_write_confirmed: false,
     }
 }
@@ -137,7 +137,7 @@ const fn pro_mini(product_id: u16) -> ModelCaps {
         spec_lighting_keys: &MINI_LIGHTING_KEYS,
         live_analog: false,
         profile_read: false,
-        clear_direct: true,
+        clear_direct: false,
         mapping_write_confirmed: false,
     }
 }
@@ -179,7 +179,7 @@ pub const MODEL_CAPS: &[ModelCaps] = &[
         spec_lighting_keys: WIRED_2023_KEYS,
         live_analog: false,
         profile_read: false,
-        clear_direct: true,
+        clear_direct: false,
         mapping_write_confirmed: false,
     },
     ModelCaps {
@@ -193,7 +193,7 @@ pub const MODEL_CAPS: &[ModelCaps] = &[
         spec_lighting_keys: &MINI_LIGHTING_KEYS,
         live_analog: false,
         profile_read: false,
-        clear_direct: true,
+        clear_direct: false,
         mapping_write_confirmed: false,
     },
 ];
@@ -308,7 +308,7 @@ mod tests {
     }
 
     #[test]
-    fn only_the_0x1628_has_confirmed_mapping_writes_and_every_row_defines_clear_direct() {
+    fn only_the_0x1628_has_confirmed_mapping_writes_and_clear_direct() {
         for row in MODEL_CAPS {
             assert_eq!(
                 row.mapping_write_confirmed,
@@ -316,7 +316,12 @@ mod tests {
                 "{:#06x}",
                 row.product_id
             );
-            assert!(row.clear_direct, "{:#06x}", row.product_id);
+            assert_eq!(
+                row.clear_direct,
+                row.product_id == APEX_PRO_TKL_2023,
+                "{:#06x}",
+                row.product_id
+            );
         }
     }
 

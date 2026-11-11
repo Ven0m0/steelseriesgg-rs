@@ -815,6 +815,24 @@ mod tests {
     }
 
     #[test]
+    fn zero_usage_keyboard_bindings_survive_profile_json() {
+        let mut profile = Gen3Profile::decode(&synthetic()[..]).unwrap();
+        profile.button_mappings[0].key = KeyAction::Key(0);
+        profile.button_mappings[1].key = KeyAction::Unbound;
+        let blob = profile.encode().unwrap();
+        let decoded = Gen3Profile::decode(&blob[..]).unwrap();
+        let json = decoded.to_json().unwrap();
+        let mut again = Gen3Profile::from_json(&json).unwrap();
+        assert_eq!(again.button_mappings[0].key.to_bytes(), (0x51, [0; 4]));
+        assert_eq!(again.button_mappings[1].key.to_bytes(), (0x00, [0; 4]));
+        assert_eq!(again.encode().unwrap()[..], blob[..]);
+
+        again.name = "renamed".into();
+        profile.name = "renamed".into();
+        assert_eq!(again.encode().unwrap(), profile.encode().unwrap());
+    }
+
+    #[test]
     fn every_field_sits_at_its_documented_offset() {
         let mut blob = Box::new([0u8; PROFILE_LEN]);
         blob[o::SCHEMA] = 3;

@@ -120,7 +120,9 @@ pub trait Keyboard: Device {
     /// [EXPERIMENTAL] Send one animation frame to a direct-mode keyboard: `(usage, colour)` for the keys of
     /// [`Keyboard::direct_frame_keys`], unlisted keys black. Unlike `set_key_colors_direct` the frame is not
     /// saved as the base of later per-key changes, so streaming does not write to disk every tick.
-    async fn stream_direct_frame(&mut self, _colors: &[(u8, Color)]) -> Result<()> {
+    /// Colors are unscaled: `Some(brightness)` applies that level (0.0-1.0) instead of the saved device level;
+    /// `None` uses the saved level. Streaming never persists a brightness override.
+    async fn stream_direct_frame(&mut self, _colors: &[(u8, Color)], _brightness: Option<f32>) -> Result<()> {
         Err(Error::DeviceCommunication(
             "direct-mode frames are not supported by this keyboard".to_string(),
         ))

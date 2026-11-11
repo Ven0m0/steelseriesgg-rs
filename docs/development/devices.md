@@ -74,8 +74,14 @@ hall switches. "Spec lighting keys" is the layout GG lights, not necessarily the
 | 0x1620 (Apex 9 Mini) | 513 | 68 | no live table | no | no | 61 |
 
 The typed mapping, macro, query, display and profile commands are sized for the 645-byte report, so the 513-byte
-boards get only the direct lighting frame and the 2-byte `00 41` release. The 2024 Pro TKL boards (`0x1642`, `0x1660`, `0x1662`) have their own raw
+boards get only the direct lighting frame. The `00 41` release is allowed only on the hardware-confirmed
+`0x1628`; its output report shape is unverified on the other boards. The 2024 Pro TKL boards (`0x1642`, `0x1660`, `0x1662`) have their own raw
 hall-threshold tables, so the live `38 6x` frames stay `0x1628`-only.
+
+**Mini lighting supports US layouts only**, including the Apex 9 Mini (`0x1620`) and Pro Mini
+(`0x161E`, `0x1648`). Layout detection is unavailable because the `F2` query is refused on these 513-byte
+boards. ISO/UK/JP layouts can leave `0x32` / `0x64` dark and address a nonexistent `0x31`; opening a Mini
+logs a warning about this limitation.
 
 ### Headsets
 

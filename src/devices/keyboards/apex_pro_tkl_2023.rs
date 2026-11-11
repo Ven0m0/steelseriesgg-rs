@@ -566,6 +566,16 @@ impl ApexProTkl2023 {
 
     /// Create from a generic keyboard; the software brightness is the level last saved for this model.
     pub fn new(keyboard: GenericKeyboard) -> Self {
+        if matches!(
+            keyboard.info().product_id,
+            product_ids::APEX_PRO_MINI | product_ids::APEX_PRO_MINI_2024 | product_ids::APEX_9_MINI
+        ) {
+            tracing::warn!(
+                "{} direct lighting supports US layouts only; layout detection is unavailable. \
+                 ISO/UK/JP layouts may leave keys unlit or address nonexistent keys",
+                keyboard.info().name
+            );
+        }
         let sent = SentFrames::in_config();
         let brightness = sent.as_ref().map_or(100, |s| s.brightness(keyboard.info().product_id));
         Self {
@@ -662,17 +672,24 @@ impl ApexProTkl2023 {
     /// Send one direct-mode feature report covering every key in `direct_keys()`, and save it as the base of
     /// later per-key changes.
     fn send_direct_frame(&mut self, color_for: impl Fn(u8) -> Color) -> Result<()> {
-        let entries = self.write_direct_frame(color_for)?;
+        let entries = self.write_direct_frame(color_for, None)?;
         self.save_last_frame(&entries);
         Ok(())
     }
 
     /// Send one direct-mode feature report covering every key in `direct_keys()`; returns its unscaled entries.
-    fn write_direct_frame(&mut self, color_for: impl Fn(u8) -> Color) -> Result<Vec<(u8, Color)>> {
+    fn write_direct_frame(
+        &mut self,
+        color_for: impl Fn(u8) -> Color,
+        brightness: Option<f32>,
+    ) -> Result<Vec<(u8, Color)>> {
         self.probe_firmware();
         self.ensure_new_protocol_init()?;
         let entries = self.direct_entries(color_for);
-        let buf = self.frame_for(&entries)?;
+        let buf = match brightness {
+            Some(level) => self.frame_for_brightness(&entries, level)?,
+            None => self.frame_for(&entries)?,
+        };
         self.inner.send_feature(&buf, buf.len())?;
         Ok(entries)
     }
@@ -702,7 +719,12 @@ impl ApexProTkl2023 {
 
     /// Frame for `entries` with the software brightness applied.
     fn frame_for(&self, entries: &[(u8, Color)]) -> Result<Vec<u8>> {
-        let factor = f32::from(self.brightness) / 100.0;
+        self.frame_for_brightness(entries, f32::from(self.brightness) / 100.0)
+    }
+
+    /// Apply one brightness source without changing the saved CLI level or the unscaled entries.
+    fn frame_for_brightness(&self, entries: &[(u8, Color)], brightness: f32) -> Result<Vec<u8>> {
+        let factor = brightness.clamp(0.0, 1.0);
         let shown: Vec<(u8, Color)> = entries.iter().map(|(u, c)| (*u, c.scale(factor))).collect();
         let command = DirectFrameCommand {
             packet: self.frame().packet_id,
@@ -881,7 +903,7 @@ impl ApexProTkl2023 {
             self.require_caps(
                 "the direct-mode release",
                 |caps| caps.clear_direct,
-                "its spec does not define `clear_direct_write`",
+                "its `clear_direct_write` output report has not been confirmed on hardware",
             )?;
         } else {
             self.require_caps(
@@ -1255,13 +1277,13 @@ crate::impl_keyboard_with_delegation!(ApexProTkl2023, {
         self.uses_new_protocol().then(|| self.frame().keys)
     }
 
-    async fn stream_direct_frame(&mut self, colors: &[(u8, Color)]) -> Result<()> {
+    async fn stream_direct_frame(&mut self, colors: &[(u8, Color)], brightness: Option<f32>) -> Result<()> {
         if !self.uses_new_protocol() {
             return Err(crate::Error::DeviceCommunication(
                 "direct-mode frames are not supported by this keyboard".to_string(),
             ));
         }
-        self.write_direct_frame(|usage| per_key_color(colors, &[], usage))
+        self.write_direct_frame(|usage| per_key_color(colors, &[], usage), brightness)
             .map(drop)
     }
 
@@ -1830,12 +1852,18 @@ mod tests {
     }
 
     #[test]
-    fn the_direct_mode_release_is_allowed_on_every_caps_row_and_refused_without_one() {
+    fn the_direct_mode_release_is_refused_before_io_on_unconfirmed_boards() {
         use crate::devices::keyboards::model_caps::MODEL_CAPS;
         for caps in MODEL_CAPS {
-            keyboard_for(caps.product_id)
-                .require_caps("release", |c| c.clear_direct, "no `00 41`")
-                .unwrap();
+            let mut keyboard = keyboard_for(caps.product_id);
+            if caps.product_id == product_ids::APEX_PRO_TKL_2023 {
+                keyboard
+                    .require_caps("release", |c| c.clear_direct, "unconfirmed")
+                    .unwrap();
+            } else {
+                let text = refusal(keyboard.send_display_command(Apex2022DisplayCommand::ClearDirect));
+                assert!(text.contains("not supported on"), "{:#06x}: {text}", caps.product_id);
+            }
         }
         let mut no_row = keyboard_for(product_ids::APEX_PRO_TKL_WIRELESS_2024_DONGLE);
         let text = refusal(no_row.send_display_command(Apex2022DisplayCommand::ClearDirect));
@@ -2050,6 +2078,29 @@ mod tests {
         let frame = keyboard.frame_for(&keyboard.direct_entries(|_| Color::RED)).unwrap();
         assert_eq!(frame.len(), APEX_2023_PACKET_LENGTH);
         assert_eq!(&frame[..7], &[0x00, 0x3A, 112, 0x04, 0xFF, 0x00, 0x00]);
+    }
+
+    #[test]
+    fn controller_brightness_overrides_cached_direct_brightness_without_compounding() {
+        let mut keyboard = keyboard_for(product_ids::APEX_PRO_TKL_2023);
+        keyboard.brightness = 20;
+        let mut controller = crate::rgb::RgbController::new(0);
+        controller.set_effect(crate::rgb::Effect::Static {
+            color: Color::new(200, 100, 40),
+        });
+        for (brightness, expected) in [(0.5, [100, 50, 20]), (0.0, [0, 0, 0]), (1.0, [200, 100, 40])] {
+            controller.set_brightness(brightness);
+            let entries = controller.compute_key_colors(keyboard.direct_keys());
+            let first = keyboard
+                .frame_for_brightness(&entries, controller.brightness())
+                .unwrap();
+            let second = keyboard
+                .frame_for_brightness(&entries, controller.brightness())
+                .unwrap();
+            assert_eq!(&first[4..7], &expected);
+            assert_eq!(first, second);
+            assert_eq!(keyboard.brightness, 20, "streaming must not change the saved CLI level");
+        }
     }
 
     #[test]

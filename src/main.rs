@@ -369,7 +369,7 @@ async fn cmd_rgb(manager: &DeviceManager, action: RgbAction) -> Result<()> {
                         stopped?;
                         break;
                     }
-                    _ = ticks.tick() => keyboard.stream_direct_frame(&controller.compute_key_colors(keys)).await?,
+                    _ = ticks.tick() => keyboard.stream_direct_frame(&controller.compute_key_colors(keys), None).await?,
                 }
             }
             println!("Stopped; the board keeps the last frame (`ssgg rgb release` hands 0x1628 back to its profile)");

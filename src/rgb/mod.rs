@@ -1235,8 +1235,8 @@ impl RgbController {
     }
 
     /// [EXPERIMENTAL] Per-key colours of the current effect for a direct-frame keyboard, see
-    /// [`EffectEngine::compute_keys`]. Brightness is not applied: those keyboards scale every frame by their own
-    /// saved software level, which `ssgg rgb brightness` sets.
+    /// [`EffectEngine::compute_keys`]. Brightness is applied by the keyboard when streaming: pass this
+    /// controller's brightness for daemon frames, or use the saved device level for CLI streaming.
     pub fn compute_key_colors(&self, keys: &[u8]) -> Vec<(u8, Color)> {
         self.engine.compute_keys(keys)
     }

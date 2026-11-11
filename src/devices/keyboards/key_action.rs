@@ -197,9 +197,7 @@ impl fmt::Display for KeyAction {
             Self::WheelDown => write!(f, "wheel:down"),
             Self::PanLeft => write!(f, "pan:left"),
             Self::PanRight => write!(f, "pan:right"),
-            // The board stores "unbound" as function 0x51 with zero codes on some layers; shown as unbound, while
-            // `to_bytes` keeps the exact bytes.
-            Self::Key(0) => write!(f, "unbound"),
+            // Keep Key(0) as key:0x00: "unbound" parses as function 0x00, not the stored 0x51.
             Self::Key(usage) => write!(f, "key:0x{usage:02X}"),
             Self::Consumer(usage) => write!(f, "consumer:0x{usage:02X}"),
             Self::Meta => write!(f, "meta"),
@@ -417,6 +415,7 @@ mod tests {
             KeyAction::WheelDown,
             KeyAction::PanLeft,
             KeyAction::PanRight,
+            KeyAction::Key(0),
             KeyAction::Key(0x04),
             KeyAction::Key(0xF0),
             KeyAction::Consumer(0xCD),
@@ -568,10 +567,15 @@ mod tests {
     }
 
     #[test]
-    fn key_zero_with_function_51_shows_as_unbound_but_writes_back_exact_bytes() {
+    fn key_zero_with_function_51_keeps_its_identity_in_text_and_bytes() {
         let action = KeyAction::from_bytes(0x51, [0; 4]);
-        assert_eq!(action.to_string(), "unbound");
+        assert_eq!(action.to_string(), "key:0x00");
+        assert_eq!(
+            KeyAction::parse(&action.to_string()).unwrap().to_bytes(),
+            (0x51, [0; 4])
+        );
         assert_eq!(action.to_bytes(), (0x51, [0; 4]));
+        assert_eq!(KeyAction::Unbound.to_string(), "unbound");
         assert_eq!(KeyAction::Unbound.to_bytes(), (0x00, [0; 4]));
     }
 

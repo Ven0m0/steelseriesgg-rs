@@ -782,7 +782,10 @@ async fn run_animation_loop(daemon_state_anim: Arc<RwLock<DaemonState>>) {
                 state.keyboards.remove_entry(serial.as_str())
             };
             if let Some((owned_serial, (mut keyboard, controller, other))) = keyboard_entry {
-                if let Err(e) = keyboard.stream_direct_frame(key_colors).await {
+                if let Err(e) = keyboard
+                    .stream_direct_frame(key_colors, Some(controller.brightness()))
+                    .await
+                {
                     tracing::warn!("Failed to update keyboard {}: {}", serial, e);
                 }
                 let mut state = daemon_state_anim.write().await;
