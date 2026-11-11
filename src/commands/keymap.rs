@@ -148,8 +148,8 @@ pub(crate) async fn cmd_keymap(manager: &DeviceManager, action: KeymapAction) ->
             }
             open_keyboard(manager)?.set_key_mappings(layer, &changes)?;
             println!(
-                "Sent {} change(s) to the {layer} layer. Live writes are volatile per the spec: read it back with \
-                 `ssgg keymap read --layer {layer}`",
+                "Sent {} change(s) to the {layer} layer. The board re-read matched what was sent; whether the write \
+                 survives a power cycle is unknown. Check with `ssgg keymap read --layer {layer}`",
                 changes.len()
             );
         }
