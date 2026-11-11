@@ -125,7 +125,7 @@ pub const KEYBOARD_MODELS: &[KeyboardModel] = &[
     model(APEX_3, "Apex 3", C::Apex3, false, None),
     model(APEX_5, "Apex 5", C::ApexProTkl2023, false, GEN1),
     model(APEX_PRO_MINI, "Apex Pro Mini", C::ApexProTkl2023, false, MINI),
-    model(APEX_9_MINI, "Apex 9 Mini", C::ApexProTkl2023, false, APEX_9),
+    model(APEX_9_MINI, "Apex 9 Mini", C::ApexProTkl2023, false, MINI),
     model(APEX_3_TKL, "Apex 3 TKL", C::Apex3Tkl, false, None),
     model(
         APEX_PRO_MINI_WIRELESS_DONGLE,

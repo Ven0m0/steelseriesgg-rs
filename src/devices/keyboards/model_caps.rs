@@ -6,7 +6,7 @@
 //! `apex_9_tkl`, `apex_9_mini`, all on `base_apex_2022_wired`; read 2026-11-11). Only `0x1628` is confirmed on
 //! hardware; every other row is untested. A feature a row does not list is refused rather than sent in another
 //! board's shape: the commands in `hid_reports` are sized for a 645-byte feature report, so a 513-byte board gets
-//! its direct lighting frame and nothing else until those commands take a report size.
+//! its direct lighting frame and the 2-byte `00 41` release and nothing else until those commands take a report size.
 
 use super::apex_pro_tkl_2023::WIRED_2023_KEYS;
 use super::key_action::MAPPING_KEYS;
@@ -33,21 +33,34 @@ pub struct ModelCaps {
     pub feature_report_size: usize,
     /// `device-mapping-hid-codes`: the keys of a base or meta mapping layer, sorted.
     pub mapping_keys: &'static [u8],
-    /// `device-analog-hid-codes`: keys with analog (hall) switches, sorted; empty on the Apex 9 boards, which have
-    /// no analog actuation.
+    /// `device-analog-hid-codes`: keys of the live per-key `38 61` table, sorted; empty on the Apex 9 boards, which
+    /// have no such table (their per-key sensitivity lives in the profile; the spec's num-analog-keys equals the
+    /// mapping-key count).
     pub analog_keys: &'static [u8],
     /// `has-second-actuation-layer`.
     pub has_second_actuation: bool,
     pub oled: OledImage,
     /// `macro-data-size` in bytes.
     pub macro_data_size: usize,
-    /// The usages of the prism-sync layout (`hidcode-matrix-layout-nonvariant`), i.e. the keys GG lights.
-    pub lighting_keys: &'static [u8],
+    /// The usages of the spec's prism-sync layout (`hidcode-matrix-layout-nonvariant`), i.e. the keys GG lights.
+    /// Not necessarily the frame `ssgg` sends: the 2024 TKLs and the Apex 9 TKL send the 112-key `TKL_KEYS` frame.
+    /// US layout only on the Mini and `0x1628` tables.
+    pub spec_lighting_keys: &'static [u8],
     /// Whether the live `38 6x` frames of the wired `0x1628` are right for this board: its raw hall-threshold table
     /// is the one `ACTUATION_POINTS` holds. The 2024 boards carry their own tables, so this is `false` for them.
     pub live_analog: bool,
-    /// Whether the on-board profile blob is the `0x1628` one (same `device_profile` structs, 12,500 bytes).
+    /// Whether the on-board profile blob is the `0x1628` one (same `device_profile` structs, 12,500 bytes). The
+    /// 2024 boards' device schema and firmware range differ from the `0x1628`'s (schema 8 from firmware 1.19.0), so
+    /// "same structs" only holds on matching firmware; the read is allowed and its result is not interpreted.
     pub profile_read: bool,
+    /// Whether the spec defines `clear_direct_write` (`00 41`) for the board: it sits in the shared
+    /// `base_apex_2022_wired`, which every row includes. The report is a 2-byte output report, so it fits the
+    /// 513-byte boards too; the output report size of those boards is unverified.
+    pub clear_direct: bool,
+    /// Whether `36` key-mapping writes are allowed: only `0x1628`, the board the whole write path was built on.
+    /// The other rows may read mappings but their writes stay unwired, as the rules file requires of writes that
+    /// are not confirmed for the family.
+    pub mapping_write_confirmed: bool,
 }
 
 impl ModelCaps {
@@ -104,9 +117,11 @@ const fn pro_tkl_2024(product_id: u16) -> ModelCaps {
         has_second_actuation: true,
         oled: OledImage::ColumnPacked,
         macro_data_size: 9600,
-        lighting_keys: &TKL_2024_LIGHTING_KEYS,
+        spec_lighting_keys: &TKL_2024_LIGHTING_KEYS,
         live_analog: false,
         profile_read: true,
+        clear_direct: true,
+        mapping_write_confirmed: false,
     }
 }
 
@@ -119,9 +134,11 @@ const fn pro_mini(product_id: u16) -> ModelCaps {
         has_second_actuation: true,
         oled: OledImage::None,
         macro_data_size: 9600,
-        lighting_keys: &MINI_LIGHTING_KEYS,
+        spec_lighting_keys: &MINI_LIGHTING_KEYS,
         live_analog: false,
         profile_read: false,
+        clear_direct: true,
+        mapping_write_confirmed: false,
     }
 }
 
@@ -138,17 +155,19 @@ pub const MODEL_CAPS: &[ModelCaps] = &[
         has_second_actuation: true,
         oled: OledImage::RowMajor,
         macro_data_size: 9600,
-        lighting_keys: WIRED_2023_KEYS,
+        spec_lighting_keys: WIRED_2023_KEYS,
         live_analog: true,
         profile_read: true,
+        clear_direct: true,
+        mapping_write_confirmed: true,
     },
     pro_tkl_2024(APEX_PRO_TKL_2024),
     pro_tkl_2024(APEX_PRO_TKL_2024_CYBER),
     pro_tkl_2024(APEX_PRO_TKL_2024_STEEL),
     pro_mini(APEX_PRO_MINI),
     pro_mini(APEX_PRO_MINI_2024),
-    // Apex 9 TKL: 104 idx entries (97 keys), 98 firmware analog slots, but no second layer and no analog
-    // actuation; the spec only defines the reset-all `38 61` frame and rapid tap.
+    // Apex 9 TKL: 104 idx entries (97 keys), 98 firmware analog slots, but no second layer and no live per-key
+    // `38 61` table; the spec only defines the reset-all `38 61` frame and rapid tap.
     ModelCaps {
         product_id: APEX_9_TKL,
         feature_report_size: 513,
@@ -157,9 +176,11 @@ pub const MODEL_CAPS: &[ModelCaps] = &[
         has_second_actuation: false,
         oled: OledImage::None,
         macro_data_size: 9600,
-        lighting_keys: WIRED_2023_KEYS,
+        spec_lighting_keys: WIRED_2023_KEYS,
         live_analog: false,
         profile_read: false,
+        clear_direct: true,
+        mapping_write_confirmed: false,
     },
     ModelCaps {
         product_id: APEX_9_MINI,
@@ -169,9 +190,11 @@ pub const MODEL_CAPS: &[ModelCaps] = &[
         has_second_actuation: false,
         oled: OledImage::None,
         macro_data_size: 9600,
-        lighting_keys: &MINI_LIGHTING_KEYS,
+        spec_lighting_keys: &MINI_LIGHTING_KEYS,
         live_analog: false,
         profile_read: false,
+        clear_direct: true,
+        mapping_write_confirmed: false,
     },
 ];
 
@@ -215,7 +238,7 @@ mod tests {
             assert_eq!(row.analog_keys.len(), analog, "{pid:#06x}");
             assert_eq!(row.has_second_actuation, second, "{pid:#06x}");
             assert_eq!(row.oled, oled, "{pid:#06x}");
-            assert_eq!(row.lighting_keys.len(), lighting, "{pid:#06x}");
+            assert_eq!(row.spec_lighting_keys.len(), lighting, "{pid:#06x}");
             assert_eq!(row.macro_data_size, 9600, "{pid:#06x}");
         }
     }
@@ -230,12 +253,12 @@ mod tests {
                 "{:#06x}",
                 row.product_id
             );
-            let mut lighting = row.lighting_keys.to_vec();
+            let mut lighting = row.spec_lighting_keys.to_vec();
             lighting.sort_unstable();
             lighting.dedup();
             assert_eq!(
                 lighting.len(),
-                row.lighting_keys.len(),
+                row.spec_lighting_keys.len(),
                 "{:#06x} lighting",
                 row.product_id
             );
@@ -243,7 +266,7 @@ mod tests {
     }
 
     #[test]
-    fn the_apex_9_boards_have_no_analog_keys_and_no_second_layer() {
+    fn the_apex_9_boards_have_no_live_analog_table_and_no_second_layer() {
         for pid in [APEX_9_TKL, APEX_9_MINI] {
             assert!(caps(pid).analog_keys.is_empty());
             assert!(!caps(pid).has_second_actuation);
@@ -282,6 +305,19 @@ mod tests {
     fn the_mini_layout_lights_only_mapped_keys() {
         assert!(MINI_LIGHTING_KEYS.iter().all(|k| MINI_KEYS.contains(k)));
         assert!(MINI_KEYS.contains(&0xF0));
+    }
+
+    #[test]
+    fn only_the_0x1628_has_confirmed_mapping_writes_and_every_row_defines_clear_direct() {
+        for row in MODEL_CAPS {
+            assert_eq!(
+                row.mapping_write_confirmed,
+                row.product_id == APEX_PRO_TKL_2023,
+                "{:#06x}",
+                row.product_id
+            );
+            assert!(row.clear_direct, "{:#06x}", row.product_id);
+        }
     }
 
     #[test]

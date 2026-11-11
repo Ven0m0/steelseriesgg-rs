@@ -860,9 +860,10 @@ async fn wait_for_shutdown() -> Result<()> {
     Ok(())
 }
 
-/// [EXPERIMENTAL] Hand the wired Apex Pro TKL 2023 (`0x1628`, the only model that defines `00 41`) back to its
-/// on-board lighting, so it does not hold the last streamed frame after the daemon exits. Untested on hardware;
-/// a failure is logged, not fatal.
+/// [EXPERIMENTAL] Hand the wired Apex Pro TKL 2023 (`0x1628`) back to its on-board lighting, so it does not hold
+/// the last streamed frame after the daemon exits. The other wired Gen 3 rows define `00 41` too (`clear_direct`),
+/// but only `0x1628` has it confirmed, so the daemon sends it there alone; `ssgg rgb release` reaches the others.
+/// A failure is logged, not fatal.
 async fn release_direct_lighting(daemon_state: &RwLock<DaemonState>) {
     let mut state = daemon_state.write().await;
     for (keyboard, _, info) in state.keyboards.values_mut() {

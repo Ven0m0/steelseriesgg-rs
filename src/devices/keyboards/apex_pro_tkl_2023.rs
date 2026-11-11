@@ -104,7 +104,10 @@ pub(crate) const WIRED_2023_FRAME: DirectFrame = DirectFrame {
 
 /// [EXPERIMENTAL] Apex Pro Mini (`0x161E`) and Apex Pro Mini (2024) (`0x1648`): the `0x40` direct frame in the
 /// board's 513-byte feature report, the prism-sync layout of the Mini as key table (GG specs `apex_pro_mini`,
-/// `apex_pro_mini_2024`, 2026-11-11), no `0x4B` init as for `0x1628`. Untested on hardware.
+/// `apex_pro_mini_2024`, 2026-11-11), no `0x4B` init as for `0x1628`. Also the Apex 9 Mini (`0x1620`), whose spec
+/// uses the same layout. US layout only: ISO, UK and JP boards would light a nonexistent `0x31` and leave `0x32` /
+/// `0x64` dark (the `F2` layout query is refused on 513-byte boards, so the layout is not detected). Untested on
+/// hardware.
 pub(crate) const MINI_FRAME: DirectFrame = DirectFrame {
     packet_id: CommandCode::Apex2023Direct,
     length: APEX_9_PACKET_LENGTH,
@@ -795,13 +798,16 @@ impl ApexProTkl2023 {
         let product_id = self.inner.info().product_id;
         match model_caps(product_id) {
             Some(caps) if allowed(caps) => Ok(caps),
-            _ => Err(crate::Error::DeviceCommunication(format!(
+            Some(_) => Err(crate::Error::DeviceCommunication(format!(
                 "{what} is not supported on {product_id:#06x}: {why} [EXPERIMENTAL]"
+            ))),
+            None => Err(crate::Error::DeviceCommunication(format!(
+                "{what} is not supported on {product_id:#06x}: no capability row for this model [EXPERIMENTAL]"
             ))),
         }
     }
 
-    /// The boards whose typed commands (mapping, macro, query, `00 41`) are sized for the 645-byte feature report.
+    /// The boards whose typed commands (mapping, macro, query) are sized for the 645-byte feature report.
     fn require_wide_reports(&self, what: &str) -> Result<&'static ModelCaps> {
         self.require_caps(
             what,
@@ -872,7 +878,11 @@ impl ApexProTkl2023 {
     /// [EXPERIMENTAL] Send one display command (leave direct mode, OLED write or reset). Wired board only.
     pub fn send_display_command(&mut self, command: Apex2022DisplayCommand<'_>) -> Result<()> {
         if matches!(command, Apex2022DisplayCommand::ClearDirect) {
-            self.require_wide_reports("the direct-mode release")?;
+            self.require_caps(
+                "the direct-mode release",
+                |caps| caps.clear_direct,
+                "its spec does not define `clear_direct_write`",
+            )?;
         } else {
             self.require_caps(
                 "this OLED command",
@@ -1013,6 +1023,11 @@ impl ApexProTkl2023 {
     /// Wired board only.
     pub fn write_key_mappings(&mut self, layer: MappingLayer, entries: &[KeyBinding]) -> Result<()> {
         self.require_mapping("the key-mapping write", layer)?;
+        self.require_caps(
+            "the key-mapping write",
+            |caps| caps.mapping_write_confirmed,
+            "key-mapping writes are only wired for the 0x1628",
+        )?;
         for report in key_mapping_reports(layer, entries)? {
             self.send_report(&report, true)?;
             command_gap();
@@ -1805,7 +1820,6 @@ mod tests {
             assert!(keyboard.read_gen3_profile(0).is_err(), "{pid:#06x}");
             assert!(keyboard.send_analog_setting(&AnalogSetting::RapidTap(true)).is_err());
             for command in [
-                Apex2022DisplayCommand::ClearDirect,
                 Apex2022DisplayCommand::OledReset,
                 Apex2022DisplayCommand::Oled(&[0; 640]),
             ] {
@@ -1813,6 +1827,79 @@ mod tests {
                 assert!(text.contains("not supported on"), "{pid:#06x}: {text}");
             }
         }
+    }
+
+    #[test]
+    fn the_direct_mode_release_is_allowed_on_every_caps_row_and_refused_without_one() {
+        use crate::devices::keyboards::model_caps::MODEL_CAPS;
+        for caps in MODEL_CAPS {
+            keyboard_for(caps.product_id)
+                .require_caps("release", |c| c.clear_direct, "no `00 41`")
+                .unwrap();
+        }
+        let mut no_row = keyboard_for(product_ids::APEX_PRO_TKL_WIRELESS_2024_DONGLE);
+        let text = refusal(no_row.send_display_command(Apex2022DisplayCommand::ClearDirect));
+        assert!(text.contains("no capability row"), "{text}");
+        assert!(!text.contains("645"), "{text}");
+    }
+
+    #[test]
+    fn mapping_writes_are_wired_for_the_0x1628_only_while_reads_stay_allowed() {
+        for pid in [
+            product_ids::APEX_PRO_TKL_2024,
+            product_ids::APEX_PRO_TKL_2024_CYBER,
+            product_ids::APEX_PRO_TKL_2024_STEEL,
+        ] {
+            let mut keyboard = keyboard_for(pid);
+            for layer in [MappingLayer::Base, MappingLayer::Meta, MappingLayer::Second] {
+                keyboard.require_mapping("mapping", layer).unwrap();
+                let text = refusal(keyboard.write_key_mappings(layer, &[]));
+                assert!(text.contains("only wired for the 0x1628"), "{pid:#06x}: {text}");
+            }
+            assert!(keyboard.reset_key_mappings(MappingLayer::Base).is_err(), "{pid:#06x}");
+        }
+    }
+
+    /// The `spec_lighting_keys` column is what GG lights, not the frame `ssgg` sends: pins, per PID, which one
+    /// differs and which matches.
+    #[test]
+    fn the_frame_sent_matches_the_spec_layout_only_where_documented() {
+        use crate::devices::keyboards::model_caps::MODEL_CAPS;
+        let same = [
+            product_ids::APEX_PRO_TKL_2023,
+            product_ids::APEX_PRO_MINI,
+            product_ids::APEX_PRO_MINI_2024,
+            product_ids::APEX_9_MINI,
+        ];
+        let tkl_frame = [
+            product_ids::APEX_PRO_TKL_2024,
+            product_ids::APEX_PRO_TKL_2024_CYBER,
+            product_ids::APEX_PRO_TKL_2024_STEEL,
+            product_ids::APEX_9_TKL,
+        ];
+        for caps in MODEL_CAPS {
+            let keyboard = keyboard_for(caps.product_id);
+            if same.contains(&caps.product_id) {
+                assert_eq!(
+                    keyboard.direct_keys(),
+                    caps.spec_lighting_keys,
+                    "{:#06x}",
+                    caps.product_id
+                );
+            } else {
+                assert!(tkl_frame.contains(&caps.product_id), "{:#06x}", caps.product_id);
+                assert_eq!(keyboard.direct_keys(), TKL_KEYS, "{:#06x}", caps.product_id);
+                assert_ne!(
+                    keyboard.direct_keys(),
+                    caps.spec_lighting_keys,
+                    "{:#06x}",
+                    caps.product_id
+                );
+            }
+        }
+        assert!(keyboard_for(product_ids::APEX_PRO_TKL_2024).needs_init());
+        assert!(!keyboard_for(product_ids::APEX_9_TKL).needs_init());
+        assert!(!keyboard_for(product_ids::APEX_9_MINI).needs_init());
     }
 
     #[test]
@@ -1825,7 +1912,11 @@ mod tests {
 
     #[test]
     fn mini_direct_frame_is_513_bytes_with_the_mini_layout() {
-        for pid in [product_ids::APEX_PRO_MINI, product_ids::APEX_PRO_MINI_2024] {
+        for pid in [
+            product_ids::APEX_PRO_MINI,
+            product_ids::APEX_PRO_MINI_2024,
+            product_ids::APEX_9_MINI,
+        ] {
             let keyboard = keyboard_for(pid);
             assert_eq!(keyboard.direct_packet_length(), 513);
             assert!(!keyboard.needs_init());
@@ -1989,23 +2080,17 @@ mod tests {
     }
 
     #[test]
-    fn apex_9_pair_uses_the_0x40_frame_in_513_bytes_without_init() {
-        for pid in [product_ids::APEX_9_TKL, product_ids::APEX_9_MINI] {
-            let keyboard = keyboard_for(pid);
-            assert_eq!(
-                keyboard.direct_packet_id(),
-                Some(CommandCode::Apex2023Direct),
-                "{pid:#06x}"
-            );
-            assert_eq!(keyboard.direct_packet_length(), 513, "{pid:#06x}");
-            assert!(!keyboard.needs_init(), "{pid:#06x}");
-            assert_eq!(keyboard.direct_keys().len(), 112);
+    fn apex_9_tkl_uses_the_0x40_frame_in_513_bytes_without_init() {
+        let keyboard = keyboard_for(product_ids::APEX_9_TKL);
+        assert_eq!(keyboard.direct_packet_id(), Some(CommandCode::Apex2023Direct));
+        assert_eq!(keyboard.direct_packet_length(), 513);
+        assert!(!keyboard.needs_init());
+        assert_eq!(keyboard.direct_keys().len(), 112);
 
-            let frame = keyboard.frame_for(&keyboard.direct_entries(|_| Color::RED)).unwrap();
-            assert_eq!(frame.len(), 513);
-            assert_eq!(&frame[..7], &[0x00, 0x40, 0x70, 0x04, 0xFF, 0x00, 0x00]);
-            assert!(frame[3 + 112 * 4..].iter().all(|&b| b == 0));
-        }
+        let frame = keyboard.frame_for(&keyboard.direct_entries(|_| Color::RED)).unwrap();
+        assert_eq!(frame.len(), 513);
+        assert_eq!(&frame[..7], &[0x00, 0x40, 0x70, 0x04, 0xFF, 0x00, 0x00]);
+        assert!(frame[3 + 112 * 4..].iter().all(|&b| b == 0));
         assert!((513 - 3) / 4 >= TKL_KEYS.len());
     }
 
@@ -2073,7 +2158,7 @@ mod tests {
             (0x161A, K::Apex3, "Apex 3", None, None),
             (0x161C, K::ApexProTkl2023, "Apex 5", GEN1, GEN1),
             (0x161E, K::ApexProTkl2023, "Apex Pro Mini", MINI, MINI),
-            (0x1620, K::ApexProTkl2023, "Apex 9 Mini", APEX_9, APEX_9_GEN3),
+            (0x1620, K::ApexProTkl2023, "Apex 9 Mini", MINI, MINI),
             (0x1622, K::Apex3Tkl, "Apex 3 TKL", None, None),
             (0x1624, K::Generic, "Apex Pro Mini Wireless (Dongle)", None, None),
             (0x1626, K::Generic, "Apex Pro Mini Wireless", None, None),

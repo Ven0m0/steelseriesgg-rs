@@ -62,18 +62,19 @@ GG names PID `0x1628` `apex_pro_tkl_2022` regardless of the retail year.
 `src/devices/keyboards/model_caps.rs` holds one row per board, derived from GG's decrypted device specs
 (2026-11-11); only `0x1628` is confirmed on hardware, every other row is untested. Commands outside a row are
 refused before anything is sent. Mapping counts are the keys of a base or meta layer; analog counts are keys with
-hall switches.
+hall switches. "Spec lighting keys" is the layout GG lights, not necessarily the frame `ssgg` sends (the
+2024 TKLs and `0x1634` send the 112-key frame; `0x1620` sends the 61-key Mini frame, US layout only).
 
-| PID | Feature report | Mapping keys | Analog keys | Second layer | OLED | Lighting keys |
+| PID | Feature report | Mapping keys | Analog keys | Second layer | OLED | Spec lighting keys |
 |-----|----------------|--------------|-------------|--------------|------|---------------|
 | 0x1628 | 645 | 91 | 68 | yes | yes, row-major | 84 |
 | 0x1642, 0x1660, 0x1662 | 645 | 91 | 68 | yes | yes, column-packed in the spec (refused) | 85 (+ `0xFB`) |
 | 0x161E, 0x1648 | 513 | 68 | 68 | yes | no | 61 |
-| 0x1634 (Apex 9 TKL) | 513 | 91 | none | no | no | 84 |
-| 0x1620 (Apex 9 Mini) | 513 | 68 | none | no | no | 61 |
+| 0x1634 (Apex 9 TKL) | 513 | 91 | no live table | no | no | 84 |
+| 0x1620 (Apex 9 Mini) | 513 | 68 | no live table | no | no | 61 |
 
 The typed mapping, macro, query, display and profile commands are sized for the 645-byte report, so the 513-byte
-boards get only the direct lighting frame. The 2024 Pro TKL boards (`0x1642`, `0x1660`, `0x1662`) have their own raw
+boards get only the direct lighting frame and the 2-byte `00 41` release. The 2024 Pro TKL boards (`0x1642`, `0x1660`, `0x1662`) have their own raw
 hall-threshold tables, so the live `38 6x` frames stay `0x1628`-only.
 
 ### Headsets
