@@ -478,19 +478,15 @@ pub(crate) enum RgbAction {
     Release,
 }
 
-/// Apex Pro TKL 2023 (0x1628) 128x40 OLED, from GG's device spec. EXPERIMENTAL, untested from ssgg. The 640
-/// image bytes GG itself sent (captured 2026-11-10) render as a picture row-major, so `row` is the default packing.
+/// Apex Pro TKL 2023 (0x1628) 128x40 OLED, from GG's device spec; direct write, on-board image and reset confirmed
+/// on hardware 2026-11-10 (firmware 1.19.7). Images are row-major, 16 bytes per row, MSB = leftmost pixel.
 #[derive(Subcommand)]
 pub(crate) enum OledAction {
-    /// Show a 128x40 image: a binary PBM (P4) file, packed per --packing, or a raw 640-byte frame sent as is
+    /// Show a 128x40 image: a binary PBM (P4) file or a raw 640-byte frame
     Show {
         file: PathBuf,
-        /// [EXPERIMENTAL] PBM pixel packing: `row` = row-major (byte row*16 + column/8, MSB = leftmost pixel; the
-        /// layout of GG's captured image), `page` = SSD1306 pages (byte page*128 + column, LSB = top pixel)
-        #[arg(long, default_value = "row", value_parser = clap::builder::PossibleValuesParser::new(["page", "row"]))]
-        packing: String,
-        /// Send the image as the on-board OLED image (`38 83`, the frame GG uses) instead of the direct write
-        /// (`1F 81`); the board keeps it
+        /// Send the image as the on-board OLED image (`38 83`, the frame GG uses; the board keeps it) instead of
+        /// the direct write (`1F 81`)
         #[arg(long)]
         onboard: bool,
         /// Print the report instead of sending it; no keyboard is opened
@@ -498,12 +494,8 @@ pub(crate) enum OledAction {
         dry_run: bool,
     },
 
-    /// Send a frame whose first 16 bytes are 0xFF and the rest 0: under row packing it lights a one-pixel line
-    /// across the top, under page packing a 16x8 block top left
+    /// Send a frame whose first 16 bytes are 0xFF and the rest 0: a one-pixel line across the top
     TestPattern {
-        /// [EXPERIMENTAL] Packing to describe the expected result for; the frame is the same for both
-        #[arg(long, default_value = "row", value_parser = clap::builder::PossibleValuesParser::new(["page", "row"]))]
-        packing: String,
         /// Print the report instead of sending it; no keyboard is opened
         #[arg(long)]
         dry_run: bool,

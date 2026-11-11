@@ -1,8 +1,9 @@
-//! `[EXPERIMENTAL]` Apex Pro TKL 2023 (`0x1628`) 128x40 monochrome OLED frames: file parsing and pixel packing
-//! for [`Apex2022DisplayCommand::Oled`](crate::devices::hid_reports::Apex2022DisplayCommand::Oled) and
-//! [`OnboardImage`](crate::devices::hid_reports::Apex2022DisplayCommand::OnboardImage). The spec does not say
-//! how the board maps the 640 bytes onto pixels; the image GG sent on 2026-11-10 (USBPcap, `0x1628`) renders as
-//! a picture only as [`OledPacking::Row`], so that is the default. Neither layout is replayed from `ssgg` yet.
+//! Apex Pro TKL 2023 (`0x1628`) 128x40 monochrome OLED frames: file parsing for
+//! [`Apex2022DisplayCommand::Oled`](crate::devices::hid_reports::Apex2022DisplayCommand::Oled) and
+//! [`OnboardImage`](crate::devices::hid_reports::Apex2022DisplayCommand::OnboardImage). The 640 bytes are the
+//! image row-major, 16 bytes per row, MSB = leftmost pixel (the PBM `P4` raster layout): confirmed on hardware
+//! 2026-11-10 (firmware 1.19.7) with the test pattern (a one-pixel line across the top), a border-and-diagonal
+//! image and the image GG itself had sent.
 
 use crate::{Error, Result};
 
@@ -11,48 +12,20 @@ pub const OLED_HEIGHT: usize = 40;
 /// One bit per pixel.
 pub const OLED_FRAME_LEN: usize = OLED_WIDTH * OLED_HEIGHT / 8;
 
-/// `[EXPERIMENTAL]` Byte layout of an OLED frame; `Row` matches GG's captured image, nothing is replayed yet.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum OledPacking {
-    /// SSD1306 pages: byte `page * 128 + column`, bit `n` = pixel row `page * 8 + n` (LSB = top pixel of the page).
-    Page,
-    /// Row-major: byte `row * 16 + column / 8`, MSB = leftmost pixel.
-    Row,
-}
-
-/// `[EXPERIMENTAL]` A frame whose first 16 bytes are `0xFF`: a 16x8 block top left under [`OledPacking::Page`],
-/// a one-pixel line across the top under [`OledPacking::Row`].
+/// A frame whose first 16 bytes are `0xFF`: a one-pixel line across the top (confirmed 2026-11-10).
 pub fn test_pattern() -> [u8; OLED_FRAME_LEN] {
     let mut frame = [0u8; OLED_FRAME_LEN];
     frame[..16].fill(0xFF);
     frame
 }
 
-/// `[EXPERIMENTAL]` Frame from a file's bytes: exactly [`OLED_FRAME_LEN`] bytes are a raw frame and sent as is;
-/// anything else must be a 128x40 binary PBM (`P4`), packed with `packing`.
-pub fn frame_from_file(bytes: &[u8], packing: OledPacking) -> Result<[u8; OLED_FRAME_LEN]> {
+/// Frame from a file's bytes: exactly [`OLED_FRAME_LEN`] bytes are a raw frame and sent as is; anything else
+/// must be a 128x40 binary PBM (`P4`), whose raster already has the board's layout.
+pub fn frame_from_file(bytes: &[u8]) -> Result<[u8; OLED_FRAME_LEN]> {
     if let Ok(raw) = bytes.try_into() {
         return Ok(raw);
     }
-    Ok(pack(&parse_pbm(bytes)?, packing))
-}
-
-/// Pack a row-major, MSB-first 128x40 raster (the PBM `P4` layout) into `packing`.
-pub fn pack(raster: &[u8; OLED_FRAME_LEN], packing: OledPacking) -> [u8; OLED_FRAME_LEN] {
-    match packing {
-        OledPacking::Row => *raster,
-        OledPacking::Page => {
-            let lit = |x: usize, y: usize| raster[y * OLED_WIDTH / 8 + x / 8] & (0x80 >> (x % 8)) != 0;
-            let mut frame = [0u8; OLED_FRAME_LEN];
-            for (i, byte) in frame.iter_mut().enumerate() {
-                let (page, column) = (i / OLED_WIDTH, i % OLED_WIDTH);
-                *byte = (0..8)
-                    .filter(|bit| lit(column, page * 8 + bit))
-                    .fold(0, |b, bit| b | 1 << bit);
-            }
-            frame
-        }
-    }
+    parse_pbm(bytes)
 }
 
 /// Raster of a binary PBM (`P4`) that must be exactly 128x40. Header comments (`#` to end of line) are allowed.
@@ -126,34 +99,15 @@ mod tests {
     }
 
     #[test]
-    fn pack_row_keeps_the_raster() {
-        assert_eq!(pack(&three_pixels(), OledPacking::Row), three_pixels());
-    }
-
-    #[test]
-    fn pack_page_transposes_into_ssd1306_pages() {
-        let frame = pack(&three_pixels(), OledPacking::Page);
-        let mut expected = [0u8; OLED_FRAME_LEN];
-        expected[0] = 0x01; // page 0, column 0, top pixel
-        expected[9] = 0x01; // page 0, column 9, top pixel
-        expected[4 * 128 + 127] = 0x80; // page 4, column 127, row 39 = bit 7
-        assert_eq!(frame, expected);
-    }
-
-    #[test]
     fn frame_from_pbm_with_comment() {
         let file = pbm("P4\n# made by hand\n128 40\n", &three_pixels());
-        assert_eq!(frame_from_file(&file, OledPacking::Row).unwrap(), three_pixels());
-        assert_eq!(
-            frame_from_file(&file, OledPacking::Page).unwrap(),
-            pack(&three_pixels(), OledPacking::Page)
-        );
+        assert_eq!(frame_from_file(&file).unwrap(), three_pixels());
     }
 
     #[test]
-    fn frame_from_raw_640_bytes_ignores_packing() {
+    fn frame_from_raw_640_bytes_is_sent_as_is() {
         let raw = three_pixels();
-        assert_eq!(frame_from_file(&raw, OledPacking::Page).unwrap(), raw);
+        assert_eq!(frame_from_file(&raw).unwrap(), raw);
     }
 
     #[test]
@@ -168,7 +122,7 @@ mod tests {
         assert!(parse_pbm(&pbm("P1 128 40\n", &[0u8; OLED_FRAME_LEN])).is_err());
         assert!(parse_pbm(b"P4 128").is_err());
         assert!(parse_pbm(&pbm("P4 128 40\n", &[0u8; 639])).is_err());
-        assert!(frame_from_file(&[0u8; 639], OledPacking::Page).is_err());
+        assert!(frame_from_file(&[0u8; 639]).is_err());
     }
 
     #[test]

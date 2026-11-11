@@ -154,8 +154,9 @@ pub enum CommandCode {
     /// decrypted device spec; confirmed on `0x1628` (fw 1.19.7, 2026-11-10): the board returned to its stored
     /// lighting after `ssgg rgb release`.
     Apex2023DirectClear = 0x41,
-    /// [EXPERIMENTAL] OLED direct write / reset (`00 1F 81|82`), see [`Apex2022DisplayCommand`]. From GG's
-    /// decrypted device spec, never sent from `ssgg` on hardware.
+    /// OLED direct write / reset (`00 1F 81|82`), see [`Apex2022DisplayCommand`]. From GG's decrypted device spec;
+    /// confirmed on `0x1628` (firmware 1.19.7, 2026-11-10): the test pattern, a drawn image and GG's own image bytes rendered,
+    /// and `1F 82` handed the OLED back to the firmware.
     Apex2023Oled = 0x1F,
     /// [EXPERIMENTAL] Live key-binding write of the 2022-firmware Apex boards (`00 36 <layer> <count> ...`), see
     /// [`KeyMappingCommand`]. From GG's decrypted device spec, never sent from `ssgg` on hardware.
@@ -221,7 +222,7 @@ impl fmt::Display for CommandCode {
             CommandCode::AnalogKeys => write!(f, "ANALOG_KEYS_EXPERIMENTAL"),
             CommandCode::Gen3ProfileRead => write!(f, "GEN3_PROFILE_READ"),
             CommandCode::Apex2023DirectClear => write!(f, "APEX2023_DIRECT_CLEAR"),
-            CommandCode::Apex2023Oled => write!(f, "APEX2023_OLED_EXPERIMENTAL"),
+            CommandCode::Apex2023Oled => write!(f, "APEX2023_OLED"),
             CommandCode::KeyMappingWrite => write!(f, "KEY_MAPPING_WRITE_EXPERIMENTAL"),
             CommandCode::KeyMappingRead => write!(f, "KEY_MAPPING_READ_EXPERIMENTAL"),
             CommandCode::MetaToggle => write!(f, "META_TOGGLE_EXPERIMENTAL"),
@@ -1252,21 +1253,24 @@ impl HidCommand for Gen3ProfileReadCommand {
     }
 }
 
-/// [EXPERIMENTAL] Display commands of the 2022-firmware Apex boards, from GG's decrypted device spec
-/// (`base_apex_2022_wired`, `apex_pro_tkl_2022`, 2026-10-24); never sent from `ssgg` on hardware.
+/// Display commands of the 2022-firmware Apex boards, from GG's decrypted device spec (`base_apex_2022_wired`,
+/// `apex_pro_tkl_2022`, 2026-10-24); all four confirmed on `0x1628` (firmware 1.19.7, 2026-11-10).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Apex2022DisplayCommand<'a> {
     /// `00 41`, output report (GG `clear_direct_write`): leave direct-mode lighting. Confirmed on `0x1628`
     /// (2026-11-10).
     ClearDirect,
-    /// `00 1F 81 <640 bytes>`, feature report (GG `oled_direct_write`). The pixel packing is not in the spec.
+    /// `00 1F 81 <640 bytes>`, feature report (GG `oled_direct_write`): image row-major, 16 bytes per row, MSB
+    /// left. Confirmed on `0x1628` (2026-11-10).
     Oled(&'a [u8; 640]),
     /// `00 38 83 00 <640 bytes>`, feature report: the on-board OLED image. This is the frame GG sends when the
     /// OLED image is changed in its UI (USBPcap, `0x1628`, firmware 1.19.7, 2026-11-10: `1F 82` first, then this,
     /// then an on-board profile rewrite); the 640 bytes GG sent render as a 128x40 picture row-major, 16 bytes per
-    /// row, MSB = leftmost pixel. Wire byte `0x38` is [`CommandCode::AnalogKeys`]. Not yet replayed from `ssgg`.
+    /// row, MSB = leftmost pixel. Wire byte `0x38` is [`CommandCode::AnalogKeys`]. Confirmed on `0x1628`
+    /// (2026-11-10): GG's own image bytes and a drawn image rendered through `ssgg oled show --onboard`.
     OnboardImage(&'a [u8; 640]),
-    /// `00 1F 82`, output report (GG `oled_reset_direct_write`): hand the OLED back to the firmware.
+    /// `00 1F 82`, output report (GG `oled_reset_direct_write`): hand the OLED back to the firmware. Confirmed on
+    /// `0x1628` (2026-11-10).
     OledReset,
 }
 

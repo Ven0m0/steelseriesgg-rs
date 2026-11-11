@@ -5,7 +5,7 @@ use steelseries_gg::devices::hid_reports::{
     Apex2022DisplayCommand, HallLayer, HidReportBuilder, PROFILE_CHUNK_REPORT_SIZE,
 };
 use steelseries_gg::devices::keyboards::apex_pro_tkl_2023::{AnalogSetting, analog_report, key_actuation_setting};
-use steelseries_gg::devices::keyboards::oled::{self, OledPacking};
+use steelseries_gg::devices::keyboards::oled;
 use steelseries_gg::devices::{DeviceManager, DeviceType, HidDeviceType, KeyMappingDatabase, product_ids};
 use steelseries_gg::{Error, Result};
 
@@ -156,28 +156,15 @@ pub(crate) async fn cmd_actuation(manager: &DeviceManager, action: ActuationActi
 }
 
 pub(crate) async fn cmd_oled(manager: &DeviceManager, action: OledAction) -> Result<()> {
-    let packing = |name: &str| {
-        if name == "row" {
-            OledPacking::Row
-        } else {
-            OledPacking::Page
-        }
-    };
     let bitmap: Option<[u8; 640]> = match &action {
-        OledAction::Show {
-            file, packing: name, ..
-        } => {
+        OledAction::Show { file, .. } => {
             let bytes = tokio::fs::read(file)
                 .await
                 .map_err(|e| Error::Other(format!("read {}: {e}", file.display())))?;
-            Some(oled::frame_from_file(&bytes, packing(name))?)
+            Some(oled::frame_from_file(&bytes)?)
         }
-        OledAction::TestPattern { packing: name, .. } => {
-            let expected = match packing(name) {
-                OledPacking::Page => "a 16x8 block top left",
-                OledPacking::Row => "a one-pixel line across the top",
-            };
-            println!("Test pattern: if the packing is {name} [EXPERIMENTAL], expect {expected}");
+        OledAction::TestPattern { .. } => {
+            println!("Test pattern: a one-pixel line across the top of the OLED");
             Some(oled::test_pattern())
         }
         OledAction::Reset { .. } => None,
@@ -193,7 +180,7 @@ pub(crate) async fn cmd_oled(manager: &DeviceManager, action: OledAction) -> Res
     if dry_run {
         let mut buf = vec![0u8; PROFILE_CHUNK_REPORT_SIZE];
         let size = HidReportBuilder::new(HidDeviceType::Keyboard).build_report(command, &mut buf)?;
-        println!("dry run, nothing sent: Apex Pro TKL 2023 (0x1628) report [EXPERIMENTAL]");
+        println!("dry run, nothing sent: Apex Pro TKL 2023 (0x1628) report");
         print_report(&buf[..size]);
         return Ok(());
     }
@@ -204,6 +191,6 @@ pub(crate) async fn cmd_oled(manager: &DeviceManager, action: OledAction) -> Res
     let mut keyboard = manager.open_keyboard(keyboard_info)?;
     crate::warn_if_gg_engine_running();
     keyboard.send_display_command(command)?;
-    println!("Sent [EXPERIMENTAL], never confirmed on hardware");
+    println!("Sent");
     Ok(())
 }
