@@ -3,7 +3,7 @@
 use super::apex_pro_tkl_2023_profile::{PROFILE_LEN, actuation_raw, checksum_matches, profile_chunks};
 use super::key_action::{
     MappingLayer, default_key_mappings, key_mapping_read_request, key_mapping_reports, macro_data, macro_read_requests,
-    merge_key_mappings, parse_device_query, parse_key_mapping_reply,
+    merge_key_mappings, parse_device_query, parse_key_mapping_reply, verify_key_mappings,
 };
 use super::models::{DirectFrame, keyboard_model};
 use super::{GenericKeyboard, Keyboard};
@@ -443,6 +443,8 @@ fn command_report(command: impl HidCommand, len: usize) -> Result<Vec<u8>> {
 }
 
 /// The id in a layout or region answer, `None` when `reply` is not that answer, `Err` when its error byte is set.
+/// Treating a non-zero error byte as a failure is an assumption: the spec declares the byte's values as `0 1`
+/// without saying which is which.
 fn device_query_answer(reply: &[u8], query: DeviceQueryCommand) -> Option<Result<u8>> {
     let (error, id) = parse_device_query(reply, query)?;
     Some(if error == 0 {
@@ -577,7 +579,7 @@ impl ApexProTkl2023 {
         if self.gen3_firmware.is_some() || !probes {
             return;
         }
-        let version = ApexProTkl2023::firmware_version(self);
+        let version = self.poll_firmware_version();
         let gen3 = version.as_deref().is_some_and(is_gen3_firmware);
         tracing::info!("firmware {version:?}: Gen 3 protocol {gen3}");
         self.gen3_firmware = Some(gen3);
@@ -802,8 +804,7 @@ impl ApexProTkl2023 {
         self.require_wired_2023("the Gen3 on-board profile read")?;
         let requests = gen3_read_requests(slot)?;
         let gap = std::time::Duration::from_millis(Gen3ProfileReadCommand::COMMAND_GAP_MS);
-        // Path call: `self.firmware_version()` would pick the `&mut self` trait method over this `&self` one.
-        let firmware = ApexProTkl2023::firmware_version(self);
+        let firmware = self.poll_firmware_version();
         let builder = HidReportBuilder::new(HidDeviceType::Keyboard);
         let mut replies = Vec::with_capacity(requests.len());
         for request in requests {
@@ -906,7 +907,8 @@ impl ApexProTkl2023 {
         parse_key_mapping_reply(&reply, &layer.keys())
     }
 
-    /// `[EXPERIMENTAL]` Write a whole layer: every `36` chunk, 13 ms apart. Volatile per the spec. Wired board only.
+    /// `[EXPERIMENTAL]` Write a whole layer: every `36` chunk, 13 ms apart. Whether it survives a power cycle is unknown.
+    /// Wired board only.
     pub fn write_key_mappings(&mut self, layer: MappingLayer, entries: &[KeyBinding]) -> Result<()> {
         self.require_wired_2023("the key-mapping write")?;
         for report in key_mapping_reports(layer, entries)? {
@@ -916,12 +918,18 @@ impl ApexProTkl2023 {
         Ok(())
     }
 
-    /// `[EXPERIMENTAL]` Read a layer, apply `changes`, write it back. A failed read sends nothing.
+    /// `[EXPERIMENTAL]` Read a layer, apply `changes`, write it back, then read it again and compare. A failed
+    /// first read sends nothing; a read-back that differs from what was sent is an error naming the first key.
     pub fn set_key_mappings(&mut self, layer: MappingLayer, changes: &[KeyBinding]) -> Result<()> {
         let current = self.read_key_mappings(layer).map_err(|e| {
             Error::DeviceCommunication(format!("reading the {layer} layer failed, nothing was sent: {e}"))
         })?;
-        self.write_key_mappings(layer, &merge_key_mappings(layer, &current, changes)?)
+        let merged = merge_key_mappings(layer, &current, changes)?;
+        self.write_key_mappings(layer, &merged)?;
+        let read_back = self.read_key_mappings(layer).map_err(|e| {
+            Error::DeviceCommunication(format!("the {layer} layer was written but the read-back failed: {e}"))
+        })?;
+        verify_key_mappings(layer, &merged, &read_back)
     }
 
     /// `[EXPERIMENTAL]` Write the reset state of a layer (base: every key its own usage; others: unbound).
@@ -986,7 +994,7 @@ impl ApexProTkl2023 {
     }
 
     /// The `90 00` firmware poll (GG `fw_version`); informational, so a failure is logged and gives `None`.
-    pub fn firmware_version(&self) -> Option<String> {
+    pub fn poll_firmware_version(&self) -> Option<String> {
         let mut buf = [0u8; KEYBOARD_REPORT_SIZE];
         let poll = HidReportBuilder::new(HidDeviceType::Keyboard)
             .build_report(OnboardFirmwareVersionCommand::KEYBOARD, &mut buf)
@@ -1170,7 +1178,7 @@ crate::impl_keyboard_with_delegation!(ApexProTkl2023, {
 
     fn firmware_version(&mut self) -> Result<Option<String>> {
         self.require_wired_2023("the firmware poll")?;
-        Ok(ApexProTkl2023::firmware_version(self))
+        Ok(self.poll_firmware_version())
     }
 
     fn read_key_mappings(&mut self, layer: MappingLayer) -> Result<Vec<KeyBinding>> {

@@ -197,6 +197,9 @@ impl fmt::Display for KeyAction {
             Self::WheelDown => write!(f, "wheel:down"),
             Self::PanLeft => write!(f, "pan:left"),
             Self::PanRight => write!(f, "pan:right"),
+            // The board stores "unbound" as function 0x51 with zero codes on some layers; shown as unbound, while
+            // `to_bytes` keeps the exact bytes.
+            Self::Key(0) => write!(f, "unbound"),
             Self::Key(usage) => write!(f, "key:0x{usage:02X}"),
             Self::Consumer(usage) => write!(f, "consumer:0x{usage:02X}"),
             Self::Meta => write!(f, "meta"),
@@ -240,6 +243,40 @@ pub fn merge_key_mappings(layer: MappingLayer, base: &[KeyBinding], changes: &[K
         *entry = change;
     }
     Ok(merged)
+}
+
+/// The bindings of `read` that differ from `target`, as `(target, read)` pairs; both lists carry the same keys in
+/// HID order (see [`parse_key_mapping_reply`] and [`key_mapping_reports`]).
+pub fn differing_bindings(target: &[KeyBinding], read: &[KeyBinding]) -> Vec<(KeyBinding, KeyBinding)> {
+    target
+        .iter()
+        .zip(read)
+        .filter(|(sent, got)| sent != got)
+        .map(|(&sent, &got)| (sent, got))
+        .collect()
+}
+
+/// Checks a layer read back after a write against what was sent.
+///
+/// # Errors
+///
+/// Returns an error naming the first key whose binding differs, or if the lists differ in length.
+pub fn verify_key_mappings(layer: MappingLayer, sent: &[KeyBinding], read: &[KeyBinding]) -> Result<()> {
+    if sent.len() != read.len() {
+        return Err(Error::DeviceCommunication(format!(
+            "read-back of the {layer} layer has {} keys, {} were sent",
+            read.len(),
+            sent.len()
+        )));
+    }
+    match differing_bindings(sent, read).first() {
+        None => Ok(()),
+        Some(&((hid, function, codes), (_, got_function, got_codes))) => Err(Error::DeviceCommunication(format!(
+            "read-back of the {layer} layer differs from what was sent; first differing key {hid:#04x}: sent {},              board reports {}",
+            KeyAction::from_bytes(function, codes),
+            KeyAction::from_bytes(got_function, got_codes)
+        ))),
+    }
 }
 
 fn build_feature(command: impl crate::devices::hid_reports::HidCommand) -> Result<Vec<u8>> {
@@ -325,12 +362,20 @@ pub fn macro_read_requests() -> Vec<MacroReadCommand> {
 ///
 /// # Errors
 ///
-/// Returns an error if a reply is short or the chunks do not add up to the full data.
+/// Returns an error if a reply is not a full-size `B7` answer (report-ID byte, then `B7`) or the chunks do not add
+/// up to the full data.
 pub fn macro_data(replies: &[Vec<u8>]) -> Result<Vec<u8>> {
     let head = MacroReadCommand::REPLY_HEADER_LEN;
     let chunk = usize::from(MacroReadCommand::CHUNK_EVENTS) * MacroReadCommand::EVENT_LEN;
     let mut data = Vec::with_capacity(MacroReadCommand::DATA_LEN);
     for (i, reply) in replies.iter().enumerate() {
+        if reply.len() != PROFILE_CHUNK_REPORT_SIZE || reply[1] != MacroReadCommand::WIRE_BYTE {
+            return Err(Error::DeviceCommunication(format!(
+                "macro chunk {i}: not a B7 answer ({} bytes, header {:02x?})",
+                reply.len(),
+                &reply[..reply.len().min(head)]
+            )));
+        }
         data.extend_from_slice(
             reply.get(head..head + chunk).ok_or_else(|| {
                 Error::DeviceCommunication(format!("macro chunk {i}: reply of {} bytes", reply.len()))
@@ -494,7 +539,7 @@ mod tests {
         assert_eq!(requests[15].offset_events, 2250);
         let replies: Vec<Vec<u8>> = (0..16u8)
             .map(|i| {
-                let mut reply = vec![0xEE; 7];
+                let mut reply = vec![0x00, 0xB7, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE];
                 reply.extend(std::iter::repeat_n(i, 600));
                 reply.resize(645, 0);
                 reply
@@ -504,6 +549,48 @@ mod tests {
         assert_eq!(data.len(), 9600);
         assert_eq!((data[0], data[599], data[600], data[9599]), (0, 0, 1, 15));
         assert!(macro_data(&replies[..15]).is_err());
+
+        // A reply that is not a B7 answer, or not full size, is an error instead of saved garbage.
+        let mut wrong_command = replies.clone();
+        wrong_command[3][1] = 0xB6;
+        assert!(
+            macro_data(&wrong_command)
+                .unwrap_err()
+                .to_string()
+                .contains("macro chunk 3")
+        );
+        let mut short = replies.clone();
+        short[0].truncate(644);
+        assert!(macro_data(&short).is_err());
+        let mut empty = replies;
+        empty[0].clear();
+        assert!(macro_data(&empty).is_err());
+    }
+
+    #[test]
+    fn key_zero_with_function_51_shows_as_unbound_but_writes_back_exact_bytes() {
+        let action = KeyAction::from_bytes(0x51, [0; 4]);
+        assert_eq!(action.to_string(), "unbound");
+        assert_eq!(action.to_bytes(), (0x51, [0; 4]));
+        assert_eq!(KeyAction::Unbound.to_bytes(), (0x00, [0; 4]));
+    }
+
+    #[test]
+    fn read_back_check_names_the_first_differing_key() {
+        let sent = default_key_mappings(MappingLayer::Base);
+        assert!(verify_key_mappings(MappingLayer::Base, &sent, &sent).is_ok());
+
+        let mut read = sent.clone();
+        read[2].1 = 0x00;
+        read[2].2 = [0; 4];
+        read[5].2 = [0x99, 0, 0, 0];
+        assert_eq!(differing_bindings(&sent, &read).len(), 2);
+        let message = verify_key_mappings(MappingLayer::Base, &sent, &read)
+            .unwrap_err()
+            .to_string();
+        assert!(message.contains("0x06") && message.contains("sent key:0x06") && message.contains("reports unbound"));
+
+        assert!(verify_key_mappings(MappingLayer::Base, &sent, &read[..90]).is_err());
     }
 
     #[test]

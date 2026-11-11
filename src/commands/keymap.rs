@@ -10,7 +10,8 @@ use steelseries_gg::devices::hid_reports::{
 };
 use steelseries_gg::devices::keyboards::Keyboard;
 use steelseries_gg::devices::keyboards::key_action::{
-    KeyAction, default_key_mappings, key_mapping_read_request, key_mapping_reports, merge_key_mappings,
+    KeyAction, MappingLayer, default_key_mappings, differing_bindings, key_mapping_read_request, key_mapping_reports,
+    merge_key_mappings,
 };
 use steelseries_gg::devices::{DeviceManager, DeviceType, HidDeviceType, KeyMappingDatabase, product_ids};
 use steelseries_gg::fs_utils::secure_write_async;
@@ -59,7 +60,14 @@ fn parse_change(pair: &str) -> Result<KeyBinding> {
     let (key, action) = pair
         .split_once('=')
         .ok_or_else(|| Error::InvalidConfig(format!("{pair}: expected KEY=ACTION, e.g. CAPSLOCK=key:ESC")))?;
-    let (function, codes) = parse_action(action)?.to_bytes();
+    let action = parse_action(action)?;
+    // GG follows a `36` write with the macro data (`37`/`3C`); ssgg sends neither, so these would bind to nothing.
+    if let KeyAction::Macro(_) | KeyAction::External(_) = action {
+        return Err(Error::InvalidConfig(format!(
+            "{pair}: macro and external bindings are not supported by `keymap set`: ssgg does not send the macro              data GG sends after a mapping write, so the key would be bound to nothing (`keymap read` still shows them)"
+        )));
+    }
+    let (function, codes) = action.to_bytes();
     Ok((parse_hid(key)?, function, codes))
 }
 
@@ -75,6 +83,25 @@ fn key_names() -> HashMap<u8, String> {
         }
     }
     names
+}
+
+/// Persistence of a live mapping write is unknown, so writes need an explicit `--yes`; checked before any
+/// keyboard is opened.
+fn require_yes(yes: bool, what: &str) -> Result<()> {
+    if yes {
+        return Ok(());
+    }
+    Err(Error::InvalidConfig(format!(
+        "{what} writes the key bindings, and whether a live mapping write survives a power cycle is unknown:          pass --yes (--dry-run prints the frames instead)"
+    )))
+}
+
+fn warn_meta_layer(layer: MappingLayer) {
+    if layer == MappingLayer::Meta {
+        eprintln!(
+            "warning: the meta-layer gap is not handled: GG follows a meta-layer write with a `3C` bitmask of the              meta-mapped keys, which ssgg does not send, so meta bindings may not take effect"
+        );
+    }
 }
 
 fn print_frames(reports: &[Vec<u8>]) {
@@ -94,8 +121,17 @@ pub(crate) async fn cmd_keymap(manager: &DeviceManager, action: KeymapAction) ->
                 println!("{name} = {}", KeyAction::from_bytes(function, codes));
             }
         }
-        KeymapAction::Set { keys, layer, dry_run } => {
+        KeymapAction::Set {
+            keys,
+            layer,
+            yes,
+            dry_run,
+        } => {
             let changes = keys.iter().map(|pair| parse_change(pair)).collect::<Result<Vec<_>>>()?;
+            if !dry_run {
+                require_yes(yes, "keymap set")?;
+            }
+            warn_meta_layer(layer);
             if dry_run {
                 println!("dry run, nothing sent [EXPERIMENTAL]. A live run first reads the {layer} layer:");
                 print_report(&key_mapping_read_request(layer)?);
@@ -117,7 +153,10 @@ pub(crate) async fn cmd_keymap(manager: &DeviceManager, action: KeymapAction) ->
                 changes.len()
             );
         }
-        KeymapAction::Reset { layer, dry_run } => {
+        KeymapAction::Reset { layer, yes, dry_run } => {
+            if !dry_run {
+                require_yes(yes, "keymap reset")?;
+            }
             if dry_run {
                 let reports = key_mapping_reports(layer, &default_key_mappings(layer))?;
                 println!(
@@ -127,7 +166,17 @@ pub(crate) async fn cmd_keymap(manager: &DeviceManager, action: KeymapAction) ->
                 print_frames(&reports);
                 return Ok(());
             }
-            open_keyboard(manager)?.reset_key_mappings(layer)?;
+            let mut keyboard = open_keyboard(manager)?;
+            let current = keyboard.read_key_mappings(layer).map_err(|e| {
+                Error::DeviceCommunication(format!("reading the {layer} layer failed, nothing was sent: {e}"))
+            })?;
+            let target = default_key_mappings(layer);
+            println!(
+                "{} of {} keys of the {layer} layer would change",
+                differing_bindings(&target, &current).len(),
+                target.len()
+            );
+            keyboard.reset_key_mappings(layer)?;
             println!("Sent the reset state of the {layer} layer");
         }
         KeymapAction::Macros { out } => {
@@ -204,7 +253,12 @@ pub(crate) fn cmd_device(manager: &DeviceManager, action: DeviceAction) -> Resul
                     "the region write is persistent (it writes flash): pass --yes".to_string(),
                 ));
             }
-            open_keyboard(manager)?.write_region(id)?;
+            let mut keyboard = open_keyboard(manager)?;
+            if keyboard.device_region()? == id {
+                println!("region already {id} ({}), nothing written", region_name(id));
+                return Ok(());
+            }
+            keyboard.write_region(id)?;
             println!("Sent: region {id} ({})", region_name(id));
         }
     }
@@ -213,10 +267,8 @@ pub(crate) fn cmd_device(manager: &DeviceManager, action: DeviceAction) -> Resul
 
 #[cfg(test)]
 mod tests {
-    use steelseries_gg::devices::hid_reports::PROFILE_CHUNK_REPORT_SIZE;
-    use steelseries_gg::devices::keyboards::key_action::MappingLayer;
-
     use super::*;
+    use steelseries_gg::devices::hid_reports::PROFILE_CHUNK_REPORT_SIZE;
 
     #[test]
     fn changes_parse_names_hex_and_actions() {
@@ -228,6 +280,40 @@ mod tests {
         for bad in ["A", "A=", "nokey=unbound", "A=key:nokey", "0xZZ=unbound", "A=mouse:9"] {
             assert!(parse_change(bad).is_err(), "{bad}");
         }
+    }
+
+    #[test]
+    fn macro_and_external_bindings_are_refused() {
+        for refused in [
+            "A=macro:1",
+            "A=external:7F",
+            "A=raw:71:01,00,00,00",
+            "A=raw:72:01,00,00,00",
+        ] {
+            let message = parse_change(refused).unwrap_err().to_string();
+            assert!(
+                message.contains("not supported by `keymap set`"),
+                "{refused}: {message}"
+            );
+        }
+        assert!(parse_change("A=raw:99:01,00,00,00").is_ok());
+    }
+
+    #[test]
+    fn writes_are_refused_without_yes() {
+        assert!(require_yes(true, "keymap set").is_ok());
+        let message = require_yes(false, "keymap reset").unwrap_err().to_string();
+        assert!(message.contains("keymap reset") && message.contains("pass --yes") && message.contains("unknown"));
+    }
+
+    #[test]
+    fn reset_diff_counts_only_changed_keys() {
+        let target = default_key_mappings(MappingLayer::Base);
+        assert!(differing_bindings(&target, &target).is_empty());
+        let mut current = target.clone();
+        current[0].2 = [0; 4];
+        current[7].1 = 0x00;
+        assert_eq!(differing_bindings(&target, &current).len(), 2);
     }
 
     #[test]

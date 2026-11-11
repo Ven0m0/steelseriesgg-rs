@@ -648,7 +648,7 @@ fn parse_layer(text: &str) -> std::result::Result<MappingLayer, String> {
 
 /// Apex Pro TKL 2023 (0x1628) live key bindings (`36`, `B6`, `B7`), from GG's device spec. GG did not send these
 /// for a binding change in the 2026-11-10 capture (it rewrites the on-board profile), so they are untested from
-/// ssgg. Live writes are volatile per the spec.
+/// ssgg. Whether a live mapping write survives a power cycle is unknown, so `set` and `reset` need `--yes`.
 #[derive(Subcommand)]
 pub(crate) enum KeymapAction {
     /// Print one layer's bindings, one line per key
@@ -658,25 +658,37 @@ pub(crate) enum KeymapAction {
         layer: MappingLayer,
     },
 
-    /// Change bindings: reads the layer, merges the changes and writes the layer back (nothing is sent when the
-    /// read fails)
+    /// Change bindings: reads the layer, merges the changes, writes the layer back and reads it again to compare
+    /// (nothing is sent when the first read fails). Needs --yes: whether the write survives a power cycle is unknown
     Set {
         /// KEY=ACTION, e.g. CAPSLOCK=key:ESC or 0x39=key:0x29. KEY is a key name or 0x<hid usage>. ACTION is
         /// key:<name|0xUSAGE>, unbound, mouse:<1-8>, wheel:up|down, pan:left|right, consumer:<hex>, meta, cpi,
-        /// macro:<index>, external:<hex> or raw:<function>:<kc0>,<kc1>,<kc2>,<kc3> (hex)
+        /// consumer:<hex>, meta, cpi or raw:<function>:<kc0>,<kc1>,<kc2>,<kc3> (hex). macro:<index> and
+        /// external:<hex> are refused: ssgg does not send the macro data GG sends after a mapping write
         #[arg(required = true, value_name = "KEY=ACTION")]
         keys: Vec<String>,
+        /// base, meta or second. WARNING for meta: the meta-layer gap is not handled (GG follows a meta write with
+        /// a `3C` bitmask of the meta-mapped keys, which ssgg does not send), so meta bindings may not take effect
         #[arg(long, default_value = "base", value_parser = parse_layer)]
         layer: MappingLayer,
+        /// Confirm the write: whether a live mapping write survives a power cycle is unknown
+        #[arg(long)]
+        yes: bool,
         /// Print the frames instead of sending them; no keyboard is opened
         #[arg(long)]
         dry_run: bool,
     },
 
-    /// Write a layer's reset state: base keys bound to their own usage, meta and second layers unbound
+    /// Write a layer's reset state: base keys bound to `key:<own usage>` (as in the owner's slot-0 profile), meta
+    /// and second layers unbound. The board itself stores "unbound" as function 0x51 with zero codes on some
+    /// layers, so the number of entries that would change is printed first (a failed read sends nothing). Needs
+    /// --yes: whether the write survives a power cycle is unknown
     Reset {
         #[arg(long, default_value = "base", value_parser = parse_layer)]
         layer: MappingLayer,
+        /// Confirm the write: whether a live mapping write survives a power cycle is unknown
+        #[arg(long)]
+        yes: bool,
         /// Print the frames instead of sending them; no keyboard is opened
         #[arg(long)]
         dry_run: bool,
@@ -705,7 +717,8 @@ pub(crate) enum DeviceAction {
         dry_run: bool,
     },
 
-    /// Write the region id to the keyboard (`00 75 <id>`). **Persistent**: it writes flash. Ids the spec names:
+    /// Write the region id to the keyboard (`00 75 <id>`). **Persistent**: it writes flash; nothing is written
+    /// when the keyboard already reports that id. Ids the spec names:
     /// 1 us, 3 uk, 4 germany, 6 france, 10 nordic, 13 japan, 20 turkish
     Region {
         id: u8,
@@ -1401,7 +1414,13 @@ mod tests {
     fn keymap_and_device_subcommands_parse() {
         let parsed = Cli::try_parse_from(["ssgg", "keymap", "set", "A=key:B", "0x39=meta", "--layer", "meta"]).unwrap();
         let Commands::Keymap {
-            action: KeymapAction::Set { keys, layer, dry_run },
+            action:
+                KeymapAction::Set {
+                    keys,
+                    layer,
+                    yes,
+                    dry_run,
+                },
         } = parsed.command
         else {
             panic!("not keymap set");
@@ -1409,6 +1428,14 @@ mod tests {
         assert_eq!(keys, ["A=key:B", "0x39=meta"]);
         assert_eq!(layer, MappingLayer::Meta);
         assert!(!dry_run);
+        assert!(!yes);
+        let parsed = Cli::try_parse_from(["ssgg", "keymap", "reset", "--yes"]).unwrap();
+        assert!(matches!(
+            parsed.command,
+            Commands::Keymap {
+                action: KeymapAction::Reset { yes: true, .. }
+            }
+        ));
 
         let parsed = Cli::try_parse_from(["ssgg", "keymap", "read"]).unwrap();
         assert!(matches!(
