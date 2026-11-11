@@ -437,6 +437,10 @@ pub mod product_ids {
     pub const APEX_PRO_MINI_2024: u16 = 0x1648;
     pub const APEX_5_2024: u16 = 0x1650;
     pub const APEX_7_2024: u16 = 0x1652;
+    // GG specs `apex_pro_tkl_2024_cyber` / `apex_pro_tkl_2024_steel` (2026-11-11): the Pro TKL (2024) board with
+    // its own hall-threshold table. No hardware confirmation.
+    pub const APEX_PRO_TKL_2024_CYBER: u16 = 0x1660;
+    pub const APEX_PRO_TKL_2024_STEEL: u16 = 0x1662;
     // Apex M750 (issue #276, lsusb name). [EXPERIMENTAL] solid-colour protocol from a community fork, see
     // keyboards::apex_m750.
     pub const APEX_M750: u16 = 0x0616;

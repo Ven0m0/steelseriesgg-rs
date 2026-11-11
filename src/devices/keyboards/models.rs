@@ -3,7 +3,7 @@
 //! mice keep their own tables (`headsets::nova7`, `mice::modern`).
 
 use super::apex_pro_tkl_2023::{
-    APEX_9_FRAME, APEX_9_GEN3_FRAME, GEN1_FRAME, GEN3_FRAME, WIRED_2023_FRAME, WIRELESS_FRAME,
+    APEX_9_FRAME, APEX_9_GEN3_FRAME, GEN1_FRAME, GEN3_FRAME, MINI_FRAME, WIRED_2023_FRAME, WIRELESS_FRAME,
 };
 use crate::devices::hid_reports::CommandCode;
 use crate::devices::product_ids::*;
@@ -103,6 +103,7 @@ const GEN1: Option<DirectLighting> = Some(DirectLighting::Fixed(GEN1_FRAME));
 const GEN3: Option<DirectLighting> = Some(DirectLighting::Fixed(GEN3_FRAME));
 const WIRELESS: Option<DirectLighting> = Some(DirectLighting::Fixed(WIRELESS_FRAME));
 const WIRED_2023: Option<DirectLighting> = Some(DirectLighting::Fixed(WIRED_2023_FRAME));
+const MINI: Option<DirectLighting> = Some(DirectLighting::Fixed(MINI_FRAME));
 const GEN1_OR_GEN3: Option<DirectLighting> = Some(DirectLighting::ByFirmware {
     legacy: GEN1_FRAME,
     gen3: GEN3_FRAME,
@@ -123,7 +124,7 @@ pub const KEYBOARD_MODELS: &[KeyboardModel] = &[
     model(APEX_7_TKL, "Apex 7 TKL", C::ApexProTkl2023, false, GEN1),
     model(APEX_3, "Apex 3", C::Apex3, false, None),
     model(APEX_5, "Apex 5", C::ApexProTkl2023, false, GEN1),
-    model(APEX_PRO_MINI, "Apex Pro Mini", C::Generic, false, None),
+    model(APEX_PRO_MINI, "Apex Pro Mini", C::ApexProTkl2023, false, MINI),
     model(APEX_9_MINI, "Apex 9 Mini", C::ApexProTkl2023, false, APEX_9),
     model(APEX_3_TKL, "Apex 3 TKL", C::Apex3Tkl, false, None),
     model(
@@ -178,7 +179,27 @@ pub const KEYBOARD_MODELS: &[KeyboardModel] = &[
         true,
         WIRELESS,
     ),
-    model(APEX_PRO_MINI_2024, "Apex Pro Mini (2024)", C::Generic, false, None),
+    model(
+        APEX_PRO_MINI_2024,
+        "Apex Pro Mini (2024)",
+        C::ApexProTkl2023,
+        false,
+        MINI,
+    ),
+    model(
+        APEX_PRO_TKL_2024_CYBER,
+        "Apex Pro TKL (2024) Cyber",
+        C::ApexProTkl2023,
+        false,
+        GEN3,
+    ),
+    model(
+        APEX_PRO_TKL_2024_STEEL,
+        "Apex Pro TKL (2024) Steel",
+        C::ApexProTkl2023,
+        false,
+        GEN3,
+    ),
     model(APEX_5_2024, "Apex 5 (2024)", C::Generic, false, None),
     model(APEX_7_2024, "Apex 7 (2024)", C::Generic, false, None),
     model(APEX_M750, "Apex M750", C::ApexM750, false, None),

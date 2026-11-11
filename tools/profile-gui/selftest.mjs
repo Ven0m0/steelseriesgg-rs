@@ -389,14 +389,14 @@ ok('feature sets follow the model: family, mouse layout, extra keys', () => {
   const apex7 = app.deviceFeatures(0x1612).join(' | ');
   const apexPro = app.deviceFeatures(0x1610).join(' | ');
   const headset = app.deviceFeatures(0x12CB).join(' | ');
-  const mouse = app.deviceFeatures(0x1662).join(' | ');
+  const mouse = app.deviceFeatures(0x1664).join(' | ');
   return /device registry: keyboard/.test(apex7) && /on-board profile protocol: read back/.test(apex7)
     && /legacy Apex 750-byte/.test(apex7) && /extra blocks this page decodes/.test(apex7)
     && /device registry: keyboard/.test(apexPro) && /not in Rust/.test(apexPro)
     && /not the one this page encodes/.test(apexPro)
     && /device registry: headset/.test(headset) && /no keyboard layout/.test(headset)
     && /no entry in Rust/.test(mouse);
-}, () => [app.deviceFeatures(0x1612), app.deviceFeatures(0x1610), app.deviceFeatures(0x12CB), app.deviceFeatures(0x1662)]);
+}, () => [app.deviceFeatures(0x1612), app.deviceFeatures(0x1610), app.deviceFeatures(0x12CB), app.deviceFeatures(0x1664)]);
 
 ok('the imported device kinds are the ones the Rust registry gives', () => {
   const ids = sync.productIds(sectionOf(read('src/devices/mod.rs'), 'pub mod product_ids'));
@@ -935,7 +935,7 @@ const mouseDoc = (() => {
   const src = app.cloneDoc(apex);
   src.name = 'Mouse probe';
   src.name_hex = app.hexOf([...Buffer.from('Mouse probe', 'utf8')]);
-  src.device = { vendor_id: 4144, product_id: 0x1662, product: 'Steelpoint Series 3', known: true, model_kind: 'mouse', writable: false, platform: 'wsl' };
+  src.device = { vendor_id: 4144, product_id: 0x1664, product: 'Steelpoint Series 3', known: true, model_kind: 'mouse', writable: false, platform: 'wsl' };
   for (const name of ['wheel_mappings', 'wheel_meta_mappings']) {
     src[name] = src[name].map((e, i) => ({ ...e, function: 0x01 + i, key_codes: '00 00 00 00' }));
   }

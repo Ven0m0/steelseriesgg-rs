@@ -54,6 +54,27 @@ GG names PID `0x1628` `apex_pro_tkl_2022` regardless of the retail year.
 | 0x1648 | apex-pro-mini-2024 |
 | 0x1650 | apex_5_2024 |
 | 0x1652 | apex_7_2024 |
+| 0x1660 | apex_pro_tkl_2024_cyber |
+| 0x1662 | apex_pro_tkl_2024_steel |
+
+#### Wired Gen 3 siblings of `0x1628`: capability table `[EXPERIMENTAL]`
+
+`src/devices/keyboards/model_caps.rs` holds one row per board, derived from GG's decrypted device specs
+(2026-11-11); only `0x1628` is confirmed on hardware, every other row is untested. Commands outside a row are
+refused before anything is sent. Mapping counts are the keys of a base or meta layer; analog counts are keys with
+hall switches.
+
+| PID | Feature report | Mapping keys | Analog keys | Second layer | OLED | Lighting keys |
+|-----|----------------|--------------|-------------|--------------|------|---------------|
+| 0x1628 | 645 | 91 | 68 | yes | yes, row-major | 84 |
+| 0x1642, 0x1660, 0x1662 | 645 | 91 | 68 | yes | yes, column-packed in the spec (refused) | 85 (+ `0xFB`) |
+| 0x161E, 0x1648 | 513 | 68 | 68 | yes | no | 61 |
+| 0x1634 (Apex 9 TKL) | 513 | 91 | none | no | no | 84 |
+| 0x1620 (Apex 9 Mini) | 513 | 68 | none | no | no | 61 |
+
+The typed mapping, macro, query, display and profile commands are sized for the 645-byte report, so the 513-byte
+boards get only the direct lighting frame. The 2024 Pro TKL boards (`0x1642`, `0x1660`, `0x1662`) have their own raw
+hall-threshold tables, so the live `38 6x` frames stay `0x1628`-only.
 
 ### Headsets
 
@@ -236,7 +257,7 @@ Keyboard output reports are 65 bytes: report ID `0x00`, command byte, data, zero
 | `0x23` | `Apex8ZoneBrightnessCommand` | `[EXPERIMENTAL]` | Apex 3 TKL brightness `[00 23 level ..]`, level `0x00`-`0x10` scaled from 0-100 (OpenRGB `SteelSeriesApex8ZoneController`). Sent by `rgb brightness` on `0x1622`. |
 | `0x25`, `0x26` | `ReactiveMode`, `ColorShift` | `[EXPERIMENTAL]` | Enum values only; the uncalled `Apex3Tkl` helpers (and the `0x24` OSD helper) were removed on 2026-10-15. |
 | `0x2D` | `ActuationControl` | `[EXPERIMENTAL]` | `[00 2D value ..]`, value 1-40 = 0.1-4.0 mm (`ActuationCommand`). Sent by `ssgg actuation`. GG does not use it; it writes actuation through the on-board profile blob (capture note). |
-| `0x40` | `Apex2023Direct` | `[EXPERIMENTAL]` | Lighting frame `40 54 [usage R G B] x84`, feature report. Used for `rgb color` and `rgb perkey` on `0x1628`. See the capture note. The Apex 9 TKL `0x1634` and Apex 9 Mini `0x1620` take the same frame in a 513-byte report (127 entries fit, 112 are sent, count byte `0x70`) with no `0x4B` init, `[EXPERIMENTAL]`, community fork, untested. |
+| `0x40` | `Apex2023Direct` | `[EXPERIMENTAL]` | Lighting frame `40 54 [usage R G B] x84`, feature report. Used for `rgb color` and `rgb perkey` on `0x1628`. See the capture note. The Apex 9 TKL `0x1634` and Apex 9 Mini `0x1620` take the same frame in a 513-byte report (127 entries fit, 112 are sent, count byte `0x70`) with no `0x4B` init, `[EXPERIMENTAL]`, community fork, untested. The Apex Pro Mini `0x161E` / `0x1648` take it in 513 bytes with the Mini layout (61 keys, count byte `0x3D`), no init, `[EXPERIMENTAL]`, GG spec, untested. |
 | `0x3A` | `ApexGen1Direct` | `[EXPERIMENTAL]` | Original Apex Pro `0x1610` direct frame: 643-byte feature report `00 3A N [usage R G B] xN` on interface 1, no init (OpenRGB `SteelSeriesApexController`, Gen 1). Untested here (issue #283). The same frame is routed to Apex 5 `0x161C`, Apex 7 TKL `0x1618`, Apex Pro TKL `0x1614` and Apex Pro (2024) `0x1640` from a community fork's table; unverified except on `0x1640`, where solid-colour and per-key frames were confirmed on hardware (ISO-DE, firmware 4.16.8, Linux: all 106 keys lit at their HID usage; the Gen 3 `0x40` frame did nothing there). |
 | `0x8E` | `ApexMDirect` | `[EXPERIMENTAL]` | Apex M750 `0x0616` direct frame, 513-byte feature report on interface 2: header `00 00 00 01 8E 01 03 06 16`, then 132 `R G B` slots from index 9. The slot-to-key map is unknown, so `ssgg` fills every slot (solid colour and off only). Community fork, untested (issue #276). |
 | `0x01` | `ApexMEnable` | `[EXPERIMENTAL]` | Apex M750 enable sequence, three 513-byte feature reports sent once before the first frame, all zero but (index 0 is the report ID): `[4]=01 [6]=85`; `[4]=03 [5]=01 [7]=FF`; `[4]=01 [6]=85 [7]=FF`. `0x01` is only byte 4 of the first and third; the three share no leading byte. Community fork, untested. |

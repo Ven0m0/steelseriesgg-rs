@@ -2,17 +2,18 @@
 
 use super::apex_pro_tkl_2023_profile::{PROFILE_LEN, actuation_raw, checksum_matches, profile_chunks};
 use super::key_action::{
-    MappingLayer, default_key_mappings, key_mapping_read_request, key_mapping_reports, macro_data, macro_read_requests,
-    merge_key_mappings, parse_device_query, parse_key_mapping_reply, verify_key_mappings,
+    MAPPING_KEYS, MappingLayer, default_key_mappings, key_mapping_read_request, key_mapping_reports, macro_data,
+    macro_read_requests, merge_key_mappings, parse_device_query, parse_key_mapping_reply, verify_key_mappings,
 };
+use super::model_caps::{MINI_LIGHTING_KEYS, ModelCaps, OledImage, model_caps};
 use super::models::{DirectFrame, keyboard_model};
 use super::{GenericKeyboard, Keyboard};
 use crate::devices::hid_reports::{
     ActuationCommand, AnalogKeyCommand, Apex2022DisplayCommand, CommandCode, DeviceQueryCommand, DirectFrameCommand,
     DirectInitCommand, Gen3ProfileReadCommand, HallLayer, HidCommand, HidDeviceType, HidReportBuilder,
-    KEYBOARD_REPORT_SIZE, KeyBinding, LoadProfileCommand, MetaToggleCommand, OnboardFirmwareVersionCommand,
-    PROFILE_CHUNK_REPORT_SIZE, ProfileCommitCommand, ProfileEraseCommand, RapidTapPair, RegionWriteCommand,
-    SetProfileVolatileCommand,
+    KEYBOARD_REPORT_SIZE, KeyBinding, LoadProfileCommand, MacroReadCommand, MetaToggleCommand,
+    OnboardFirmwareVersionCommand, PROFILE_CHUNK_REPORT_SIZE, ProfileCommitCommand, ProfileEraseCommand, RapidTapPair,
+    RegionWriteCommand, SetProfileVolatileCommand,
 };
 use crate::devices::key_mapping::{KeyAddress, KeyId, KeyMapping};
 use crate::devices::product_ids;
@@ -48,7 +49,7 @@ const TKL_KEYS: &[u8] = &[
 /// [EXPERIMENTAL] Key table SteelSeries GG sends to the wired Apex Pro TKL 2023 (PID 0x1628).
 /// Read from a USBPcap capture of GG (2026-10-14, firmware 1.19.7); order is GG's, count byte was
 /// always 0x54. See docs/development/apex-pro-tkl-2023-gg-capture.md.
-const WIRED_2023_KEYS: &[u8] = &[
+pub(crate) const WIRED_2023_KEYS: &[u8] = &[
     0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16,
     0x17, 0x18, 0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F, 0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x29, 0x2A,
     0x2B, 0x2C, 0x2D, 0x2E, 0x2F, 0x30, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x3A, 0x3B, 0x3C, 0x3D, 0x3E, 0x3F,
@@ -98,6 +99,16 @@ pub(crate) const WIRED_2023_FRAME: DirectFrame = DirectFrame {
     packet_id: CommandCode::Apex2023Direct,
     length: WIRED_2023_PACKET_LENGTH,
     keys: WIRED_2023_KEYS,
+    init: false,
+};
+
+/// [EXPERIMENTAL] Apex Pro Mini (`0x161E`) and Apex Pro Mini (2024) (`0x1648`): the `0x40` direct frame in the
+/// board's 513-byte feature report, the prism-sync layout of the Mini as key table (GG specs `apex_pro_mini`,
+/// `apex_pro_mini_2024`, 2026-11-11), no `0x4B` init as for `0x1628`. Untested on hardware.
+pub(crate) const MINI_FRAME: DirectFrame = DirectFrame {
+    packet_id: CommandCode::Apex2023Direct,
+    length: APEX_9_PACKET_LENGTH,
+    keys: &MINI_LIGHTING_KEYS,
     init: false,
 };
 
@@ -778,6 +789,42 @@ impl ApexProTkl2023 {
         )))
     }
 
+    /// The capability row of this keyboard when `allowed` holds for it; otherwise an error that says `what` is
+    /// refused and `why`, before anything is sent. Models without a row are always refused.
+    fn require_caps(&self, what: &str, allowed: impl Fn(&ModelCaps) -> bool, why: &str) -> Result<&'static ModelCaps> {
+        let product_id = self.inner.info().product_id;
+        match model_caps(product_id) {
+            Some(caps) if allowed(caps) => Ok(caps),
+            _ => Err(crate::Error::DeviceCommunication(format!(
+                "{what} is not supported on {product_id:#06x}: {why} [EXPERIMENTAL]"
+            ))),
+        }
+    }
+
+    /// The boards whose typed commands (mapping, macro, query, `00 41`) are sized for the 645-byte feature report.
+    fn require_wide_reports(&self, what: &str) -> Result<&'static ModelCaps> {
+        self.require_caps(
+            what,
+            ModelCaps::wide_reports,
+            "its feature report is not the 645 bytes this command is sized for",
+        )
+    }
+
+    /// A key-mapping layer of this board; the layer's key list has to be the board's own.
+    fn require_mapping(&self, what: &str, layer: MappingLayer) -> Result<()> {
+        self.require_caps(
+            what,
+            |caps| {
+                caps.wide_reports()
+                    && caps.mapping_keys == MAPPING_KEYS
+                    && (layer != MappingLayer::Second
+                        || (caps.has_second_actuation && caps.analog_keys == layer.keys()))
+            },
+            "its feature report size, key list or second actuation layer is not the 0x1628's",
+        )
+        .map(drop)
+    }
+
     /// Send a report (report-ID byte first) as a feature report or as an output report, bytes as given.
     /// Not `send_raw`: that path prepends a second report-ID byte and drops repeated reports.
     fn send_report(&mut self, report: &[u8], feature: bool) -> Result<()> {
@@ -792,7 +839,11 @@ impl ApexProTkl2023 {
     /// board's `38 ...` answer if one arrives (rapid tap was captured answering `38 00 66`); what other
     /// answers mean is unknown, so it is only reported.
     pub fn send_analog_setting(&mut self, setting: &AnalogSetting) -> Result<Option<Vec<u8>>> {
-        self.require_wired_2023("a live analog-key setting")?;
+        self.require_caps(
+            "a live analog-key setting",
+            |caps| caps.live_analog,
+            "its raw hall-threshold table or report size is not the wired 0x1628's, or it has no analog keys",
+        )?;
         let (report, feature) = analog_report(setting)?;
         self.send_report(&report, feature)?;
         if let (Some((layer, frame)), Some(sent)) = (hall_frame(setting)?, &self.sent) {
@@ -820,7 +871,15 @@ impl ApexProTkl2023 {
 
     /// [EXPERIMENTAL] Send one display command (leave direct mode, OLED write or reset). Wired board only.
     pub fn send_display_command(&mut self, command: Apex2022DisplayCommand<'_>) -> Result<()> {
-        self.require_wired_2023("this display command")?;
+        if matches!(command, Apex2022DisplayCommand::ClearDirect) {
+            self.require_wide_reports("the direct-mode release")?;
+        } else {
+            self.require_caps(
+                "this OLED command",
+                |caps| caps.oled == OledImage::RowMajor,
+                "it has no OLED, or the spec packs its image in a layout other than the 0x1628's",
+            )?;
+        }
         let mut buf = vec![0u8; PROFILE_CHUNK_REPORT_SIZE];
         let size = HidReportBuilder::new(HidDeviceType::Keyboard).build_report(command, &mut buf)?;
         self.send_report(&buf[..size], command.is_feature())
@@ -829,7 +888,11 @@ impl ApexProTkl2023 {
     /// Read one on-board profile slot (0-4) with the spec's `83 01` chunk read. Read only: nothing here writes
     /// to the board. Confirmed on `0x1628` (firmware 1.19.7, 2026-11-10): all five slots, CRC matching.
     pub fn read_gen3_profile(&mut self, slot: u8) -> Result<Gen3ProfileRead> {
-        self.require_wired_2023("the Gen3 on-board profile read")?;
+        self.require_caps(
+            "the Gen3 on-board profile read",
+            |caps| caps.profile_read,
+            "its on-board profile is not the 0x1628's 12,500-byte blob",
+        )?;
         let requests = gen3_read_requests(slot)?;
         let gap = std::time::Duration::from_millis(Gen3ProfileReadCommand::COMMAND_GAP_MS);
         let firmware = self.poll_firmware_version();
@@ -937,7 +1000,7 @@ impl ApexProTkl2023 {
     /// `[EXPERIMENTAL]` The bindings of one layer (`B6` request, then a feature-report read). Wired board only.
     /// Spec-only: GG did not send `B6` on this board in the 2026-11-10 capture; untested from `ssgg`.
     pub fn read_key_mappings(&mut self, layer: MappingLayer) -> Result<Vec<KeyBinding>> {
-        self.require_wired_2023("the key-mapping read")?;
+        self.require_mapping("the key-mapping read", layer)?;
         self.send_report(&key_mapping_read_request(layer)?, true)?;
         command_gap();
         let reply = self
@@ -949,7 +1012,7 @@ impl ApexProTkl2023 {
     /// `[EXPERIMENTAL]` Write a whole layer: every `36` chunk, 13 ms apart. Whether it survives a power cycle is unknown.
     /// Wired board only.
     pub fn write_key_mappings(&mut self, layer: MappingLayer, entries: &[KeyBinding]) -> Result<()> {
-        self.require_wired_2023("the key-mapping write")?;
+        self.require_mapping("the key-mapping write", layer)?;
         for report in key_mapping_reports(layer, entries)? {
             self.send_report(&report, true)?;
             command_gap();
@@ -1003,7 +1066,11 @@ impl ApexProTkl2023 {
 
     /// `[EXPERIMENTAL]` The 9600 bytes of on-board macro data (16 `B7` chunk reads). Read only. Wired board only.
     pub fn read_macro_data(&mut self) -> Result<Vec<u8>> {
-        self.require_wired_2023("the macro data read")?;
+        self.require_caps(
+            "the macro data read",
+            |caps| caps.wide_reports() && caps.macro_data_size == MacroReadCommand::DATA_LEN,
+            "its feature report or macro data size is not the 0x1628's",
+        )?;
         let mut replies = Vec::new();
         for request in macro_read_requests() {
             command_gap();
@@ -1019,7 +1086,7 @@ impl ApexProTkl2023 {
 
     /// Send a layout or region query (output report) and take the first input report that carries its answer.
     fn query_device(&mut self, query: DeviceQueryCommand) -> Result<u8> {
-        self.require_wired_2023("the layout/region query")?;
+        self.require_wide_reports("the layout/region query")?;
         self.send_report(&command_report(query, KEYBOARD_REPORT_SIZE)?, false)?;
         for _ in 0..5 {
             let Some(reply) = self.inner.read_profile_input_packet(KEYBOARD_REPORT_SIZE, 500)? else {
@@ -1216,7 +1283,7 @@ crate::impl_keyboard_with_delegation!(ApexProTkl2023, {
     }
 
     fn firmware_version(&mut self) -> Result<Option<String>> {
-        self.require_wired_2023("the firmware poll")?;
+        self.require_wide_reports("the firmware poll")?;
         Ok(self.poll_firmware_version())
     }
 
@@ -1681,12 +1748,121 @@ mod tests {
     fn non_wired_models_refuse_spec_commands() {
         let mut keyboard = keyboard_for(product_ids::APEX_PRO_TKL_2024);
         assert!(keyboard.send_analog_setting(&AnalogSetting::RapidTap(true)).is_err());
-        assert!(keyboard.read_gen3_profile(0).is_err());
-        assert!(
-            keyboard
-                .send_display_command(Apex2022DisplayCommand::ClearDirect)
-                .is_err()
-        );
+        assert!(keyboard.write_gen3_profile(0, &[0; PROFILE_LEN]).is_err());
+        assert!(keyboard.activate_gen3_profile(0).is_err());
+        assert!(keyboard.meta_key(0xF0).is_err());
+        assert!(keyboard.write_region(1).is_err());
+    }
+
+    /// The text of the refusal of `result`, or a failure if the call was allowed.
+    fn refusal<T>(result: Result<T>) -> String {
+        match result {
+            Ok(_) => panic!("the call was allowed"),
+            Err(e) => e.to_string(),
+        }
+    }
+
+    #[test]
+    fn the_2024_pro_tkl_boards_get_mappings_and_macros_but_not_live_analog_or_oled() {
+        for pid in [
+            product_ids::APEX_PRO_TKL_2024,
+            product_ids::APEX_PRO_TKL_2024_CYBER,
+            product_ids::APEX_PRO_TKL_2024_STEEL,
+        ] {
+            let keyboard = keyboard_for(pid);
+            for layer in [MappingLayer::Base, MappingLayer::Meta, MappingLayer::Second] {
+                keyboard.require_mapping("mapping", layer).unwrap();
+            }
+            keyboard.require_wide_reports("query").unwrap();
+            let live = refusal(keyboard.require_caps("analog", |c| c.live_analog, "table"));
+            assert!(live.contains("not supported on"), "{pid:#06x}: {live}");
+            let oled = refusal(keyboard.require_caps("oled", |c| c.oled == OledImage::RowMajor, "layout"));
+            assert!(oled.contains("[EXPERIMENTAL]"), "{pid:#06x}: {oled}");
+        }
+        let wired = keyboard_for(product_ids::APEX_PRO_TKL_2023);
+        wired.require_caps("analog", |c| c.live_analog, "table").unwrap();
+        wired
+            .require_caps("oled", |c| c.oled == OledImage::RowMajor, "layout")
+            .unwrap();
+    }
+
+    #[test]
+    fn the_513_byte_boards_are_refused_every_645_byte_command() {
+        for pid in [
+            product_ids::APEX_PRO_MINI,
+            product_ids::APEX_PRO_MINI_2024,
+            product_ids::APEX_9_TKL,
+            product_ids::APEX_9_MINI,
+        ] {
+            let mut keyboard = keyboard_for(pid);
+            for layer in [MappingLayer::Base, MappingLayer::Meta, MappingLayer::Second] {
+                let text = refusal(keyboard.read_key_mappings(layer));
+                assert!(text.contains("not supported on"), "{pid:#06x}: {text}");
+                assert!(keyboard.write_key_mappings(layer, &[]).is_err(), "{pid:#06x}");
+            }
+            assert!(keyboard.read_macro_data().is_err(), "{pid:#06x}");
+            assert!(keyboard.device_layout().is_err(), "{pid:#06x}");
+            assert!(keyboard.read_gen3_profile(0).is_err(), "{pid:#06x}");
+            assert!(keyboard.send_analog_setting(&AnalogSetting::RapidTap(true)).is_err());
+            for command in [
+                Apex2022DisplayCommand::ClearDirect,
+                Apex2022DisplayCommand::OledReset,
+                Apex2022DisplayCommand::Oled(&[0; 640]),
+            ] {
+                let text = refusal(keyboard.send_display_command(command));
+                assert!(text.contains("not supported on"), "{pid:#06x}: {text}");
+            }
+        }
+    }
+
+    #[test]
+    fn the_second_mapping_layer_needs_a_second_actuation_layer() {
+        let apex_9 = keyboard_for(product_ids::APEX_9_TKL);
+        assert!(apex_9.require_mapping("mapping", MappingLayer::Second).is_err());
+        let pro_tkl = keyboard_for(product_ids::APEX_PRO_TKL_2024);
+        assert!(pro_tkl.require_mapping("mapping", MappingLayer::Second).is_ok());
+    }
+
+    #[test]
+    fn mini_direct_frame_is_513_bytes_with_the_mini_layout() {
+        for pid in [product_ids::APEX_PRO_MINI, product_ids::APEX_PRO_MINI_2024] {
+            let keyboard = keyboard_for(pid);
+            assert_eq!(keyboard.direct_packet_length(), 513);
+            assert!(!keyboard.needs_init());
+            assert_eq!(keyboard.direct_keys(), MINI_LIGHTING_KEYS);
+            let requested = [(0x1A, Color::RED)]; // W
+            let frame = keyboard
+                .frame_for(&keyboard.direct_entries(|usage| per_key_color(&requested, &[], usage)))
+                .unwrap();
+            assert_eq!(frame.len(), 513, "{pid:#06x}");
+            assert_eq!(&frame[..3], &[0x00, 0x40, 61]);
+            let entries = frame[3..3 + MINI_LIGHTING_KEYS.len() * 4].as_chunks::<4>().0;
+            for (entry, &usage) in entries.iter().zip(MINI_LIGHTING_KEYS.iter()) {
+                let expected = if usage == 0x1A { [255, 0, 0] } else { [0, 0, 0] };
+                assert_eq!(entry[0], usage);
+                assert_eq!(&entry[1..], &expected, "usage {usage:#04x}");
+            }
+            assert!(frame[3 + MINI_LIGHTING_KEYS.len() * 4..].iter().all(|&b| b == 0));
+        }
+    }
+
+    #[test]
+    fn every_caps_row_has_a_direct_frame_that_fits_its_feature_report() {
+        use crate::devices::keyboards::model_caps::MODEL_CAPS;
+        for caps in MODEL_CAPS {
+            let keyboard = keyboard_for(caps.product_id);
+            assert!(keyboard.uses_new_protocol(), "{:#06x}", caps.product_id);
+            assert!(
+                keyboard.direct_packet_length() <= caps.feature_report_size,
+                "{:#06x}",
+                caps.product_id
+            );
+            assert!(
+                3 + keyboard.direct_keys().len() * 4 <= keyboard.direct_packet_length(),
+                "{:#06x}",
+                caps.product_id
+            );
+        }
     }
 
     #[test]
@@ -1887,6 +2063,7 @@ mod tests {
         const APEX_9: Frame = Some((D40, 513, 112, false));
         const APEX_9_GEN3: Frame = Some((D40, 513, 112, true));
         const WIRED_2023: Frame = Some((D40, 645, 84, false));
+        const MINI: Frame = Some((D40, 513, 61, false));
         let rows: &[(u16, K, &str, Frame, Frame)] = &[
             (0x1610, K::ApexProTkl2023, "Apex Pro", GEN1, GEN1),
             (0x1612, K::Apex7, "Apex 7", None, None),
@@ -1895,7 +2072,7 @@ mod tests {
             (0x1618, K::ApexProTkl2023, "Apex 7 TKL", GEN1, GEN1),
             (0x161A, K::Apex3, "Apex 3", None, None),
             (0x161C, K::ApexProTkl2023, "Apex 5", GEN1, GEN1),
-            (0x161E, K::Generic, "Apex Pro Mini", None, None),
+            (0x161E, K::ApexProTkl2023, "Apex Pro Mini", MINI, MINI),
             (0x1620, K::ApexProTkl2023, "Apex 9 Mini", APEX_9, APEX_9_GEN3),
             (0x1622, K::Apex3Tkl, "Apex 3 TKL", None, None),
             (0x1624, K::Generic, "Apex Pro Mini Wireless (Dongle)", None, None),
@@ -1932,9 +2109,11 @@ mod tests {
                 WIRELESS,
                 WIRELESS,
             ),
-            (0x1648, K::Generic, "Apex Pro Mini (2024)", None, None),
+            (0x1648, K::ApexProTkl2023, "Apex Pro Mini (2024)", MINI, MINI),
             (0x1650, K::Generic, "Apex 5 (2024)", None, None),
             (0x1652, K::Generic, "Apex 7 (2024)", None, None),
+            (0x1660, K::ApexProTkl2023, "Apex Pro TKL (2024) Cyber", GEN3, GEN3),
+            (0x1662, K::ApexProTkl2023, "Apex Pro TKL (2024) Steel", GEN3, GEN3),
             (0x0616, K::ApexM750, "Apex M750", None, None),
         ];
         let frame = |keyboard: &ApexProTkl2023| -> Frame {

@@ -8,6 +8,7 @@ pub mod apex_pro_tkl_2023;
 pub mod apex_pro_tkl_2023_profile;
 pub mod apex_pro_tkl_2023_profile_codec;
 pub mod key_action;
+pub mod model_caps;
 pub mod models;
 pub mod oled;
 pub mod onboard;
