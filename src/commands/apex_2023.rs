@@ -126,8 +126,8 @@ pub(crate) async fn cmd_actuation(manager: &DeviceManager, action: ActuationActi
         // No APPLY/initialize: GG sends neither around these frames, and direct mode ignores APPLY.
         let reply = keyboard.send_analog_setting(&setting)?;
         println!(
-            "Sent [EXPERIMENTAL]: from GG's device spec, never confirmed on hardware; whether it survives \
-             unplugging is unknown"
+            "Sent (from GG's device spec; only `38 61` layer 0 is confirmed on hardware, anything else is \
+             [EXPERIMENTAL]); whether it survives unplugging is unknown"
         );
         match reply {
             Some(reply) => {

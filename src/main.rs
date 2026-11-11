@@ -355,7 +355,9 @@ async fn cmd_rgb(manager: &DeviceManager, action: RgbAction) -> Result<()> {
                 println!("(Note: Animated effects require running as daemon)");
                 return Ok(());
             };
-            println!("Rendering per key until Ctrl-C [EXPERIMENTAL]; stop the daemon first, both would stream frames");
+            println!(
+                "Rendering per key until Ctrl-C (25 fps streaming confirmed on 0x1628; Linux untested); stop the daemon first, both would stream frames"
+            );
             let mut controller = RgbController::new(0);
             controller.set_effect(effect);
             let mut ticks = tokio::time::interval(DIRECT_FRAME_INTERVAL);
@@ -390,7 +392,7 @@ async fn cmd_rgb(manager: &DeviceManager, action: RgbAction) -> Result<()> {
 
         RgbAction::Release => {
             keyboard.send_display_command(steelseries_gg::devices::hid_reports::Apex2022DisplayCommand::ClearDirect)?;
-            println!("Sent the leave-direct-mode report [EXPERIMENTAL, never confirmed on hardware]");
+            println!("Sent the leave-direct-mode report (confirmed on the Apex Pro TKL 2023 0x1628; Linux untested)");
         }
     }
 
@@ -413,7 +415,7 @@ fn cmd_headset(manager: &DeviceManager, action: HeadsetAction) -> Result<()> {
     } else {
         eprintln!(
             "{}",
-            "[EXPERIMENTAL] Headset commands come from community forks and are untested on hardware.".yellow()
+            "[EXPERIMENTAL] Headset commands are confirmed on the Arctis Nova 7 Gen 2 (0x227E) only; on this model they come from community forks or GG specs and are untested on hardware.".yellow()
         );
     }
 

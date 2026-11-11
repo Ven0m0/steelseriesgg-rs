@@ -1,7 +1,8 @@
-//! `[EXPERIMENTAL]` Apex Pro TKL 2023 (`0x1628`) live key mappings, macro data and device queries, from GG's
-//! decrypted device spec (`base_apex_2022_wired`). GG sends `F2`, `F5` and `90 00` at startup (2026-11-10 USBPcap,
-//! each answered on the input endpoint) but not `36`, `B6`, `B7` or `35` for a binding change: it rewrites the
-//! on-board profile instead. Those commands are untested from `ssgg`.
+//! Apex Pro TKL 2023 (`0x1628`) live key mappings, macro data and device queries, from GG's decrypted device spec
+//! (`base_apex_2022_wired`). GG sends `F2`, `F5` and `90 00` at startup (2026-11-10 USBPcap, each answered on the
+//! input endpoint) but not `36`, `B6`, `B7` or `35` for a binding change: it rewrites the on-board profile
+//! instead. `36` (base layer), `B6`, `B7`, `F2` and `F5` are confirmed from `ssgg` on `0x1628` (Windows,
+//! 2026-11-11, Linux untested); `35` and `75` are `[EXPERIMENTAL]`, untested from `ssgg`.
 
 use std::collections::HashMap;
 
@@ -29,7 +30,7 @@ fn open_keyboard(manager: &DeviceManager) -> Result<Box<dyn Keyboard>> {
     let keyboard = manager.open_keyboard(info)?;
     crate::warn_if_gg_engine_running();
     println!(
-        "using {} [EXPERIMENTAL: from GG's device spec, untested from ssgg]",
+        "using {} (36, B6, B7, F2, F5 confirmed on Windows; 35 and 75 [EXPERIMENTAL]; Linux untested)",
         info.name
     );
     Ok(keyboard)

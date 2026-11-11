@@ -45,8 +45,9 @@ pub enum CommandCode {
     /// NOTE: This command code is a placeholder. The actual per-key RGB command
     /// for SteelSeries keyboards has not been discovered and may be different.
     PerKeyRgb = 0x23,
-    /// [EXPERIMENTAL] Apex Pro TKL 2023 direct-mode lighting frame (0x40), sent as a feature
-    /// report by `ApexProTkl2023`. See docs/development/apex-pro-tkl-2023-gg-capture.md.
+    /// Apex Pro TKL 2023 direct-mode lighting frame (0x40), sent as a feature report by `ApexProTkl2023`.
+    /// Confirmed on `0x1628` (see `.claude/rules/experimental-protocol.md`); `[EXPERIMENTAL]` on the other PIDs.
+    /// See docs/development/apex-pro-tkl-2023-gg-capture.md.
     Apex2023Direct = 0x40,
     /// [EXPERIMENTAL] Direct-mode lighting frame of the wireless Apex Pro TKL models (0x61), see
     /// [`DirectFrameCommand`]. Not listed as confirmed in `.claude/rules/experimental-protocol.md`.
@@ -143,12 +144,13 @@ pub enum CommandCode {
     /// [EXPERIMENTAL] Apex 3 (`0x161A`) lighting, see [`Apex3Command`]. A tag, never a wire byte: the frames use
     /// `0x0B` (colours) and `0x0A` (brightness). From GG's decrypted device spec, never sent on hardware.
     Apex3Lighting = 0xF5,
-    /// [EXPERIMENTAL] Live analog-key settings of the 2022-firmware Apex boards (`00 38 <sub>`), see
-    /// [`AnalogKeyCommand`]. From GG's decrypted device spec, never sent from `ssgg` on hardware.
+    /// Live analog-key settings of the 2022-firmware Apex boards (`00 38 <sub>`), see [`AnalogKeyCommand`]. From
+    /// GG's decrypted device spec. Only `38 61` layer 0 is confirmed on `0x1628` (2026-10-25); `[EXPERIMENTAL]`
+    /// for layer 2 and `38 62/65/66/67` from `ssgg`.
     AnalogKeys = 0x38,
     /// 2022-firmware on-board profile read, see [`Gen3ProfileReadCommand`]. A tag, never a wire
     /// byte: the wire header is `83 01`, and 0x83 already belongs to [`CommandCode::OnboardBufferRead`] (legacy
-    /// header `83 00`). From GG's decrypted device spec, never sent from `ssgg` on hardware.
+    /// header `83 00`). From GG's decrypted device spec; confirmed on `0x1628` (fw 1.19.7, 2026-11-10).
     Gen3ProfileRead = 0xF4,
     /// Leave direct-mode lighting (`00 41`, GG `clear_direct_write`), see [`Apex2022DisplayCommand`]. From GG's
     /// decrypted device spec; confirmed on `0x1628` (fw 1.19.7, 2026-11-10): the board returned to its stored
@@ -158,24 +160,27 @@ pub enum CommandCode {
     /// confirmed on `0x1628` (firmware 1.19.7, 2026-11-10): the test pattern, a drawn image and GG's own image bytes rendered,
     /// and `1F 82` handed the OLED back to the firmware.
     Apex2023Oled = 0x1F,
-    /// [EXPERIMENTAL] Live key-binding write of the 2022-firmware Apex boards (`00 36 <layer> <count> ...`), see
-    /// [`KeyMappingCommand`]. From GG's decrypted device spec, never sent from `ssgg` on hardware.
+    /// Live key-binding write of the 2022-firmware Apex boards (`00 36 <layer> <count> ...`), see
+    /// [`KeyMappingCommand`]. From GG's decrypted device spec; confirmed on `0x1628` (fw 1.19.7, Windows,
+    /// 2026-11-11), base layer only.
     KeyMappingWrite = 0x36,
-    /// [EXPERIMENTAL] Key-binding read request (`00 B6 <layer> <count> ...`), see [`KeyMappingReadCommand`]. From
-    /// GG's decrypted device spec, never sent from `ssgg` on hardware.
+    /// Key-binding read request (`00 B6 <layer> <count> ...`), see [`KeyMappingReadCommand`]. From GG's decrypted
+    /// device spec; confirmed on `0x1628` (fw 1.19.7, Windows, 2026-11-11).
     KeyMappingRead = 0xB6,
     /// [EXPERIMENTAL] SteelSeries (meta) key assignment (`00 35 <hid>`), see [`MetaToggleCommand`]. From GG's
-    /// decrypted device spec, never sent from `ssgg` on hardware.
+    /// decrypted device spec, untested from `ssgg`.
     MetaToggle = 0x35,
-    /// [EXPERIMENTAL] On-board macro data read, see [`MacroReadCommand`]. A tag, never a wire byte: the wire
+    /// On-board macro data read, see [`MacroReadCommand`]. A tag, never a wire byte: the wire
     /// opcode is 0xB7, which already belongs to [`CommandCode::HeadsetProBattery`]. From GG's decrypted device
-    /// spec, never sent from `ssgg` on hardware.
+    /// spec; confirmed on `0x1628` (fw 1.19.7, Windows, 2026-11-11), the event format is undecoded.
     MacroRead = 0xFA,
-    /// [EXPERIMENTAL] Physical layout query, see [`DeviceQueryCommand::Layout`]. A tag, never a wire byte: the
-    /// wire opcode is 0xF2, already the tag of [`CommandCode::MouseDpi`]. From GG's decrypted device spec.
+    /// Physical layout query, see [`DeviceQueryCommand::Layout`]. A tag, never a wire byte: the
+    /// wire opcode is 0xF2, already the tag of [`CommandCode::MouseDpi`]. From GG's decrypted device spec;
+    /// confirmed on `0x1628` (fw 1.19.7, Windows, 2026-11-11).
     DeviceLayout = 0xFB,
-    /// [EXPERIMENTAL] Region query, see [`DeviceQueryCommand::Region`]. A tag, never a wire byte: the wire
-    /// opcode is 0xF5, already the tag of [`CommandCode::Apex3Lighting`]. From GG's decrypted device spec.
+    /// Region query, see [`DeviceQueryCommand::Region`]. A tag, never a wire byte: the wire
+    /// opcode is 0xF5, already the tag of [`CommandCode::Apex3Lighting`]. From GG's decrypted device spec;
+    /// confirmed on `0x1628` (fw 1.19.7, Windows, 2026-11-11).
     DeviceRegion = 0xFC,
     /// [EXPERIMENTAL] Region write (`00 75 <region>`), see [`RegionWriteCommand`]. Writes flash. From GG's
     /// decrypted device spec, never sent from `ssgg` on hardware.
@@ -883,9 +888,10 @@ pub struct RapidTapPair {
     pub report_both: bool,
 }
 
-/// [EXPERIMENTAL] Live analog-key settings of the 2022-firmware Apex boards (wired Apex Pro TKL 2023,
-/// `0x1628`): `00 38 <sub> ...`. Read from GG's decrypted device spec (`apex_pro_tkl_2022`, 2026-10-24),
-/// never sent from `ssgg` on hardware. Per-key frames carry every analog key: the count byte is a spec
+/// Live analog-key settings of the 2022-firmware Apex boards (wired Apex Pro TKL 2023,
+/// `0x1628`): `00 38 <sub> ...`. Read from GG's decrypted device spec (`apex_pro_tkl_2022`, 2026-10-24).
+/// Only `38 61` layer 0 is confirmed on hardware (Windows, fw 1.19.7, 2026-10-25); layer 2, `38 62/65/66/67`
+/// and Linux are `[EXPERIMENTAL]` from `ssgg`. Per-key frames carry every analog key: the count byte is a spec
 /// constant, so a frame cannot address one key alone. Whether a setting survives a power cycle is unknown.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AnalogKeyCommand<'a> {
@@ -1076,12 +1082,13 @@ fn check_mapping_keys(layer: u8, keys: impl ExactSizeIterator<Item = u8>) -> Res
     Ok(())
 }
 
-/// [EXPERIMENTAL] Live key-binding write of the 2022-firmware Apex boards (GG `write-button-mappings`), a feature
+/// Live key-binding write of the 2022-firmware Apex boards (GG `write-button-mappings`), a feature
 /// report: `00 36 <layer> <count> (hid function kc0 kc1 kc2 kc3) x count`, at most [`Self::MAX_KEYS`] keys per
 /// report. Layer 0 = base, 1 = meta (behind the SteelSeries key), 2 = second actuation. From GG's decrypted device
-/// spec (`base_apex_2022_wired`, 2026-11-10), never sent from `ssgg` on hardware; GG did not send it for a binding
-/// change on `0x1628` in the 2026-11-10 capture (it rewrote the on-board profile instead). Whether a binding
-/// survives a power cycle is unknown.
+/// spec (`base_apex_2022_wired`, 2026-11-10). Confirmed on `0x1628` for the base layer (fw 1.19.7, Windows,
+/// 2026-11-11; meta and second layers and Linux untested). GG did not send it for a binding change in the
+/// 2026-11-10 capture (it rewrote the on-board profile instead). Whether a binding survives a power cycle is
+/// unknown.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct KeyMappingCommand<'a> {
     pub layer: u8,
@@ -1120,11 +1127,11 @@ impl HidCommand for KeyMappingCommand<'_> {
     }
 }
 
-/// [EXPERIMENTAL] Key-binding read request (GG `read-button-mappings`), a feature report:
+/// Key-binding read request (GG `read-button-mappings`), a feature report:
 /// `00 B6 <layer> <count> (hid 0 0 0 0 0) x count`, answered by a feature-report read holding
 /// [`Self::REPLY_HEADER_LEN`] header bytes, then `(hid function kc0 kc1 kc2 kc3) x count`. From GG's decrypted
-/// device spec (`base_apex_2022_wired`, 2026-11-10), never sent from `ssgg` on hardware; GG did not send it on
-/// `0x1628` in the 2026-11-10 capture.
+/// device spec (`base_apex_2022_wired`, 2026-11-10). Confirmed on `0x1628` (fw 1.19.7, Windows, 2026-11-11;
+/// Linux untested); GG did not send it in the 2026-11-10 capture.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct KeyMappingReadCommand<'a> {
     pub layer: u8,
@@ -1200,11 +1207,11 @@ impl HidCommand for MetaToggleCommand {
     }
 }
 
-/// [EXPERIMENTAL] One chunk of the on-board macro data read (GG `read_macro_data`), a feature report:
+/// One chunk of the on-board macro data read (GG `read_macro_data`), a feature report:
 /// `00 B7 <offset u16 LE> <length u16 LE>`, both counted in 4-byte events, answered by a feature-report read whose
 /// data starts behind [`Self::REPLY_HEADER_LEN`] bytes. Read only. From GG's decrypted device spec
-/// (`base_apex_2022_wired`, 2026-11-10), never sent from `ssgg` on hardware; GG did not send it on `0x1628` in
-/// the 2026-11-10 capture.
+/// (`base_apex_2022_wired`, 2026-11-10). Confirmed on `0x1628` (fw 1.19.7, Windows, 2026-11-11; Linux
+/// untested); GG did not send it in the 2026-11-10 capture.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MacroReadCommand {
     pub offset_events: u16,
@@ -1262,10 +1269,10 @@ impl HidCommand for MacroReadCommand {
     }
 }
 
-/// [EXPERIMENTAL] Layout or region query, an output report `00 F2` / `00 F5` (GG `read_layout` / `read_region`),
+/// Layout or region query, an output report `00 F2` / `00 F5` (GG `read_layout` / `read_region`),
 /// answered on the input endpoint by `00 <F2|F5> <error 0|1> <id>`. From GG's decrypted device spec
-/// (`base_apex_2022_wired`, 2026-11-10); GG sent both at startup on `0x1628` in the 2026-11-10 capture, `ssgg`
-/// never has.
+/// (`base_apex_2022_wired`, 2026-11-10); GG sent both at startup on `0x1628` in the 2026-11-10 capture.
+/// Confirmed from `ssgg` on `0x1628` (fw 1.19.7, Windows, 2026-11-11; Linux untested).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DeviceQueryCommand {
     Layout,
@@ -1503,14 +1510,15 @@ impl HidCommand for Apex2022DisplayCommand<'_> {
     }
 }
 
-/// [EXPERIMENTAL] Direct-mode lighting frame, a feature report:
+/// Direct-mode lighting frame, a feature report:
 /// `00 | packet id | key count | (usage R G B) x count | zero padding`, `report_len` bytes in all.
 ///
-/// Packet id `0x40` (wired Apex Pro TKL 2023, Gen 3 and `[EXPERIMENTAL]` the Apex 9 pair), `0x61` (wireless
-/// Gen 3) or `0x3A` (original Apex Pro and `[EXPERIMENTAL]` four more Gen 1 models, from OpenRGB and a
-/// community fork). One frame replaces every key. Hardware evidence is thin: a solid-colour and a
-/// per-key `0x40` frame were replayed on the wired Apex Pro TKL 2023 (`0x1628`, 2026-10-14 and 2026-10-21);
-/// see docs/development/apex-pro-tkl-2023-gg-capture.md.
+/// Packet id `0x40` (wired Apex Pro TKL 2023, Gen 3; `[EXPERIMENTAL]` on the Apex 9 pair), `0x61` (wireless
+/// Gen 3, `[EXPERIMENTAL]`) or `0x3A` (original Apex Pro and `[EXPERIMENTAL]` four more Gen 1 models, from
+/// OpenRGB and a community fork). One frame replaces every key. Confirmed on hardware: `0x40` on the wired
+/// Apex Pro TKL 2023 (`0x1628`, solid colours, per-key frames and 25 fps effects, 2026-11-10; Linux untested)
+/// and `0x3A` on the Apex Pro (2024) `0x1640` (2026-11-02); see
+/// `.claude/rules/experimental-protocol.md` and docs/development/apex-pro-tkl-2023-gg-capture.md.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DirectFrameCommand<'a> {
     /// Frame packet id: [`CommandCode::Apex2023Direct`], [`CommandCode::Apex2023DirectWireless`] or

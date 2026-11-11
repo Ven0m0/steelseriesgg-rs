@@ -619,8 +619,8 @@ impl EffectEngine {
     }
 }
 
-/// [EXPERIMENTAL] Time between two direct frames of an animation: 25 fps (GG streams about 19 fps to the wired
-/// Apex Pro TKL 2023).
+/// Time between two direct frames of an animation: 25 fps (GG streams about 19 fps to the wired Apex Pro TKL 2023).
+/// Streaming at 25 fps is confirmed on `0x1628` (2026-11-10); Linux untested.
 pub const DIRECT_FRAME_INTERVAL: Duration = Duration::from_millis(40);
 
 /// Colour at wave position `t` (wraps at 1.0) of a non-empty colour cycle, blended between neighbours.

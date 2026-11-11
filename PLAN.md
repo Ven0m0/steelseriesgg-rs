@@ -86,44 +86,24 @@ hidraw) and a USBPcap comparison of the effect stream against GG's frames. The h
 **Update 2026-11-10:** the paragraph below is superseded. `ssgg onboard gen3-read` read all five slots back on
 hardware (12,500 bytes, CRC matching, header `00 83 00`), GG itself issues the same reads at startup, and the blob
 layout is fully named from the spec (`docs/development/apex-pro-tkl-2023-gg-capture.md`, "Blob layout from the spec",
-including the old unknowns at 1080, 1224, 1590 and the second-actuation tables at 1306/1376). Item 3's init bytes
+including the old unknowns at 1080, 1224, 1590 and the second-actuation tables at 1306/1376). The init bytes
 are settled by the USBPcap of 2026-11-10: `02 01 <fs>`, `03 01 <fs>` x 25, `B1`, `B2`, `34`, `90` are the profile
 rewrite chain. Writing is allowed only through the gated command (backup of all five slots in the same run, decode
 and re-encode byte-identical, `--yes`); see the branch `feat/gg-keyboard-parity` for the state of that stage.
 
-`ssgg actuation` sends the experimental `0x2D` command; confirmed no-op on hardware (owner, 2026-10-21: no
-feel or GG-visible change). GG instead rewrites the 12,500-byte on-board profile, and a live HID trace of the
-engine (2026-10-21, see `docs/development/apex-pro-tkl-2023-gg-capture.md`, "Live HID trace and engine memory
-read") found **no `GET_FEATURE` transfer at all** over a minute that included the owner viewing GG's own
-actuation page - GG's UI reads its cached config, never the board. This is not a gap in `ssgg`'s HID coverage;
-there is nothing on the wire to read on this firmware. Writing the profile stays blocked on a read-back
-command for the same reason: the checksum is solved, but there is no way to get a current blob to modify, and
-none is expected to turn up without new firmware.
-
 0. **Correction 2026-10-24 (spec-derived, `[EXPERIMENTAL]`, not run on hardware):** GG's decrypted device spec for
    this family (`base_apex_2022_wired`, `apex_pro_tkl_2022`) defines live feature reports `00 38 61/62/65/66/67`
    for actuation, release mode, rapid trigger and rapid tap, plus a chunked on-board profile read
-   (`00 83 01 <fs-id> <size> <offset>`, fs-id `0x80 + slot`). The "no read-back, `0x2D` only" reading below came from
-   a one-minute live trace and is therefore not conclusive. The items below stay valid as history until a
-   hardware test settles it.
+   (`00 83 01 <fs-id> <size> <offset>`, fs-id `0x80 + slot`). The "no read-back, `0x2D` only" reading of the
+   2026-10-21 trace was superseded on 2026-11-10 (profile read-back confirmed on hardware).
    **Implemented 2026-10-25, owed hardware tests H1/H2 (see P8, "Reconstructed from `HANDOFF.md`"):** `ssgg actuation set|set-value|clear-second|
    release-mode|rapid-trigger|rapid-tap|rapid-tap-pairs` send the `38 6x` frames on `0x1628` (every analog key;
    `--dry-run` prints the bytes; 0.1-4.0 mm from GG's table; `set 0.1` confirmed on hardware 2026-10-25), and `ssgg onboard gen3-read`
-   reads one slot read-only and checks the CRC at 12320. The spec also names three of the init frames in item 3:
+   reads one slot read-only and checks the CRC at 12320. The spec also names three of the init frames:
    `b2` is `load_profile`, `34` is `set_profile_volatile`, `38 66`/`38 67` are rapid tap enable/pairs. The spec's
    `device-key-idx-to-hid` matches `WIRED_2023_PROFILE_SLOTS` slot for slot.
-1. **Done 2026-10-15, still blocked:** `keyboards/apex_pro_tkl_2023_profile.rs` has the checksum, `set_actuation`
-   (rejects unknown mm values and keys without a slot) and the 25-chunk split, all unit-tested. Not wired to any
-   command: no read-back exists (confirmed 2026-10-21, not just undiscovered), so there is no current blob to
-   modify and a write would overwrite the board's other on-board settings with a stale/synthetic blob. Leave
-   unwired unless a read-back command surfaces on a firmware update.
 2. ~~Actuation calibration conflict~~ resolved 2026-10-25: `(47,42)` is 1.8 mm (GG's table and the board's
    sync reports); `ACTUATION_POINTS` now holds GG's full 40-step table, with 1.0 mm back at `(21,18)`.
-3. ~~Capture GG startup to check for a read-back command~~ superseded by the 2026-10-21 live trace above: there
-   is none. **Still open, needs a capture** (USBPcap, started before launching GG): the init-sequence byte
-   meanings `b1`, `b2`, `34`, `38 66`, `38 67`; the profile tables at blob offsets 1080, 1224, 1590.
-   `second_actuation_thresholds`'s field name is now known (2026-10-21 live read, all zero on the owner's
-   board) but not its blob offset.
 
 ## P3. Apex 3 TKL (`0x1622`) RGB not applied (issues #173, #257)
 
@@ -217,8 +197,6 @@ Still open:
 Nothing below has run on a device. Ask whoever owns the device; record device, firmware and date; promote a status
 only per `.claude/rules/experimental-protocol.md`.
 
-- **[HW, owner, GG stopped]** Apex Pro TKL 2023 `0x1628`: `rgb color 00FF00`, `rgb brightness 50` then `100` (frame
-  dims and restores?), then `rgb color` again in a new run (full brightness: known limit).
 - **[HW, outside]** Apex 3 TKL `0x1622` (#173/#257): `ssgg -d rgb color FF0000`, `rgb off`, `rgb brightness 50` with the
   new no-APPLY behaviour.
 - **[HW, outside]** #283 `0x1610`, #276 (`0x1858` `ssgg mouse`, `0x22A1` `ssgg headset`, `0x0616` `rgb color`),

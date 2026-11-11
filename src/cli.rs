@@ -51,13 +51,13 @@ pub(crate) enum Commands {
         action: OledAction,
     },
 
-    /// Apex Pro TKL 2023 live key mappings and macro data (EXPERIMENTAL: from GG's device spec, untested from ssgg)
+    /// Apex Pro TKL 2023 live key mappings and macro data (36, B6, B7 confirmed on 0x1628, Windows; Linux untested)
     Keymap {
         #[command(subcommand)]
         action: KeymapAction,
     },
 
-    /// Apex Pro TKL 2023 device info, meta key and region (EXPERIMENTAL: from GG's device spec, untested from ssgg)
+    /// Apex Pro TKL 2023 device info, meta key and region (info confirmed on 0x1628, Windows; meta key and region EXPERIMENTAL)
     Device {
         #[command(subcommand)]
         action: DeviceAction,
@@ -662,8 +662,9 @@ fn parse_layer(text: &str) -> std::result::Result<MappingLayer, String> {
 }
 
 /// Apex Pro TKL 2023 (0x1628) live key bindings (`36`, `B6`, `B7`), from GG's device spec. GG did not send these
-/// for a binding change in the 2026-11-10 capture (it rewrites the on-board profile), so they are untested from
-/// ssgg. Whether a live mapping write survives a power cycle is unknown, so `set` and `reset` need `--yes`.
+/// for a binding change in the 2026-11-10 capture (it rewrites the on-board profile). Confirmed from ssgg on
+/// 0x1628 (Windows, 2026-11-11; Linux untested). Whether a live mapping write survives a power cycle is unknown,
+/// so `set` and `reset` need `--yes`.
 #[derive(Subcommand)]
 pub(crate) enum KeymapAction {
     /// Print one layer's bindings, one line per key
@@ -807,8 +808,9 @@ pub(crate) enum MouseAction {
     },
 }
 
-/// The Apex Pro TKL 2023 (0x1628) settings below come from GG's device spec and are EXPERIMENTAL: never
-/// confirmed on hardware, and whether they survive unplugging is unknown. Each one sets every analog key.
+/// The Apex Pro TKL 2023 (0x1628) settings below come from GG's device spec. Only `set` (`38 61` layer 0) is
+/// confirmed on hardware (2026-10-25); the other layers and commands are EXPERIMENTAL, and whether any survives
+/// unplugging is unknown. Each one sets every analog key.
 #[derive(Subcommand)]
 pub(crate) enum ActuationAction {
     /// Set actuation point for all keys (global). Apex Pro TKL 2023: 0.1-4.0 mm in 0.1 mm steps

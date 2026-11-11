@@ -221,15 +221,18 @@ Kinzu v2.
 
 ## Keyboard HID protocol
 
-Two sets of commands have been replayed on hardware from this project:
+The per-code status of record is the table in `.claude/rules/experimental-protocol.md`; it is complete and wins
+over this page. Summary of what has been replayed on hardware from this project:
 
-- the `0x40` lighting frame on the wired Apex Pro TKL 2023 (`0x1628`), one solid colour, 2026-10-14 (details
-  in the capture note); it is still `[EXPERIMENTAL]`;
+- the wired Apex Pro TKL 2023 (`0x1628`, fw 1.19.7, Windows, 2026-11-10): `0x40` lighting frames, `0x41`
+  release, `0x1F` OLED, `38 61` layer 0, `38 83` onboard image and the `83 01` profile read-back (details in
+  the capture note); Linux untested;
+- the Apex Pro (2024) `0x1640` `0x3A` frame (ISO-DE, Linux, 2026-11-02);
 - the legacy Apex on-board profile frames on an Apex 7 (`0x1612`) under Linux, 2026-10-20 - `90` firmware
   poll, `85` pull, `83` payload read, `88` file open, `03 00` resource-buffer write, `05` push, `EB` commit,
-  `89` profile deploy. These are **confirmed** on that model.
+  `89` profile deploy.
 
-Every other code below is untested here.
+Every other code is `[EXPERIMENTAL]` or `[PLACEHOLDER]` unless the rules file says otherwise.
 
 ### Control endpoint
 
@@ -248,6 +251,10 @@ Keyboard output reports are 65 bytes: report ID `0x00`, command byte, data, zero
 
 ### Command codes
 
+This table is the legacy command set only. Codes it omits (`0x41`, `0x1F`, `0x38`, `0x36`/`0xB6`/`0xB7`, `0x35`,
+`0x75`, `0x02`/`0xB1`/`0xB2`/`0x34`, Gen 3 `0x83 01`) are listed in `.claude/rules/experimental-protocol.md`, which is
+the complete table.
+
 | Code | Name in code | Status | Notes |
 |------|--------------|--------|-------|
 | `0x09` | `Apply` | `[EXPERIMENTAL]` | `[00 09 00 ..]`. Code comments say it makes the 2023 controller fall back to its stored profile, so `ApexProTkl2023::apply()` skips it in direct mode. |
@@ -257,7 +264,8 @@ Keyboard output reports are 65 bytes: report ID `0x00`, command byte, data, zero
 | `0x23` | `Apex8ZoneBrightnessCommand` | `[EXPERIMENTAL]` | Apex 3 TKL brightness `[00 23 level ..]`, level `0x00`-`0x10` scaled from 0-100 (OpenRGB `SteelSeriesApex8ZoneController`). Sent by `rgb brightness` on `0x1622`. |
 | `0x25`, `0x26` | `ReactiveMode`, `ColorShift` | `[EXPERIMENTAL]` | Enum values only; the uncalled `Apex3Tkl` helpers (and the `0x24` OSD helper) were removed on 2026-10-15. |
 | `0x2D` | `ActuationControl` | `[EXPERIMENTAL]` | `[00 2D value ..]`, value 1-40 = 0.1-4.0 mm (`ActuationCommand`). Sent by `ssgg actuation`. GG does not use it; it writes actuation through the on-board profile blob (capture note). |
-| `0x40` | `Apex2023Direct` | `[EXPERIMENTAL]` | Lighting frame `40 54 [usage R G B] x84`, feature report. Used for `rgb color` and `rgb perkey` on `0x1628`. See the capture note. The Apex 9 TKL `0x1634` and Apex 9 Mini `0x1620` take the same frame in a 513-byte report (127 entries fit, 112 are sent, count byte `0x70`) with no `0x4B` init, `[EXPERIMENTAL]`, community fork, untested. The Apex Pro Mini `0x161E` / `0x1648` take it in 513 bytes with the Mini layout (61 keys, count byte `0x3D`), no init, `[EXPERIMENTAL]`, GG spec, untested. |
+| `0x40` | `Apex2023Direct` | confirmed (`0x1628`) | Lighting frame `40 54 [usage R G B] x84`, feature report. Used for `rgb color` and `rgb perkey` on `0x1628`; status details in the rules file, Linux untested. See the capture note. |
+| `0x40` | `Apex2023Direct` (other PIDs) | `[EXPERIMENTAL]` | The Apex 9 TKL `0x1634` and Apex 9 Mini `0x1620` take the same frame in a 513-byte report (127 entries fit, 112 are sent, count byte `0x70`) with no `0x4B` init, `[EXPERIMENTAL]`, community fork, untested. The Apex Pro Mini `0x161E` / `0x1648` take it in 513 bytes with the Mini layout (61 keys, count byte `0x3D`), no init, `[EXPERIMENTAL]`, GG spec, untested. |
 | `0x3A` | `ApexGen1Direct` | `[EXPERIMENTAL]` | Original Apex Pro `0x1610` direct frame: 643-byte feature report `00 3A N [usage R G B] xN` on interface 1, no init (OpenRGB `SteelSeriesApexController`, Gen 1). Untested here (issue #283). The same frame is routed to Apex 5 `0x161C`, Apex 7 TKL `0x1618`, Apex Pro TKL `0x1614` and Apex Pro (2024) `0x1640` from a community fork's table; unverified except on `0x1640`, where solid-colour and per-key frames were confirmed on hardware (ISO-DE, firmware 4.16.8, Linux: all 106 keys lit at their HID usage; the Gen 3 `0x40` frame did nothing there). |
 | `0x8E` | `ApexMDirect` | `[EXPERIMENTAL]` | Apex M750 `0x0616` direct frame, 513-byte feature report on interface 2: header `00 00 00 01 8E 01 03 06 16`, then 132 `R G B` slots from index 9. The slot-to-key map is unknown, so `ssgg` fills every slot (solid colour and off only). Community fork, untested (issue #276). |
 | `0x01` | `ApexMEnable` | `[EXPERIMENTAL]` | Apex M750 enable sequence, three 513-byte feature reports sent once before the first frame, all zero but (index 0 is the report ID): `[4]=01 [6]=85`; `[4]=03 [5]=01 [7]=FF`; `[4]=01 [6]=85 [7]=FF`. `0x01` is only byte 4 of the first and third; the three share no leading byte. Community fork, untested. |

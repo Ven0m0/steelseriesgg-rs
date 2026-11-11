@@ -1,10 +1,9 @@
 # Apex Pro TKL (2023, wired, PID 0x1628): SteelSeries GG wire capture
 
-Status: **[EXPERIMENTAL]**. Everything below was read from USB captures of the official SteelSeries GG
+Status: the bytes below are observed GG traffic, read from USB captures of the official SteelSeries GG
 (Windows) talking to a real Apex Pro TKL (VID 0x1038, PID 0x1628, firmware reported as `1.19.7`),
-captured with USBPcap 1.5.4.0 on 2026-10-14. The bytes are observed GG traffic. Only a solid-colour frame
-(2026-10-14) and per-key frames (2026-10-21) have been replayed from this project (see open question 3), so nothing here is "confirmed"
-in the sense of `.claude/rules/experimental-protocol.md`.
+captured with USBPcap 1.5.4.0 on 2026-10-14. Whether an `ssgg` frame is Confirmed is decided per frame by
+replay from `ssgg` on hardware; the per-frame status lives in `.claude/rules/experimental-protocol.md`.
 
 ## Transport
 
@@ -19,10 +18,9 @@ transfers (`bmRequestType 0x21`, `bRequest 9`). Replies came back on interrupt I
 The 644 is the on-wire length; it excludes the report-ID byte. For `0x1628` the code builds a
 `WIRED_2023_PACKET_LENGTH = 645` buffer (report-ID byte + 644 wire bytes) in `apex_pro_tkl_2023.rs`. `GenericKeyboard::send_feature`
 (`keyboards/mod.rs`) sends the frame on the device's own hidapi handle on every platform.
-**Needs a hardware test on `0x1628`**: if the keyboard ignores
-direct-mode frames sent on the collection discovery opened, the interface-1 control collection
-(the one carrying this model's profile traffic on `wIndex 1`) has to be opened as its own device.
-The Linux path for `0x1628` is untested.
+The wired path was confirmed on hardware (Windows, fw 1.19.7, 2026-11-10). Only Linux hidraw is untested: if
+the keyboard ignores direct-mode frames sent on the collection discovery opened, the interface-1 control
+collection (the one carrying this model's profile traffic on `wIndex 1`) has to be opened as its own device.
 
 ## Per-key lighting (feature report, command 0x40)
 
@@ -133,7 +131,8 @@ and re-encode round trip is byte-identical; the write stays behind `--yes` (see 
 | `38 66 01` / `38 66 00` | Rapid Tap on / off in GG | `38 00 66` |
 | `38 67 0a 00 04 07 <n> ...` | 4 times while cycling a 4-state option; `<n>` was 1, 2, 3, 0 | not captured |
 
-Meaning of `b1`, `b2`, `34` and the `38 67` payload is unknown.
+`b1 <slot>` commits a rewritten profile slot, `b2 <slot>` loads it and `34 00` sets the profile volatile (see the
+2026-11-10 live trace below). The `38 67` payload layout is still unknown.
 
 ## Live HID trace and engine memory read (2026-10-21)
 
@@ -149,7 +148,8 @@ Over about one minute, including the owner opening the keyboard's actuation sett
   the process made to any HID device for the whole trace, not a sample.
 - **Output-report polling is exactly the already-listed set**: `02 01 80`, `b1`, `b2`, `34`, `90`, cycling
   every few seconds. Opening the actuation page triggered none of these, and no new command.
-- **Conclusion: this firmware/GG version has no actuation (or lighting) read-back at all.** GG's actuation
+- **Superseded 2026-11-10: profile read-back exists (`83 01`, all five slots), lighting read-back still none.**
+  Original conclusion of this trace: this firmware/GG version has no actuation (or lighting) read-back at all. GG's actuation
   UI is backed entirely by its own cached config, not a hardware query. This matches what `ssgg actuation`
   already showed indirectly (`0x2D` has no effect on `0x1628`, confirmed by the owner 2026-10-21) and
   explains it: there is nothing on the wire to read, not a missing `ssgg` command.
@@ -318,6 +318,8 @@ direct-mode frames; Prism is the colour source, not the writer.
 
 ## Live trace, 2026-11-10 (engine `70d240b7`)
 
+Frida hooks only; see the USBPcap section for the on-wire captures.
+
 Read-only Frida attach to `SteelSeriesEngine.exe` (PID 14204), hooks on `DeviceIoControl` (only the
 two HID codes), `WriteFile` and `ReadFile`, across two action rounds while the owner changed settings
 in the GG window. Payloads are read with `readByteArray`; `new Uint8Array(ptr, off, len)` silently
@@ -336,7 +338,7 @@ bytes, zero-padded after the command bytes:
 | `00 38 66 01 ...` | 1 | Rapid Tap on |
 | `00 38 66 00 ...` | 1 | Rapid Tap off |
 | `00 02 01 80 ...` | 8 | sequence head |
-| `00 b1 00 ...` | 8 | profile chunk write, zero payload |
+| `00 b1 00 ...` | 8 | profile commit, slot 0 |
 | `00 b2 00 ...` | 8 | `load_profile` |
 | `00 34 00 ...` | 8 | `set_profile_volatile` |
 | `00 90 00 00 ...` | 8 | firmware-version poll |
@@ -344,7 +346,7 @@ bytes, zero-padded after the command bytes:
 The last five repeat as a group about every 2.5 s for the whole action window, and each `90 00` is
 followed by a read of GG's own 81-byte device JSON (`{"firmware_version": "1.19.7", "device_name":
 "apex_pro_tkl_2022"}`). That group is a refresh loop, not a user frame: it fires whether or not
-anything changed, and the profile bytes in `b1` are all zero.
+anything changed, and `b1` is only the commit of slot 0.
 
 ### What was not seen
 
