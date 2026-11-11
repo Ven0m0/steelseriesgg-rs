@@ -277,6 +277,11 @@ pub(crate) async fn cmd_onboard(mut manager: Option<&mut DeviceManager>, action:
         }
 
         OnboardAction::Gen3Read(args) => cmd_gen3_read(manager, args).await?,
+        OnboardAction::Gen3Decode(args) => super::gen3_profile::cmd_gen3_decode(&args)?,
+        OnboardAction::Gen3Encode(args) => super::gen3_profile::cmd_gen3_encode(&args)?,
+        OnboardAction::Gen3Write(args) => super::gen3_profile::cmd_gen3_write(manager, args)?,
+        OnboardAction::Gen3Activate(args) => super::gen3_profile::cmd_gen3_activate(manager, &args)?,
+        OnboardAction::Gen3Restore(args) => super::gen3_profile::cmd_gen3_restore(manager, args)?,
     }
 
     Ok(())

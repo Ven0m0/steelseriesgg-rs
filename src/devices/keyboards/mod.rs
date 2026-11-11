@@ -6,6 +6,7 @@ pub mod apex_7_profile;
 pub mod apex_m750;
 pub mod apex_pro_tkl_2023;
 pub mod apex_pro_tkl_2023_profile;
+pub mod apex_pro_tkl_2023_profile_codec;
 pub mod key_action;
 pub mod models;
 pub mod oled;
@@ -255,6 +256,26 @@ pub trait Keyboard: Device {
     fn read_gen3_profile(&mut self, _slot: u8) -> Result<apex_pro_tkl_2023::Gen3ProfileRead> {
         Err(Error::DeviceCommunication(
             "the Gen3 on-board profile read is not supported by this keyboard".to_string(),
+        ))
+    }
+
+    /// [EXPERIMENTAL] Gen3 on-board profile write of one slot (0-4): erase, 25 chunks, commit. **Replaces the
+    /// slot's stored profile.** Wired Apex Pro TKL 2023 only; other keyboards return an error.
+    fn write_gen3_profile(
+        &mut self,
+        _slot: u8,
+        _blob: &[u8; apex_pro_tkl_2023_profile::PROFILE_LEN],
+    ) -> Result<Vec<apex_pro_tkl_2023::Gen3Reply>> {
+        Err(Error::DeviceCommunication(
+            "the Gen3 on-board profile write is not supported by this keyboard".to_string(),
+        ))
+    }
+
+    /// [EXPERIMENTAL] Make the board run one of its Gen3 on-board profiles (load + set-volatile). Wired Apex Pro
+    /// TKL 2023 only; other keyboards return an error.
+    fn activate_gen3_profile(&mut self, _slot: u8) -> Result<Vec<apex_pro_tkl_2023::Gen3Reply>> {
+        Err(Error::DeviceCommunication(
+            "the Gen3 on-board profile activation is not supported by this keyboard".to_string(),
         ))
     }
 

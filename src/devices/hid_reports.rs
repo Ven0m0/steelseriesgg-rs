@@ -180,6 +180,18 @@ pub enum CommandCode {
     /// [EXPERIMENTAL] Region write (`00 75 <region>`), see [`RegionWriteCommand`]. Writes flash. From GG's
     /// decrypted device spec, never sent from `ssgg` on hardware.
     RegionWrite = 0x75,
+    /// [EXPERIMENTAL] Erase an on-board profile file before a rewrite (`00 02 01 <fs id>`), see
+    /// [`ProfileEraseCommand`]. Captured from GG (2026-11-10), not yet replayed from `ssgg` on hardware.
+    ProfileErase = 0x02,
+    /// [EXPERIMENTAL] Commit a rewritten on-board profile (`00 B1 <slot>`), see [`ProfileCommitCommand`].
+    /// Captured from GG (2026-11-10), not yet replayed from `ssgg` on hardware.
+    ProfileCommit = 0xB1,
+    /// [EXPERIMENTAL] Make the board run an on-board profile (`00 B2 <slot>`), see [`LoadProfileCommand`].
+    /// Captured from GG (2026-11-10), not yet replayed from `ssgg` on hardware.
+    LoadProfile = 0xB2,
+    /// [EXPERIMENTAL] `00 34 <0|1>` after a profile load, see [`SetProfileVolatileCommand`]. Captured from GG
+    /// (2026-11-10), not yet replayed from `ssgg` on hardware.
+    SetProfileVolatile = 0x34,
 }
 
 impl fmt::Display for CommandCode {
@@ -230,6 +242,10 @@ impl fmt::Display for CommandCode {
             CommandCode::DeviceLayout => write!(f, "DEVICE_LAYOUT_EXPERIMENTAL"),
             CommandCode::DeviceRegion => write!(f, "DEVICE_REGION_EXPERIMENTAL"),
             CommandCode::RegionWrite => write!(f, "REGION_WRITE_EXPERIMENTAL"),
+            CommandCode::ProfileErase => write!(f, "PROFILE_ERASE_EXPERIMENTAL"),
+            CommandCode::ProfileCommit => write!(f, "PROFILE_COMMIT_EXPERIMENTAL"),
+            CommandCode::LoadProfile => write!(f, "LOAD_PROFILE_EXPERIMENTAL"),
+            CommandCode::SetProfileVolatile => write!(f, "SET_PROFILE_VOLATILE_EXPERIMENTAL"),
         }
     }
 }
@@ -253,6 +269,10 @@ impl CommandCode {
             0x4B => Some(CommandCode::Apex2023Init),
             0x2D => Some(CommandCode::ActuationControl),
             0x03 => Some(CommandCode::ProfileChunk),
+            0x02 => Some(CommandCode::ProfileErase),
+            0xB1 => Some(CommandCode::ProfileCommit),
+            0xB2 => Some(CommandCode::LoadProfile),
+            0x34 => Some(CommandCode::SetProfileVolatile),
             0x85 => Some(CommandCode::OnboardPayloadPull),
             0x05 => Some(CommandCode::OnboardPayloadPush),
             0x88 => Some(CommandCode::OnboardFileOpen),
@@ -628,12 +648,15 @@ impl HidCommand for Apex3Command {
 pub const PROFILE_CHUNK_REPORT_SIZE: usize = 645;
 
 /// [EXPERIMENTAL] One chunk of the wired Apex Pro TKL 2023 (PID 0x1628) on-board profile upload, a feature
-/// report: `00 | 03 01 80 | len u16 LE | offset u16 LE | 00 00 | data | zero padding`.
+/// report: `00 | 03 01 <fs id> | len u16 LE | offset u16 LE | 00 00 | data | zero padding`.
 ///
-/// Layout from GG USBPcap captures (2026-10-14). Nothing sends it: no profile read-back is known, so a write
-/// would replace the board's other settings (docs/development/apex-pro-tkl-2023-gg-capture.md).
+/// Layout from GG USBPcap captures (2026-10-14, 2026-11-10); the file id of slot N is `0x80 + N`.
+/// `ssgg onboard gen3-write` sends 25 of them behind a [`ProfileEraseCommand`]. Not yet replayed from `ssgg` on
+/// hardware.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProfileChunkCommand<'a> {
+    /// File id of the target slot (`0x80 + slot`).
+    pub fs_id: u8,
     /// Byte offset of `data` in the 12,500-byte profile blob.
     pub offset: u16,
     /// Chunk payload (GG always sent 500 bytes).
@@ -643,7 +666,6 @@ pub struct ProfileChunkCommand<'a> {
 impl ProfileChunkCommand<'_> {
     /// Largest payload seen in a chunk.
     pub const MAX_DATA_LEN: usize = 500;
-    const HEADER: [u8; 3] = [CommandCode::ProfileChunk as u8, 0x01, 0x80];
     const DATA_OFFSET: usize = 10;
 }
 
@@ -664,7 +686,7 @@ impl HidCommand for ProfileChunkCommand<'_> {
 
         let report = &mut buffer[..PROFILE_CHUNK_REPORT_SIZE];
         report.fill(0);
-        report[1..4].copy_from_slice(&Self::HEADER);
+        report[1..4].copy_from_slice(&[CommandCode::ProfileChunk as u8, 0x01, self.fs_id]);
         report[4..6].copy_from_slice(&(self.data.len() as u16).to_le_bytes());
         report[6..8].copy_from_slice(&self.offset.to_le_bytes());
         report[Self::DATA_OFFSET..Self::DATA_OFFSET + self.data.len()].copy_from_slice(self.data);
@@ -672,6 +694,7 @@ impl HidCommand for ProfileChunkCommand<'_> {
     }
 
     fn validate(&self) -> Result<()> {
+        check_profile_fs_id(self.fs_id)?;
         if self.data.is_empty() || self.data.len() > Self::MAX_DATA_LEN {
             return Err(Error::DeviceCommunication(format!(
                 "Profile chunk must carry 1-{} bytes, got {}",
@@ -695,6 +718,156 @@ pub enum HallLayer {
     Primary = 0x00,
     /// Second actuation point (GG `second_actuation_thresholds`).
     Second = 0x02,
+}
+
+/// Check that a file id names one of the five on-board profile slots (`0x80..=0x84`).
+fn check_profile_fs_id(fs_id: u8) -> Result<()> {
+    let first = Gen3ProfileReadCommand::FIRST_PROFILE_FS;
+    if !(first..first + Gen3ProfileReadCommand::SLOTS).contains(&fs_id) {
+        return Err(Error::InvalidConfig(format!(
+            "file id {fs_id:#04x} is not a profile slot (0x80-0x84)"
+        )));
+    }
+    Ok(())
+}
+
+/// Check a profile slot number (0-4) before it goes into a Gen3 write-chain frame.
+fn check_profile_slot(slot: u8) -> Result<()> {
+    if slot >= Gen3ProfileReadCommand::SLOTS {
+        return Err(Error::InvalidConfig(format!(
+            "profile slot {slot} out of range 0-{}",
+            Gen3ProfileReadCommand::SLOTS - 1
+        )));
+    }
+    Ok(())
+}
+
+/// [EXPERIMENTAL] Erase an on-board profile file before a rewrite, an output report: `00 02 01 <fs id>` (fs id =
+/// `0x80 + slot`). GG waits for an input report (5000 ms) before it sends the first chunk. Captured from GG
+/// (USBPcap, `0x1628`, firmware 1.19.7, 2026-11-10), not yet replayed from `ssgg` on hardware. **Destroys the
+/// slot's stored profile until the chunks and the commit follow.**
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ProfileEraseCommand {
+    pub slot: u8,
+}
+
+impl HidCommand for ProfileEraseCommand {
+    fn command_code(&self) -> CommandCode {
+        CommandCode::ProfileErase
+    }
+
+    fn serialize(&self, buffer: &mut [u8], _device_type: HidDeviceType) -> Result<usize> {
+        self.validate()?;
+        check_report_buffer(buffer, KEYBOARD_REPORT_SIZE)?;
+        let report = &mut buffer[..KEYBOARD_REPORT_SIZE];
+        report.fill(0);
+        report[1..4].copy_from_slice(&[
+            CommandCode::ProfileErase as u8,
+            0x01,
+            Gen3ProfileReadCommand::FIRST_PROFILE_FS + self.slot,
+        ]);
+        Ok(KEYBOARD_REPORT_SIZE)
+    }
+
+    fn validate(&self) -> Result<()> {
+        check_profile_slot(self.slot)
+    }
+
+    fn description(&self) -> String {
+        format!("Gen3 profile erase: slot {}", self.slot)
+    }
+}
+
+/// [EXPERIMENTAL] Commit a rewritten on-board profile, an output report: `00 B1 <slot>`. GG sends it after the
+/// 25th chunk and waits for an input report. Captured from GG (2026-11-10, `0x1628`, firmware 1.19.7), not yet
+/// replayed from `ssgg` on hardware.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ProfileCommitCommand {
+    pub slot: u8,
+}
+
+impl HidCommand for ProfileCommitCommand {
+    fn command_code(&self) -> CommandCode {
+        CommandCode::ProfileCommit
+    }
+
+    fn serialize(&self, buffer: &mut [u8], _device_type: HidDeviceType) -> Result<usize> {
+        self.validate()?;
+        check_report_buffer(buffer, KEYBOARD_REPORT_SIZE)?;
+        let report = &mut buffer[..KEYBOARD_REPORT_SIZE];
+        report.fill(0);
+        report[1..3].copy_from_slice(&[CommandCode::ProfileCommit as u8, self.slot]);
+        Ok(KEYBOARD_REPORT_SIZE)
+    }
+
+    fn validate(&self) -> Result<()> {
+        check_profile_slot(self.slot)
+    }
+
+    fn description(&self) -> String {
+        format!("Gen3 profile commit: slot {}", self.slot)
+    }
+}
+
+/// [EXPERIMENTAL] Make the board run an on-board profile (GG `load_profile`), an output report: `00 B2 <slot>`,
+/// answered by an input report. GG sends it only to activate a profile. **Changes what the keyboard runs now.**
+/// Captured from GG (2026-11-10, `0x1628`, firmware 1.19.7), not yet replayed from `ssgg` on hardware.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LoadProfileCommand {
+    pub slot: u8,
+}
+
+impl HidCommand for LoadProfileCommand {
+    fn command_code(&self) -> CommandCode {
+        CommandCode::LoadProfile
+    }
+
+    fn serialize(&self, buffer: &mut [u8], _device_type: HidDeviceType) -> Result<usize> {
+        self.validate()?;
+        check_report_buffer(buffer, KEYBOARD_REPORT_SIZE)?;
+        let report = &mut buffer[..KEYBOARD_REPORT_SIZE];
+        report.fill(0);
+        report[1..3].copy_from_slice(&[CommandCode::LoadProfile as u8, self.slot]);
+        Ok(KEYBOARD_REPORT_SIZE)
+    }
+
+    fn validate(&self) -> Result<()> {
+        check_profile_slot(self.slot)
+    }
+
+    fn description(&self) -> String {
+        format!("Gen3 load profile: slot {}", self.slot)
+    }
+}
+
+/// [EXPERIMENTAL] `00 34 <0|1>`, an output report GG sends right after [`LoadProfileCommand`] (it sends `34 00`).
+/// What the flag means is unknown; the name follows GG's `set_profile_volatile`. Captured from GG (2026-11-10,
+/// `0x1628`, firmware 1.19.7), not yet replayed from `ssgg` on hardware.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SetProfileVolatileCommand {
+    pub volatile: bool,
+}
+
+impl HidCommand for SetProfileVolatileCommand {
+    fn command_code(&self) -> CommandCode {
+        CommandCode::SetProfileVolatile
+    }
+
+    fn serialize(&self, buffer: &mut [u8], _device_type: HidDeviceType) -> Result<usize> {
+        check_report_buffer(buffer, KEYBOARD_REPORT_SIZE)?;
+        let report = &mut buffer[..KEYBOARD_REPORT_SIZE];
+        report.fill(0);
+        report[1..3].copy_from_slice(&[CommandCode::SetProfileVolatile as u8, u8::from(self.volatile)]);
+        Ok(KEYBOARD_REPORT_SIZE)
+    }
+
+    fn validate(&self) -> Result<()> {
+        Ok(())
+    }
+
+    fn description(&self) -> String {
+        format!("Gen3 set profile volatile: {}", self.volatile)
+    }
 }
 
 /// [EXPERIMENTAL] One rapid-tap key pair (GG `rapid_tap_pair`).
@@ -4831,6 +5004,71 @@ mod tests {
         for (fs_id, size) in [(0x7F, 500), (0x85, 500), (0x80, 0), (0x80, 642)] {
             let bad = Gen3ProfileReadCommand { fs_id, size, offset: 0 };
             assert!(builder.build_report(bad, &mut buffer).is_err(), "{bad:?}");
+        }
+    }
+
+    #[test]
+    fn gen3_write_chain_frames_match_the_gg_capture() {
+        let erase = keyboard_report(ProfileEraseCommand { slot: 2 });
+        assert_eq!(erase.len(), KEYBOARD_REPORT_SIZE);
+        assert_eq!(&erase[..5], &[0x00, 0x02, 0x01, 0x82, 0x00]);
+        assert!(erase[4..].iter().all(|&b| b == 0));
+
+        let commit = keyboard_report(ProfileCommitCommand { slot: 3 });
+        assert_eq!(commit.len(), KEYBOARD_REPORT_SIZE);
+        assert_eq!(&commit[..4], &[0x00, 0xB1, 0x03, 0x00]);
+
+        let load = keyboard_report(LoadProfileCommand { slot: 4 });
+        assert_eq!(&load[..4], &[0x00, 0xB2, 0x04, 0x00]);
+
+        let volatile = keyboard_report(SetProfileVolatileCommand { volatile: false });
+        assert_eq!(&volatile[..4], &[0x00, 0x34, 0x00, 0x00]);
+        assert_eq!(
+            &keyboard_report(SetProfileVolatileCommand { volatile: true })[..3],
+            &[0x00, 0x34, 0x01]
+        );
+
+        let mut buffer = vec![0u8; PROFILE_CHUNK_REPORT_SIZE];
+        let builder = HidReportBuilder::new(HidDeviceType::Keyboard);
+        assert!(
+            builder
+                .build_report(ProfileEraseCommand { slot: 5 }, &mut buffer)
+                .is_err()
+        );
+        assert!(
+            builder
+                .build_report(ProfileCommitCommand { slot: 5 }, &mut buffer)
+                .is_err()
+        );
+        assert!(
+            builder
+                .build_report(LoadProfileCommand { slot: 5 }, &mut buffer)
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn profile_chunk_carries_the_slot_file_id() {
+        let data = [0x11u8; 500];
+        let chunk = keyboard_report(ProfileChunkCommand {
+            fs_id: 0x83,
+            offset: 500,
+            data: &data,
+        });
+        assert_eq!(
+            &chunk[..10],
+            &[0x00, 0x03, 0x01, 0x83, 0xF4, 0x01, 0xF4, 0x01, 0x00, 0x00]
+        );
+
+        let mut buffer = vec![0u8; PROFILE_CHUNK_REPORT_SIZE];
+        let builder = HidReportBuilder::new(HidDeviceType::Keyboard);
+        for fs_id in [0x7F, 0x85] {
+            let bad = ProfileChunkCommand {
+                fs_id,
+                offset: 0,
+                data: &data,
+            };
+            assert!(builder.build_report(bad, &mut buffer).is_err(), "{fs_id:#04x}");
         }
     }
 

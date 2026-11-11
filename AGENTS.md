@@ -135,8 +135,10 @@ this is expected, CI builds and lints `audio` on Linux only.
   `docs/development/apex-pro-tkl-2023-gg-capture.md`. All `[EXPERIMENTAL]`. Invariants to keep in mind:
   - **Hardware evidence is thin**: `ssgg rgb color FF0000` turned the board solid red (2026-10-14, GG stopped,
     user-confirmed) and one per-key frame lit one key (2026-10-21). Other colours, Linux hidraw and actuation are untested.
-  - **Never write the on-board profile**: no read-back command exists, so any write replaces the board's other
-    settings with a stale or synthetic blob. The code (`apex_pro_tkl_2023_profile.rs`) builds blobs; nothing sends them.
+  - **On-board profile writes are gated, not forbidden**: the `83 01` read-back works (confirmed 2026-11-10), so a
+    write is allowed only through `ssgg onboard gen3-write --yes` (`gen3-restore` for saved blobs) after every slot was
+    read and saved in that run and the read blob of the target slot re-encodes byte-identically. The write chain is
+    GG's captured one (`[EXPERIMENTAL]`, not yet replayed from `ssgg` on hardware).
   - **No actuation or lighting read-back exists on this firmware** (Frida trace, 2026-10-21: GG never issues
     `GET_FEATURE`). Do not add read-back commands for `0x1628`.
   - **GG overwrites ssgg** at about 19 fps while `SteelSeriesEngine.exe` runs. Stop GG before any hardware test.

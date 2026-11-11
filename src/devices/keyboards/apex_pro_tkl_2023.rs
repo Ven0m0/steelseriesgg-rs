@@ -1,13 +1,14 @@
 //! Apex Pro TKL 2023 specific implementations.
 
-use super::apex_pro_tkl_2023_profile::{PROFILE_LEN, actuation_raw, checksum_matches};
+use super::apex_pro_tkl_2023_profile::{PROFILE_LEN, actuation_raw, checksum_matches, profile_chunks};
 use super::models::{DirectFrame, keyboard_model};
 use super::{GenericKeyboard, Keyboard};
 use crate::Result;
 use crate::devices::hid_reports::{
     ActuationCommand, AnalogKeyCommand, Apex2022DisplayCommand, CommandCode, DirectFrameCommand, DirectInitCommand,
     Gen3ProfileReadCommand, HallLayer, HidCommand, HidDeviceType, HidReportBuilder, KEYBOARD_REPORT_SIZE,
-    OnboardFirmwareVersionCommand, PROFILE_CHUNK_REPORT_SIZE, RapidTapPair,
+    LoadProfileCommand, OnboardFirmwareVersionCommand, PROFILE_CHUNK_REPORT_SIZE, ProfileCommitCommand,
+    ProfileEraseCommand, RapidTapPair, SetProfileVolatileCommand,
 };
 use crate::devices::key_mapping::{KeyAddress, KeyId, KeyMapping};
 use crate::devices::product_ids;
@@ -362,6 +363,12 @@ fn key_actuation_setting_in(
     })?;
     merge_actuation(&base, layer, changes)
 }
+
+/// How long GG waits for the input report behind a Gen3 erase, commit or load frame (the spec's read-chunk HIDIO).
+const GEN3_REPLY_TIMEOUT_MS: u64 = 5000;
+
+/// A step of the Gen3 write chain and the input report that answered it (`None` when none came).
+pub type Gen3Reply = (&'static str, Option<Vec<u8>>);
 
 /// What a Gen3 on-board profile read collected: the firmware poll answer, the 3-byte header of
 /// every chunk reply (meaning unknown, recorded for the hardware check), and the reassembled profile blob.
@@ -787,6 +794,75 @@ impl ApexProTkl2023 {
         })
     }
 
+    /// Send one output-report command of the Gen3 write chain.
+    fn send_gen3_command(&mut self, command: impl HidCommand) -> Result<()> {
+        let mut buf = vec![0u8; PROFILE_CHUNK_REPORT_SIZE];
+        let size = HidReportBuilder::new(HidDeviceType::Keyboard).build_report(command, &mut buf)?;
+        self.send_report(&buf[..size], false)
+    }
+
+    /// Wait for the input report GG waits for after `step` (5000 ms). Its content is unknown, so it is only
+    /// returned for the log; no answer is an error because the chain must not go on blind.
+    fn gen3_chain_reply(&self, step: &'static str) -> Result<Gen3Reply> {
+        let reply = self
+            .inner
+            .read_profile_input_packet(KEYBOARD_REPORT_SIZE, GEN3_REPLY_TIMEOUT_MS)?;
+        if reply.is_none() {
+            return Err(crate::Error::DeviceCommunication(format!(
+                "no input report within {GEN3_REPLY_TIMEOUT_MS} ms after {step}"
+            )));
+        }
+        Ok((step, reply))
+    }
+
+    /// [EXPERIMENTAL] Write one on-board profile slot (0-4) the way GG does (USBPcap, 2026-11-10): erase
+    /// (`02 01 <fs id>`, wait for an input report), 25 feature-report chunks `03 01 <fs id> ...` 13 ms apart, commit
+    /// (`B1 <slot>`, wait for an input report). **Replaces the slot's stored profile**, and a failure after the
+    /// erase leaves it erased or half written: callers keep a backup first. Wired board only. Not yet replayed
+    /// from `ssgg` on hardware. The answers are returned for the log; what they say is unknown.
+    pub fn write_gen3_profile(&mut self, slot: u8, blob: &[u8; PROFILE_LEN]) -> Result<Vec<Gen3Reply>> {
+        self.require_wired_2023("the Gen3 on-board profile write")?;
+        let erase = ProfileEraseCommand { slot };
+        erase.validate()?;
+        let gap = std::time::Duration::from_millis(Gen3ProfileReadCommand::COMMAND_GAP_MS);
+        let builder = HidReportBuilder::new(HidDeviceType::Keyboard);
+
+        // Stale input reports must not pass for the answers awaited below.
+        for _ in 0..32 {
+            if self.inner.read_profile_input_packet(KEYBOARD_REPORT_SIZE, 0)?.is_none() {
+                break;
+            }
+        }
+
+        let mut replies = Vec::with_capacity(2);
+        self.send_gen3_command(erase)?;
+        replies.push(self.gen3_chain_reply("profile erase (02 01)")?);
+        for chunk in profile_chunks(blob, Gen3ProfileReadCommand::FIRST_PROFILE_FS + slot) {
+            std::thread::sleep(gap);
+            let mut buf = vec![0u8; PROFILE_CHUNK_REPORT_SIZE];
+            let size = builder.build_report(chunk, &mut buf)?;
+            self.send_report(&buf[..size], true)?;
+        }
+        std::thread::sleep(gap);
+        self.send_gen3_command(ProfileCommitCommand { slot })?;
+        replies.push(self.gen3_chain_reply("profile commit (B1)")?);
+        Ok(replies)
+    }
+
+    /// [EXPERIMENTAL] Make the board run on-board profile `slot` (0-4): `B2 <slot>` (wait for an input report),
+    /// then `34 00`, as GG does to activate. **Changes what the keyboard runs now.** Wired board only. Not yet
+    /// replayed from `ssgg` on hardware.
+    pub fn activate_gen3_profile(&mut self, slot: u8) -> Result<Vec<Gen3Reply>> {
+        self.require_wired_2023("the Gen3 on-board profile activation")?;
+        let load = LoadProfileCommand { slot };
+        load.validate()?;
+        self.send_gen3_command(load)?;
+        let reply = self.gen3_chain_reply("profile load (B2)")?;
+        std::thread::sleep(std::time::Duration::from_millis(Gen3ProfileReadCommand::COMMAND_GAP_MS));
+        self.send_gen3_command(SetProfileVolatileCommand { volatile: false })?;
+        Ok(vec![reply])
+    }
+
     /// The `90 00` firmware poll (GG `fw_version`); informational, so a failure is logged and gives `None`.
     fn gen3_firmware_version(&self) -> Option<String> {
         let mut buf = [0u8; KEYBOARD_REPORT_SIZE];
@@ -960,6 +1036,14 @@ crate::impl_keyboard_with_delegation!(ApexProTkl2023, {
 
     fn read_gen3_profile(&mut self, slot: u8) -> Result<Gen3ProfileRead> {
         self.read_gen3_profile(slot)
+    }
+
+    fn write_gen3_profile(&mut self, slot: u8, blob: &[u8; PROFILE_LEN]) -> Result<Vec<Gen3Reply>> {
+        self.write_gen3_profile(slot, blob)
+    }
+
+    fn activate_gen3_profile(&mut self, slot: u8) -> Result<Vec<Gen3Reply>> {
+        self.activate_gen3_profile(slot)
     }
 });
 

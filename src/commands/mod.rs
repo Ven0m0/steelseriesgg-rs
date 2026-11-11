@@ -2,6 +2,7 @@
 
 mod apex_2023;
 mod diagnostics;
+mod gen3_profile;
 mod onboard;
 mod performance;
 

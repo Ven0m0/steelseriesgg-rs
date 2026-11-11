@@ -250,6 +250,119 @@ pub(crate) enum OnboardAction {
     /// Read one profile slot of the wired Apex Pro TKL 2023 (0x1628) with the chunked read from GG's device
     /// spec. Read-only; nothing is written to the keyboard. Confirmed on hardware (firmware 1.19.7, 2026-11-10).
     Gen3Read(OnboardGen3ReadArgs),
+
+    /// Decode a Gen3 profile blob read by `gen3-read` (no device, no hardware): a summary, or the full JSON.
+    Gen3Decode(OnboardGen3DecodeArgs),
+
+    /// Encode a Gen3 profile JSON back into a sealed 12,500-byte blob (no device, no hardware).
+    Gen3Encode(OnboardGen3EncodeArgs),
+
+    /// [EXPERIMENTAL] Write one on-board profile slot of the wired Apex Pro TKL 2023 (0x1628), GG's erase, 25
+    /// chunks and commit chain. **This replaces the slot's stored profile.** It first reads all five slots and
+    /// saves them, refuses unless the read blob of the target slot re-encodes byte for byte, and needs `--yes`.
+    /// Not yet replayed from `ssgg` on hardware.
+    Gen3Write(OnboardGen3WriteArgs),
+
+    /// [EXPERIMENTAL] Make the board run one of its on-board profile slots (0x1628): GG's `B2 <slot>`, `34 00`.
+    /// **Changes what the keyboard runs now.** Not yet replayed from `ssgg` on hardware.
+    Gen3Activate(OnboardGen3ActivateArgs),
+
+    /// [EXPERIMENTAL] Write saved slot blobs (`slot<N>.bin` from a backup directory) back to the keyboard, under
+    /// the same guards as `gen3-write`. Not yet replayed from `ssgg` on hardware.
+    Gen3Restore(OnboardGen3RestoreArgs),
+}
+
+/// Decode a Gen3 profile blob.
+#[derive(clap::Args)]
+pub(crate) struct OnboardGen3DecodeArgs {
+    /// Profile blob (12,500 bytes) from `gen3-read --bin` or a backup directory
+    #[arg(value_name = "BLOB")]
+    pub(crate) blob: PathBuf,
+
+    /// Print the full JSON decode report instead of a summary
+    #[arg(long)]
+    pub(crate) json: bool,
+
+    /// Decode a blob whose checksum does not match (forensics); the mismatch is reported
+    #[arg(long)]
+    pub(crate) ignore_crc: bool,
+}
+
+/// Encode a Gen3 profile JSON.
+#[derive(clap::Args)]
+pub(crate) struct OnboardGen3EncodeArgs {
+    /// JSON decode report (from `gen3-decode --json`, possibly edited)
+    #[arg(value_name = "JSON")]
+    pub(crate) json: PathBuf,
+
+    /// Where to write the sealed 12,500-byte blob
+    #[arg(long, value_name = "FILE")]
+    pub(crate) out: PathBuf,
+}
+
+/// A gated Gen3 profile write.
+#[derive(clap::Args)]
+pub(crate) struct OnboardGen3WriteArgs {
+    /// Profile slot to replace, 0-4
+    #[arg(short, long, value_parser = clap::value_parser!(u8).range(0..=4))]
+    pub(crate) slot: u8,
+
+    /// What to write: a 12,500-byte blob (it must decode with a matching checksum) or a JSON decode report
+    #[arg(long, value_name = "BLOB_OR_JSON")]
+    pub(crate) from: PathBuf,
+
+    /// Authorise the write. Without it nothing is sent.
+    #[arg(long)]
+    pub(crate) yes: bool,
+
+    /// Print the plan (frame counts, first chunk header, backup directory) and open no keyboard
+    #[arg(long)]
+    pub(crate) dry_run: bool,
+
+    /// Also make the board run the slot afterwards (`B2`, `34 00`)
+    #[arg(long)]
+    pub(crate) activate: bool,
+
+    /// Where the pre-write backup of all five slots goes (default: the ssgg config directory,
+    /// `gen3-backups/<slot>-<unix seconds>/`)
+    #[arg(long, value_name = "DIR")]
+    pub(crate) backup_dir: Option<PathBuf>,
+}
+
+/// Activate a Gen3 profile slot.
+#[derive(clap::Args)]
+pub(crate) struct OnboardGen3ActivateArgs {
+    /// Profile slot to run, 0-4
+    #[arg(short, long, value_parser = clap::value_parser!(u8).range(0..=4))]
+    pub(crate) slot: u8,
+
+    /// Authorise the change. Without it nothing is sent.
+    #[arg(long)]
+    pub(crate) yes: bool,
+}
+
+/// Write saved Gen3 slot blobs back.
+#[derive(clap::Args)]
+pub(crate) struct OnboardGen3RestoreArgs {
+    /// Backup directory holding `slot<N>.bin` files
+    #[arg(long, value_name = "DIR")]
+    pub(crate) from: PathBuf,
+
+    /// Restore only this slot, 0-4 (default: every `slot<N>.bin` in the directory)
+    #[arg(short, long, value_parser = clap::value_parser!(u8).range(0..=4))]
+    pub(crate) slot: Option<u8>,
+
+    /// Authorise the write. Without it nothing is sent.
+    #[arg(long)]
+    pub(crate) yes: bool,
+
+    /// Print the plan for every slot and open no keyboard
+    #[arg(long)]
+    pub(crate) dry_run: bool,
+
+    /// Where the pre-restore backup of all five slots goes (default: the ssgg config directory)
+    #[arg(long, value_name = "DIR")]
+    pub(crate) backup_dir: Option<PathBuf>,
 }
 
 /// A read-only Gen3 on-board profile read.
@@ -278,7 +391,10 @@ impl OnboardAction {
             Self::Read(_) | Self::Load(_) => true,
             Self::Write(args) => !args.dry_run,
             Self::Gen3Read(args) => !args.dry_run,
-            Self::Decode(_) | Self::Encode(_) => false,
+            Self::Gen3Write(args) => !args.dry_run,
+            Self::Gen3Restore(args) => !args.dry_run,
+            Self::Gen3Activate(_) => true,
+            Self::Decode(_) | Self::Encode(_) | Self::Gen3Decode(_) | Self::Gen3Encode(_) => false,
         }
     }
 }

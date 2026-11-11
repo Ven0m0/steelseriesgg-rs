@@ -1,9 +1,9 @@
 //! [EXPERIMENTAL] On-board profile blob of the wired Apex Pro TKL 2023 (PID 0x1628).
 //!
 //! Layout and checksum come from GG USBPcap captures (2026-10-14, firmware 1.19.7); see
-//! docs/development/apex-pro-tkl-2023-gg-capture.md. Nothing here has been written to a keyboard.
-//! GG's device spec defines a read-back (`ssgg onboard gen3-read`, untested on hardware); until a read is
-//! confirmed, sending a blob built from anything else would overwrite every other on-board setting.
+//! docs/development/apex-pro-tkl-2023-gg-capture.md. The read-back (`ssgg onboard gen3-read`) is confirmed on
+//! hardware; the typed codec of the whole blob is in `apex_pro_tkl_2023_profile_codec`. The write
+//! (`ssgg onboard gen3-write`) is gated and has not yet been replayed from `ssgg` on hardware.
 
 use super::apex_pro_tkl_2023::{
     PROFILE_ACTUATION_OFFSET, PROFILE_RESET_OFFSET, WIRED_2023_PROFILE_SLOTS, profile_slot,
@@ -20,7 +20,7 @@ pub const PROFILE_CHECKSUM_OFFSET: usize = 12_320;
 /// spec's `hall-thresholds-to-actuation-alist` (`apex_pro_tkl_2022`) and the identical `mm -> "l:h"` map in
 /// GG's UI bundle (`app.asar`), read 2026-10-25. The scale is non-linear. `(47, 42)` is 1.8 mm, the board's
 /// default; the 2026-10-21 note that GG showed it as 1.0 mm was wrong.
-const ACTUATION_POINTS: [(u8, u8); 40] = [
+pub(crate) const ACTUATION_POINTS: [(u8, u8); 40] = [
     (5, 5),
     (5, 4),
     (6, 5),
@@ -131,11 +131,13 @@ pub fn set_actuation(blob: &mut [u8; PROFILE_LEN], usage: Option<u8>, tenths_mm:
     Ok(())
 }
 
-/// Split a blob into the 25 chunk commands GG sends (500 bytes each); serialize them with `HidReportBuilder`.
-pub fn profile_chunks(blob: &[u8; PROFILE_LEN]) -> impl Iterator<Item = ProfileChunkCommand<'_>> {
+/// Split a blob into the 25 chunk commands GG sends (500 bytes each) for the file `fs_id` (`0x80 + slot`);
+/// serialize them with `HidReportBuilder`.
+pub fn profile_chunks(blob: &[u8; PROFILE_LEN], fs_id: u8) -> impl Iterator<Item = ProfileChunkCommand<'_>> {
     blob.chunks(ProfileChunkCommand::MAX_DATA_LEN)
         .enumerate()
-        .map(|(i, data)| ProfileChunkCommand {
+        .map(move |(i, data)| ProfileChunkCommand {
+            fs_id,
             offset: (i * ProfileChunkCommand::MAX_DATA_LEN) as u16,
             data,
         })
@@ -213,7 +215,7 @@ mod tests {
         blob[500] = 0xAB;
         blob[PROFILE_LEN - 1] = 0xCD;
         let builder = HidReportBuilder::new(HidDeviceType::Keyboard);
-        let reports: Vec<[u8; PROFILE_CHUNK_REPORT_SIZE]> = profile_chunks(&blob)
+        let reports: Vec<[u8; PROFILE_CHUNK_REPORT_SIZE]> = profile_chunks(&blob, 0x80)
             .map(|chunk| {
                 let mut report = [0u8; PROFILE_CHUNK_REPORT_SIZE];
                 assert_eq!(
