@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Releases and this changelog are generated automatically from
 [Conventional Commits](https://www.conventionalcommits.org/) by release-please.
 
+## [0.1.20](https://github.com/Ven0m0/steelseriesgg-rs/compare/v0.1.19...v0.1.20) (2026-11-11)
+
+
+### Added
+
+* **apex-2023:** confirm Gen3 on-board profile read on 0x1628 (fw 1.1… ([#333](https://github.com/Ven0m0/steelseriesgg-rs/issues/333)) ([d8007c7](https://github.com/Ven0m0/steelseriesgg-rs/commit/d8007c714b102d3fdbf3c08aedace49b84379b66))
+
 ## [0.1.19](https://github.com/Ven0m0/steelseriesgg-rs/compare/v0.1.18...v0.1.19) (2026-11-10)
 
 
