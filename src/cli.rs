@@ -273,7 +273,8 @@ pub(crate) enum OnboardAction {
     /// [EXPERIMENTAL] Write one on-board profile slot of the wired Apex Pro TKL 2023 (0x1628), GG's erase, 25
     /// chunks and commit chain. **This replaces the slot's stored profile.** It first reads all five slots and
     /// saves them, refuses unless the read blob of the target slot re-encodes byte for byte, and needs `--yes`.
-    /// Not yet replayed from `ssgg` on hardware.
+    /// Not yet replayed from `ssgg` on hardware. GG's capture only wrote slots 0 and 3; slot 4 (`02 01 84`,
+    /// `B1 04`) is extrapolated from the spec.
     Gen3Write(OnboardGen3WriteArgs),
 
     /// [EXPERIMENTAL] Make the board run one of its on-board profile slots (0x1628): GG's `B2 <slot>`, `34 00`.
@@ -281,7 +282,7 @@ pub(crate) enum OnboardAction {
     Gen3Activate(OnboardGen3ActivateArgs),
 
     /// [EXPERIMENTAL] Write saved slot blobs (`slot<N>.bin` from a backup directory) back to the keyboard, under
-    /// the same guards as `gen3-write`. Not yet replayed from `ssgg` on hardware.
+    /// the same guards as `gen3-write`. Not yet replayed from `ssgg` on hardware; slot 4 is extrapolated from the spec (GG wrote only slots 0 and 3).
     Gen3Restore(OnboardGen3RestoreArgs),
 }
 

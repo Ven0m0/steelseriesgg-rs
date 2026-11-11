@@ -745,7 +745,8 @@ fn check_profile_slot(slot: u8) -> Result<()> {
 /// [EXPERIMENTAL] Erase an on-board profile file before a rewrite, an output report: `00 02 01 <fs id>` (fs id =
 /// `0x80 + slot`). GG waits for an input report (5000 ms) before it sends the first chunk. Captured from GG
 /// (USBPcap, `0x1628`, firmware 1.19.7, 2026-11-10), not yet replayed from `ssgg` on hardware. **Destroys the
-/// slot's stored profile until the chunks and the commit follow.**
+/// slot's stored profile until the chunks and the commit follow.** GG's capture only erased fs ids `0x80` and
+/// `0x83`; slot 4 (`0x84`) is extrapolated from the spec.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ProfileEraseCommand {
     pub slot: u8,
@@ -780,7 +781,8 @@ impl HidCommand for ProfileEraseCommand {
 
 /// [EXPERIMENTAL] Commit a rewritten on-board profile, an output report: `00 B1 <slot>`. GG sends it after the
 /// 25th chunk and waits for an input report. Captured from GG (2026-11-10, `0x1628`, firmware 1.19.7), not yet
-/// replayed from `ssgg` on hardware.
+/// replayed from `ssgg` on hardware. The capture only committed slots 0 and 3; slot 4 (`B1 04`) is extrapolated
+/// from the spec.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ProfileCommitCommand {
     pub slot: u8,

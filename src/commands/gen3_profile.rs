@@ -540,6 +540,19 @@ fn load_restore_blobs(from: &Path, only: Option<u8>) -> Result<Vec<(u8, Box<[u8;
         .collect()
 }
 
+/// What a multi-slot restore that stopped at `failed` says about the slots it did and did not reach.
+fn restore_progress(cause: &Error, all: &[u8], done: &[u8], failed: u8) -> String {
+    let not_reached: Vec<u8> = all
+        .iter()
+        .copied()
+        .filter(|s| !done.contains(s) && *s != failed)
+        .collect();
+    format!(
+        "{cause}\nrestore stopped: slots written and read back identical: {done:?}; failed: {failed}; \
+         not attempted: {not_reached:?}"
+    )
+}
+
 pub(crate) fn cmd_gen3_restore(manager: Option<&mut DeviceManager>, args: OnboardGen3RestoreArgs) -> Result<()> {
     let blobs = load_restore_blobs(&args.from, args.slot)?;
     let slots: Vec<u8> = blobs.iter().map(|(slot, _)| *slot).collect();
@@ -563,8 +576,12 @@ pub(crate) fn cmd_gen3_restore(manager: Option<&mut DeviceManager>, args: Onboar
         let current = reads.get(usize::from(*slot)).and_then(Option::as_deref);
         print_diff(*slot, current, &blob[..]);
     }
+    let mut done: Vec<u8> = Vec::new();
     for (slot, blob) in &blobs {
-        write_and_verify(keyboard.as_mut(), *slot, blob, false, &args.from)?;
+        if let Err(e) = write_and_verify(keyboard.as_mut(), *slot, blob, false, &args.from) {
+            return Err(Error::DeviceCommunication(restore_progress(&e, &slots, &done, *slot)));
+        }
+        done.push(*slot);
     }
     Ok(())
 }
@@ -803,6 +820,17 @@ mod tests {
         assert!(lines.contains("oled: 2 bytes differ at offsets +10..=+11"), "{lines}");
         assert_eq!(diff_lines(&old, &old), ["no field differs"]);
         assert!(diff_lines(&old[..10], &old)[0].starts_with("no diff"));
+    }
+
+    #[test]
+    fn a_stopped_restore_names_written_failed_and_untouched_slots() {
+        let cause = Error::DeviceCommunication("boom".to_string());
+        let text = restore_progress(&cause, &[0, 1, 2, 3], &[0, 1], 2);
+        assert!(text.contains("boom"), "{text}");
+        assert!(
+            text.contains("identical: [0, 1]; failed: 2; not attempted: [3]"),
+            "{text}"
+        );
     }
 
     #[test]
