@@ -33,7 +33,6 @@ repos:
         language: system
         types: [rust]
         pass_filenames: false
-        stages: [pre-push]
       - id: cargo-test
         name: cargo test
         entry: cargo test --locked
@@ -54,3 +53,4 @@ repos:
         language: system
         files: ^(tools/profile-gui/|src/devices/)
         pass_filenames: false
+        stages: [pre-push]

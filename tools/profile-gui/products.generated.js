@@ -5,9 +5,9 @@
 // `--check` (and `selftest.mjs`) fails when Rust moved and this file did not.
 globalThis.SsggProducts = {
   generatedFrom: ["src/devices/mod.rs","src/devices/keyboards/models.rs","src/devices/keyboards/onboard.rs"],
-  sourceHash: "c0e5c38eedda1573",
-  productCount: 98,
-  namedCount: 98,
+  sourceHash: "db511d866fa78006",
+  productCount: 100,
+  namedCount: 100,
   nameFallback: "Unknown SteelSeries Device",
   onboardPids: ["0x1612"],
   kindFallback: "unknown",
@@ -55,6 +55,8 @@ globalThis.SsggProducts = {
     "0x1648": {"name":"Apex Pro Mini (2024)","kind":"keyboard","onboard":false},
     "0x1650": {"name":"Apex 5 (2024)","kind":"keyboard","onboard":false},
     "0x1652": {"name":"Apex 7 (2024)","kind":"keyboard","onboard":false},
+    "0x1660": {"name":"Apex Pro TKL (2024) Cyber","kind":"keyboard","onboard":false},
+    "0x1662": {"name":"Apex Pro TKL (2024) Steel","kind":"keyboard","onboard":false},
     "0x1836": {"name":"Aerox 3","kind":"mouse","onboard":false},
     "0x1838": {"name":"Aerox 3 Wireless (2.4 GHz)","kind":"mouse","onboard":false},
     "0x183A": {"name":"Aerox 3 Wireless (wired)","kind":"mouse","onboard":false},

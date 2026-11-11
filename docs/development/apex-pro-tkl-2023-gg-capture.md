@@ -1,10 +1,9 @@
 # Apex Pro TKL (2023, wired, PID 0x1628): SteelSeries GG wire capture
 
-Status: **[EXPERIMENTAL]**. Everything below was read from USB captures of the official SteelSeries GG
+Status: the bytes below are observed GG traffic, read from USB captures of the official SteelSeries GG
 (Windows) talking to a real Apex Pro TKL (VID 0x1038, PID 0x1628, firmware reported as `1.19.7`),
-captured with USBPcap 1.5.4.0 on 2026-10-14. The bytes are observed GG traffic. Only a solid-colour frame
-(2026-10-14) and per-key frames (2026-10-21) have been replayed from this project (see open question 3), so nothing here is "confirmed"
-in the sense of `.claude/rules/experimental-protocol.md`.
+captured with USBPcap 1.5.4.0 on 2026-10-14. Whether an `ssgg` frame is Confirmed is decided per frame by
+replay from `ssgg` on hardware; the per-frame status lives in `.claude/rules/experimental-protocol.md`.
 
 ## Transport
 
@@ -19,10 +18,9 @@ transfers (`bmRequestType 0x21`, `bRequest 9`). Replies came back on interrupt I
 The 644 is the on-wire length; it excludes the report-ID byte. For `0x1628` the code builds a
 `WIRED_2023_PACKET_LENGTH = 645` buffer (report-ID byte + 644 wire bytes) in `apex_pro_tkl_2023.rs`. `GenericKeyboard::send_feature`
 (`keyboards/mod.rs`) sends the frame on the device's own hidapi handle on every platform.
-**Needs a hardware test on `0x1628`**: if the keyboard ignores
-direct-mode frames sent on the collection discovery opened, the interface-1 control collection
-(the one carrying this model's profile traffic on `wIndex 1`) has to be opened as its own device.
-The Linux path for `0x1628` is untested.
+The wired path was confirmed on hardware (Windows, fw 1.19.7, 2026-11-10). Only Linux hidraw is untested: if
+the keyboard ignores direct-mode frames sent on the collection discovery opened, the interface-1 control
+collection (the one carrying this model's profile traffic on `wIndex 1`) has to be opened as its own device.
 
 ## Per-key lighting (feature report, command 0x40)
 
@@ -61,13 +59,13 @@ field names come from GG's stored config (see "GG's stored config" below).
 
 | Blob offset | Content | Values seen |
 |-------------|---------|-------------|
-| 1080 | `08 00 00 00` | meaning unknown |
+| 1080 | `08 00 00 00` | `device_profile_schema` = 8 (spec `base_apex_2022_wired`, see "Blob layout from the spec" below) |
 | 1084 + slot | Actuation point (`hall_thresholds.h`) | 0.1 mm = 0x05, 1.0 = 0x15, 1.8 = 0x2F, 2.0 = 0x39, 3.0 = 0x86, 4.0 = 0xE0 |
 | 1154 + slot | Reset point (`hall_thresholds.l`) | 0.1 mm = 0x05, 1.0 = 0x12, 1.8 = 0x2A, 2.0 = 0x34, 3.0 = 0x7b, 4.0 = 0xDB |
-| 1224 | `04 00 00 00` x3, then zeros | meaning unknown |
+| 1224 | `04 00 00 00` x3, then zeros | `zone_levels` u32 x3 (default 4 4 4), then `zone_key_subscriptions[70]`; what a zone level does is unknown |
 | 1446 + slot | Release mode (`release_mode`) | 0 = off, 2 = Rapid Trigger, 3 = Key Guard |
 | 1516 + slot | Rapid Trigger sensitivity (`rapid_trigger_sensitivity`) | default 2 |
-| 1590 + slot | unknown, all 0x14 | not `second_actuation_thresholds` (all 0 in GG's config) |
+| 1590 + slot | `protection_dist_10`, all 0x14 (2.0 mm): Key Guard protection distance; `protection_dur_ms` u32 at 1586 (500) | `second_actuation_thresholds` are the `multi_actuation_v2` tables at 1306 / 1376 |
 | 2650 | Rapid Tap pairs (`rapid_tap_pairs`), stored as HID usages | default `04 07` (A, D) |
 | 2700 | Rapid Tap enable (`rapid_tap_enable`) | 0 = off, 1 = on |
 
@@ -121,9 +119,9 @@ and a reveng-style GCD over diff pairs gave exactly `0x104C11DB7` once the 4-byt
 Caveat: only offsets 1100, 1113, 1170, 1183, 1462 and 2700 varied in the captures.
 
 Code: `src/devices/keyboards/apex_pro_tkl_2023_profile.rs` (`profile_checksum`, `seal_profile`,
-`set_actuation`, `profile_chunk_reports`). Nothing sends a profile: no read-back command is known, so a
-write would replace every other on-board setting. Recompute the CRC on a fresh capture with edits past
-offset 2700 before the first write.
+`set_actuation`, `profile_chunk_reports`). The read-back (`ssgg onboard gen3-read`, `83 01`) is confirmed on
+hardware since 2026-11-10 (all five slots, CRC matching), which lifts the "never write" rule once a read, decode
+and re-encode round trip is byte-identical; the write stays behind `--yes` (see "GG actions capture, 2026-11-10").
 
 ## Output reports (64 bytes)
 
@@ -133,7 +131,8 @@ offset 2700 before the first write.
 | `38 66 01` / `38 66 00` | Rapid Tap on / off in GG | `38 00 66` |
 | `38 67 0a 00 04 07 <n> ...` | 4 times while cycling a 4-state option; `<n>` was 1, 2, 3, 0 | not captured |
 
-Meaning of `b1`, `b2`, `34` and the `38 67` payload is unknown.
+`b1 <slot>` commits a rewritten profile slot, `b2 <slot>` loads it and `34 00` sets the profile volatile (see the
+2026-11-10 live trace below). The `38 67` payload layout is still unknown.
 
 ## Live HID trace and engine memory read (2026-10-21)
 
@@ -149,7 +148,8 @@ Over about one minute, including the owner opening the keyboard's actuation sett
   the process made to any HID device for the whole trace, not a sample.
 - **Output-report polling is exactly the already-listed set**: `02 01 80`, `b1`, `b2`, `34`, `90`, cycling
   every few seconds. Opening the actuation page triggered none of these, and no new command.
-- **Conclusion: this firmware/GG version has no actuation (or lighting) read-back at all.** GG's actuation
+- **Superseded 2026-11-10: profile read-back exists (`83 01`, all five slots), lighting read-back still none.**
+  Original conclusion of this trace: this firmware/GG version has no actuation (or lighting) read-back at all. GG's actuation
   UI is backed entirely by its own cached config, not a hardware query. This matches what `ssgg actuation`
   already showed indirectly (`0x2D` has no effect on `0x1628`, confirmed by the owner 2026-10-21) and
   explains it: there is nothing on the wire to read, not a missing `ssgg` command.
@@ -318,6 +318,8 @@ direct-mode frames; Prism is the colour source, not the writer.
 
 ## Live trace, 2026-11-10 (engine `70d240b7`)
 
+Frida hooks only; see the USBPcap section for the on-wire captures.
+
 Read-only Frida attach to `SteelSeriesEngine.exe` (PID 14204), hooks on `DeviceIoControl` (only the
 two HID codes), `WriteFile` and `ReadFile`, across two action rounds while the owner changed settings
 in the GG window. Payloads are read with `readByteArray`; `new Uint8Array(ptr, off, len)` silently
@@ -336,7 +338,7 @@ bytes, zero-padded after the command bytes:
 | `00 38 66 01 ...` | 1 | Rapid Tap on |
 | `00 38 66 00 ...` | 1 | Rapid Tap off |
 | `00 02 01 80 ...` | 8 | sequence head |
-| `00 b1 00 ...` | 8 | profile chunk write, zero payload |
+| `00 b1 00 ...` | 8 | profile commit, slot 0 |
 | `00 b2 00 ...` | 8 | `load_profile` |
 | `00 34 00 ...` | 8 | `set_profile_volatile` |
 | `00 90 00 00 ...` | 8 | firmware-version poll |
@@ -344,7 +346,7 @@ bytes, zero-padded after the command bytes:
 The last five repeat as a group about every 2.5 s for the whole action window, and each `90 00` is
 followed by a read of GG's own 81-byte device JSON (`{"firmware_version": "1.19.7", "device_name":
 "apex_pro_tkl_2022"}`). That group is a refresh loop, not a user frame: it fires whether or not
-anything changed, and the profile bytes in `b1` are all zero.
+anything changed, and `b1` is only the commit of slot 0.
 
 ### What was not seen
 
@@ -370,8 +372,8 @@ transport table above, so hooking that one function shows every logical command 
 
 1. ~~Checksum at blob offset 12320.~~ Solved 2026-10-15 (see "Checksum").
 2. ~~Full key-to-offset map.~~ Decoded 2026-10-14 (see "Slot map"); 20 slots captured, 9 set-matched,
-   the rest by row order. Still unknown: the tables at 1080, 1224 and 1590, and where
-   `second_actuation_thresholds` is stored.
+   the rest by row order. The tables at 1080, 1224 and 1590 and the second-actuation thresholds were named
+   from the spec's packed structs on 2026-11-10 (see "Blob layout from the spec").
 3. ~~Whether replaying the 0x40 frames works from this project.~~ Tested once on 2026-10-14 with GG
    stopped: `ssgg rgb color FF0000` put 644 wire bytes on interface 1 (checked with USBPcap) and the
    keyboard turned solid red (user-confirmed). Per-key tested 2026-10-21: `ssgg rgb perkey set-key W red`
@@ -384,7 +386,9 @@ transport table above, so hooking that one function shows every logical command 
    (`apex_pro_tkl_2022`, 2026-10-24): `38 66 <0|1>` is `rapid_tap_enable`, `38 67` is `rapid_tap_pairs`
    (`count {index, hid_1, hid_2, mode | 0x80 report-both, 0, 0}`). Spec-derived, not confirmed on hardware;
    `ssgg actuation rapid-tap` / `rapid-tap-pairs` send them.
-6. Whether an actuation/profile read-back command exists. **Reopened 2026-10-24:** GG's decrypted device spec
+6. ~~Whether an actuation/profile read-back command exists.~~ **Yes (2026-11-10):** `ssgg onboard gen3-read` read
+   all five slots back on the owner's board (fw 1.19.7), every chunk answered `00 83 00` + 500 bytes, CRC matching;
+   GG itself issues the same 125 `83 01 8x` reads at startup (capture below). History: **Reopened 2026-10-24:** GG's decrypted device spec
    (`base_apex_2022_wired` `read_onboard_profile_N`, `apex_pro_tkl_2022` `hall_thresholds`) defines both a chunked
    profile read (`00 83 01 <fs-id> <size> <offset>`) and live actuation writes (`00 38 61 ...`). Spec-derived,
    untested on hardware; the trace below only shows GG did not use them during that minute. Original note:
@@ -413,3 +417,76 @@ Wired `0x1628`, firmware 1.19.7, Windows, owner's board.
   `ssgg actuation set 0.1` (on the wire: `SET_REPORT` wValue `0x0300`, wIndex 1, 644 bytes) made every key
   hair-trigger (owner, by feel). The board sends no answer to `38 61`, and the OLED does not refresh after a
   host-side change, so its displayed value cannot be used to check one.
+
+## GG actions capture, 2026-11-10 (engine `70d240b7`, firmware 1.19.7)
+
+USBPcap of GG (`scripts/capture-device.ps1`, 20 guided steps, keyboard `0x1628`), filtered to `SET_REPORT`
+control transfers (feature `wValue 0x0300` and output `0x0200`); the `0x40` lighting stream (about 19 fps,
+count byte `54`) is omitted from every list. Pcap and per-step CSV live outside the repo. The macro steps were
+skipped: GG offered no macro editor for this board in the UI the owner used. "Profile rewrite" below means the
+sequence under "On-board profile write chain".
+
+### Startup (GG launched with the board attached)
+
+`90 00`, `F5`, `90 00`, `F2`, `F5` (output reports, each answered on the input endpoint), then 125 x
+`83 01 <80..84> F4 01 <offset u32 LE>` feature reads (25 per slot, slot order 0-4, 13 ms apart: GG reads every
+slot once), then `1F 82`, and three times `B2 00` + `34 00`, then `90 00` x3.
+
+### Per action
+
+| GG action | Frames (report id omitted) |
+|-----------|-----------------------------|
+| Rebind Caps Lock to Esc; undo | profile rewrite only (slot 0). No `36`, no `B6` |
+| Actuation of W to 2.0 mm; back | profile rewrite, then feature `38 61 44 00 <(hid h l) x 68>` (layer 00, 68 keys), then a second profile rewrite; the undo sent `38 61` then the rewrite |
+| Rapid Trigger on W on; off | feature `38 62 44 <(hid mode) x 68>` (W = `1A 02`, then `1A 00`), then profile rewrite |
+| Rapid Tap pair A + D added; removed | output `38 66 01` then profile rewrite; `38 66 00` then profile rewrite. No `38 67`: the pair lives in the blob (offset 2650) |
+| Lock-key colour to blue; back to white | no command at all: Caps Lock (`39`) changed from the frame colour to `00 5E FF` inside the `0x40` stream while lit, then to `FF FF FF`. The colour is host-rendered; the blob's `lock_keys_color` (offset 29) is written with the next profile rewrite |
+| OLED image set; set back | output `1F 82`, feature `38 83 00 <640 bytes>`, then profile rewrite (the image also sits at blob offset 2010). The second image was all `FF`, sent twice |
+| Active on-board profile to slot 1; back to slot 0 | `1F 82`, `B2 01`, `34 00`, `90 00`; then `1F 82`, `B2 00`, `34 00`, `90 00` |
+| Rename slot 3 ("Config 4" to "Config 4x"); back | `1F 82`, `B2 03`, `34 00`, `90 00` (selecting the profile activates it), then profile rewrite of slot 3 (`02 01 83`, chunks `03 01 83`, `B1 03`, `B2 03`, `34 00`, `90 00`, `B2 03`, `34 00`, `90 00`), twice (an intermediate name was written first) |
+
+### On-board profile write chain (as GG sends it)
+
+1. output `02 01 <0x80 + slot>` (erase / open the slot's file), answered on the input endpoint
+2. 25 x feature `03 01 <0x80 + slot> F4 01 <offset u32 LE> <500 data bytes>`, offsets 0, 500, .. 12000; bytes after
+   the CRC (12324..12499) are `FF`
+3. output `B1 <slot>` (commit), answered
+4. output `B2 <slot>` (load / deploy), answered; output `34 00` (`set_profile_volatile` 0); output `90 00`
+
+Chunk 0 of slot 0 starts `03 01 80 F4 01 00 00 00 00 | 03 00 00 00 "main" ...`: the blob's `schema` u32 (3) and
+24-byte name are the first data bytes. Status of every frame: `.claude/rules/experimental-protocol.md`.
+
+### Blob layout from the spec
+
+Field offsets computed from the packed structs of `base_apex_2022_wired` / `apex_pro_tkl_2022` (device schema 8)
+land on every offset measured above, and the slot-0 read-back of 2026-11-10 decodes accordingly (name `main`,
+`device_profile_schema` 8, hall thresholds 21/18 as in GG's DB, meta key `F0`, lock keys `53 39 47 E3`):
+
+| Offset | Field | Notes |
+|--------|-------|-------|
+| 0 | `schema` u32 | 3 |
+| 4 | `name[24]` | NUL padded |
+| 28 | `lighting_profile` (48 B) | `lock_keys_brightness` u8 @28, `lock_keys_color` rgb @29, `lock_keys_phys_hids[4]` @32, `meta_keys_brightness` @36, `meta_keys_color` rgb @37, `meta_keys_phys_hids_msk[32]` @40, `meta_background_dimmer` @72, reserved[3] @73 |
+| 76 | `meta_key_phys_hid` u32 | `F0` |
+| 80 | `button_mappings` 100 x {`function` u8, `key_codes[4]`} | indexed by `device-key-idx-to-hid` (first 70 are the analog keys); base layer, `51 <hid>` = identity |
+| 580 | `button_meta_mappings` 100 x 5 | meta (SteelSeries-key) layer |
+| 1080 | `device_profile_schema` u32 | 8 |
+| 1084 / 1154 | `sensitivity_h[70]` / `sensitivity_l[70]` | actuation / reset |
+| 1224 | `zone_levels` u32 x3 | default 4 4 4 |
+| 1236 | `zone_key_subscriptions[70]` | |
+| 1306 / 1376 | `multi_actuation_v2.sensitivity_h/l[70]` | second actuation thresholds |
+| 1446 | `release_mode[70]` | 0 off, 2 rapid trigger, 3 key guard, 4 unknown |
+| 1516 | `adaptive_dist_10[70]` | rapid-trigger sensitivity, 0.1 mm |
+| 1586 | `protection_dur_ms` u32 | 500 |
+| 1590 | `protection_dist_10[70]` | 0x14 = 2.0 mm |
+| 1660 | `ma_mappings` 70 x 5 | second-actuation layer bindings |
+| 2010 | `oled[640]` | on-board OLED image, row-major |
+| 2650 / 2700 | `rapid_tap` 10 x {hid1, hid2, mode + report_both bit 7, 0, 0} / `rapid_tap_enable` | |
+| 2701 | padding[3] | |
+| 2704 | `macro_events[9600]` | 4-byte events, format not decoded |
+| 12304 | `guid[16]` | GG's config guid |
+| 12320 | crc u32 LE | see "Checksum" |
+| 12324 | `FF` x176 | pad to 25 x 500 |
+
+Mapping `function` byte: `00` unbound, `01..08` mouse buttons, `31`/`32` wheel, `33`/`34` AC pan, `51` keyboard,
+`61` consumer, `62` meta, `30` CPI, `71` macro, `72` external; `key_codes[4]` holds the argument.

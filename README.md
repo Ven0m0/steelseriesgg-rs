@@ -34,12 +34,14 @@ systemctl --user enable --now ssgg.service
 ## Supported Devices
 
 ### Keyboards
-- Apex Pro / Apex Pro TKL / Apex Pro TKL 2023 (PID `0x1630` - pending hardware confirmation)
+- Apex Pro TKL 2023 wired (`0x1628`): confirmed on hardware (Windows; Linux untested)
+- Apex Pro (2024) (`0x1640`): lighting confirmed on hardware (Linux, 2026-11-02; ISO-DE only)
+- Apex Pro TKL 2023 wireless (`0x1630`): experimental, pending hardware confirmation
 - Apex 3 / Apex 3 TKL
 - Apex 5
 - Apex 7 / Apex 7 TKL
 - Experimental, never run on hardware (community-fork protocol data): Apex 9 TKL / Mini, Apex M750 (solid colour only),
-  Apex 5 / Apex 7 TKL / Apex Pro TKL / Apex Pro 2024 lighting
+  Apex 5 / Apex 7 TKL / Apex Pro TKL lighting
 
 ### Mice (experimental, `ssgg mouse`)
 - Aerox 3 / 5 / 9 (incl. wireless), Prime Mini / Prime Wireless, Rival 3 Gen 2, Rival 5: DPI, poll rate, colour, battery.
@@ -215,23 +217,23 @@ ssgg devices
 
 Set a static color:
 ```bash
-ssgg rgb --color red
-ssgg rgb --color "#ff5500"
+ssgg rgb color red
+ssgg rgb color "#ff5500"
 ```
 
 Set brightness:
 ```bash
-ssgg rgb --brightness 80
+ssgg rgb brightness 80
 ```
 
 Apply effects:
 ```bash
-ssgg rgb --effect breathing --color cyan
-ssgg rgb --effect spectrum
-ssgg rgb --effect wave --direction left-to-right
+ssgg rgb effect breathing --speed 1.5
+ssgg rgb effect spectrum
+ssgg rgb effect wave
 ```
 
-Available effects: `static`, `breathing`, `spectrum`, `wave`, `reactive`, `gradient`, `off`
+Available effects: `static`, `breathing`, `spectrum`, `wave`, `off`
 
 ### Profiles
 

@@ -1,6 +1,6 @@
 //! RGB lighting control and effects.
 
-use crate::devices::key_mapping::{KeyId, KeyMapping};
+use crate::devices::key_mapping::{KeyId, KeyMapping, tkl_key_position};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
@@ -508,7 +508,6 @@ impl EffectEngine {
                 } else {
                     let phase = elapsed_secs * speed;
                     let zone_count_f32 = self.zone_count as f32;
-                    let colors_len_f32 = colors.len() as f32;
                     let center = zone_count_f32 * 0.5; // Pre-calculate center
 
                     // Pre-allocate capacity to avoid reallocations
@@ -523,15 +522,7 @@ impl EffectEngine {
                             WaveDirection::OutCenter => 1.0 - (i_f32 - center).abs() / center,
                         };
 
-                        let t = (phase + zone_offset) % 1.0;
-                        let color_pos = t * colors_len_f32;
-                        let color_index = color_pos as usize % colors.len();
-                        let next_index = (color_index + 1) % colors.len();
-                        let blend_t = color_pos % 1.0;
-
-                        // Safe indexing - indices are guaranteed valid by modulo operations
-                        self.cached_colors
-                            .push(Color::blend(colors[color_index], colors[next_index], blend_t));
+                        self.cached_colors.push(wave_color(colors, phase + zone_offset));
                     }
                 }
             }
@@ -579,6 +570,65 @@ impl EffectEngine {
     pub fn reset(&mut self) {
         self.start_time = Instant::now();
     }
+
+    /// [EXPERIMENTAL] Colour of each key in `keys` (HID usages) for the current effect, for keyboards lit by one
+    /// direct frame per tick: the zone math with each key's [`tkl_key_position`] as its offset, so a wave sweeps
+    /// across the board instead of collapsing to one colour. A key the grid does not hold sits at the centre.
+    pub fn compute_keys(&self, keys: &[u8]) -> Vec<(u8, Color)> {
+        let elapsed_secs = self.start_time.elapsed().as_secs_f32();
+        keys.iter()
+            .map(|&usage| {
+                let (x, y) = tkl_key_position(usage).unwrap_or((0.5, 0.5));
+                (usage, self.key_color(elapsed_secs, x, y))
+            })
+            .collect()
+    }
+
+    fn key_color(&self, elapsed_secs: f32, x: f32, y: f32) -> Color {
+        match &self.effect {
+            Effect::Static { color } => *color,
+            Effect::Breathing { color, speed } => {
+                color.scale(((elapsed_secs * speed * 2.0 * std::f32::consts::PI).sin() + 1.0) * 0.5)
+            }
+            Effect::Spectrum { speed } => Color::from_hsv((elapsed_secs * speed * 360.0) % 360.0, 1.0, 1.0),
+            Effect::Wave { colors, .. } if colors.is_empty() => Color::BLACK,
+            Effect::Wave {
+                colors,
+                speed,
+                direction,
+            } => {
+                // Distance from the centre, 1.0 at a corner.
+                let radius = ((x - 0.5).powi(2) + (y - 0.5).powi(2)).sqrt() / std::f32::consts::FRAC_1_SQRT_2;
+                let offset = match direction {
+                    WaveDirection::LeftToRight => x,
+                    WaveDirection::RightToLeft => 1.0 - x,
+                    WaveDirection::CenterOut => radius,
+                    WaveDirection::OutCenter => 1.0 - radius,
+                };
+                wave_color(colors, elapsed_secs * speed + offset)
+            }
+            Effect::Reactive { color, .. } => color.scale(0.2),
+            Effect::Gradient { start, end } => Color::blend(*start, *end, x),
+            // Zones spread across the board left to right.
+            Effect::Custom { colors } => colors
+                .get(((x * colors.len() as f32) as usize).min(colors.len().saturating_sub(1)))
+                .copied()
+                .unwrap_or(Color::BLACK),
+            Effect::Off => Color::BLACK,
+        }
+    }
+}
+
+/// Time between two direct frames of an animation: 25 fps (GG streams about 19 fps to the wired Apex Pro TKL 2023).
+/// Streaming at 25 fps is confirmed on `0x1628` (2026-11-10); Linux untested.
+pub const DIRECT_FRAME_INTERVAL: Duration = Duration::from_millis(40);
+
+/// Colour at wave position `t` (wraps at 1.0) of a non-empty colour cycle, blended between neighbours.
+fn wave_color(colors: &[Color], t: f32) -> Color {
+    let color_pos = (t % 1.0) * colors.len() as f32;
+    let color_index = color_pos as usize % colors.len();
+    let next_index = (color_index + 1) % colors.len();
+    Color::blend(colors[color_index], colors[next_index], color_pos % 1.0)
 }
 
 /// Per-key RGB effect engine that computes colors for individual keys.
@@ -1184,6 +1234,13 @@ impl RgbController {
         self.engine.calculate_frame_budget()
     }
 
+    /// [EXPERIMENTAL] Per-key colours of the current effect for a direct-frame keyboard, see
+    /// [`EffectEngine::compute_keys`]. Brightness is applied by the keyboard when streaming: pass this
+    /// controller's brightness for daemon frames, or use the saved device level for CLI streaming.
+    pub fn compute_key_colors(&self, keys: &[u8]) -> Vec<(u8, Color)> {
+        self.engine.compute_keys(keys)
+    }
+
     /// Compute current colors with brightness applied.
     /// This method reuses an internal buffer to avoid allocations.
     #[inline]
@@ -1208,6 +1265,39 @@ mod tests {
     use super::*;
     use crate::devices::key_mapping::KeyMappingDatabase;
     use crate::devices::product_ids;
+
+    #[test]
+    fn compute_keys_renders_each_key_at_its_position() {
+        let keys = [0x29, 0x40, 0x4B, 0x2C, 0xFB]; // Esc, F7, PgUp, Space, logo (not in the grid)
+        let wave = |direction| Effect::Wave {
+            colors: vec![Color::RED, Color::BLUE],
+            speed: 0.0,
+            direction,
+        };
+
+        let right = EffectEngine::new(wave(WaveDirection::RightToLeft), 0).compute_keys(&keys);
+        assert_eq!(right.iter().map(|(u, _)| *u).collect::<Vec<_>>(), keys);
+        // Right to left: PgUp (x = 1.0) starts the cycle, F7 (column 8 of 17) sits just past its blue stop.
+        assert_eq!(right[2].1, Color::RED);
+        let f7 = right[1].1;
+        assert!(f7.b > 230 && f7.r < 20, "F7 {f7:?}");
+
+        let gradient = Effect::Gradient {
+            start: Color::BLACK,
+            end: Color::WHITE,
+        };
+        let shades = EffectEngine::new(gradient, 0).compute_keys(&keys);
+        assert_eq!(shades[0].1, Color::BLACK);
+        assert_eq!(shades[2].1, Color::WHITE);
+        assert_eq!(shades[4].1, Color::blend(Color::BLACK, Color::WHITE, 0.5));
+
+        let breathing = Effect::Breathing {
+            color: Color::GREEN,
+            speed: 0.0,
+        };
+        let pulse = EffectEngine::new(breathing, 0).compute_keys(&keys);
+        assert!(pulse.iter().all(|(_, c)| *c == pulse[0].1));
+    }
 
     #[test]
     fn color_parse_takes_names_and_hex() {

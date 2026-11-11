@@ -13,8 +13,8 @@ use crate::cli::{
     parse_key_name, require_color,
 };
 use crate::commands::{
-    cmd_actuation, cmd_bug_report, cmd_hid_logs, cmd_oled, cmd_onboard, cmd_performance, cmd_status, cmd_test_device,
-    cmd_validate, cmd_verify_performance,
+    cmd_actuation, cmd_bug_report, cmd_device, cmd_hid_logs, cmd_keymap, cmd_oled, cmd_onboard, cmd_performance,
+    cmd_status, cmd_test_device, cmd_validate, cmd_verify_performance,
 };
 use crate::daemon::{cmd_daemon, cmd_server};
 use tracing::{Level, info};
@@ -30,7 +30,7 @@ use steelseries_gg::devices::{
     discovery::print_device_summary,
 };
 use steelseries_gg::profiles::{KeyboardProfile, Profile, ProfileManager};
-use steelseries_gg::rgb::{Color, Effect, WaveDirection};
+use steelseries_gg::rgb::{Color, DIRECT_FRAME_INTERVAL, Effect, RgbController, WaveDirection};
 use steelseries_gg::{Error, Result};
 
 use colored::Colorize;
@@ -89,6 +89,16 @@ async fn main() -> Result<()> {
         Commands::Oled { action } => {
             let manager = new_device_manager()?;
             cmd_oled(&manager, action).await?;
+        }
+
+        Commands::Keymap { action } => {
+            let manager = new_device_manager()?;
+            cmd_keymap(&manager, action).await?;
+        }
+
+        Commands::Device { action } => {
+            let manager = new_device_manager()?;
+            cmd_device(&manager, action)?;
         }
 
         Commands::Headset { action } => {
@@ -340,9 +350,29 @@ async fn cmd_rgb(manager: &DeviceManager, action: RgbAction) -> Result<()> {
 
             println!("Setting effect: {:?}", effect);
             // Persist effect to state store
-            state_store.update_keyboard_effect(device_id, effect)?;
-            // Note: Full effect implementation would require a background loop
-            println!("(Note: Animated effects require running as daemon)");
+            state_store.update_keyboard_effect(device_id, effect.clone())?;
+            let Some(keys) = keyboard.direct_frame_keys() else {
+                println!("(Note: Animated effects require running as daemon)");
+                return Ok(());
+            };
+            println!(
+                "Rendering per key until Ctrl-C (25 fps streaming confirmed on 0x1628; Linux untested); stop the daemon first, both would stream frames"
+            );
+            let mut controller = RgbController::new(0);
+            controller.set_effect(effect);
+            let mut ticks = tokio::time::interval(DIRECT_FRAME_INTERVAL);
+            let ctrl_c = tokio::signal::ctrl_c();
+            tokio::pin!(ctrl_c);
+            loop {
+                tokio::select! {
+                    stopped = &mut ctrl_c => {
+                        stopped?;
+                        break;
+                    }
+                    _ = ticks.tick() => keyboard.stream_direct_frame(&controller.compute_key_colors(keys), None).await?,
+                }
+            }
+            println!("Stopped; the board keeps the last frame (`ssgg rgb release` hands 0x1628 back to its profile)");
         }
 
         RgbAction::Off => {
@@ -362,7 +392,7 @@ async fn cmd_rgb(manager: &DeviceManager, action: RgbAction) -> Result<()> {
 
         RgbAction::Release => {
             keyboard.send_display_command(steelseries_gg::devices::hid_reports::Apex2022DisplayCommand::ClearDirect)?;
-            println!("Sent the leave-direct-mode report [EXPERIMENTAL, never confirmed on hardware]");
+            println!("Sent the leave-direct-mode report (confirmed on the Apex Pro TKL 2023 0x1628; Linux untested)");
         }
     }
 
@@ -385,7 +415,7 @@ fn cmd_headset(manager: &DeviceManager, action: HeadsetAction) -> Result<()> {
     } else {
         eprintln!(
             "{}",
-            "[EXPERIMENTAL] Headset commands come from community forks and are untested on hardware.".yellow()
+            "[EXPERIMENTAL] Headset commands are confirmed on the Arctis Nova 7 Gen 2 (0x227E) only; on this model they come from community forks or GG specs and are untested on hardware.".yellow()
         );
     }
 

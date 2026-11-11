@@ -6,7 +6,11 @@ pub mod apex_7_profile;
 pub mod apex_m750;
 pub mod apex_pro_tkl_2023;
 pub mod apex_pro_tkl_2023_profile;
+pub mod apex_pro_tkl_2023_profile_codec;
+pub mod key_action;
+pub mod model_caps;
 pub mod models;
+pub mod oled;
 pub mod onboard;
 
 use super::diagnostics::{HidOperation, with_global_diagnostics};
@@ -22,6 +26,13 @@ use async_trait::async_trait;
 use hidapi::HidDevice;
 use parking_lot::Mutex;
 use std::sync::Arc;
+
+/// The error the wired-Apex-2023-only [`Keyboard`] methods answer on every other keyboard.
+fn unsupported_2023(what: &str) -> Error {
+    Error::DeviceCommunication(format!(
+        "{what} is only defined for the wired Apex Pro TKL 2023 (0x1628)"
+    ))
+}
 
 /// Trait for keyboard-specific functionality.
 #[async_trait]
@@ -98,6 +109,23 @@ pub trait Keyboard: Device {
     /// Set a region of keys to the same color using HID codes.
     async fn set_key_region(&mut self, _start_hid: u8, _count: u8, _color: Color) -> Result<()> {
         Ok(())
+    }
+
+    /// [EXPERIMENTAL] HID usages of the keys one direct-mode frame carries, on keyboards lit by streaming whole
+    /// frames (the Apex Pro direct models); `None` on zone keyboards.
+    fn direct_frame_keys(&self) -> Option<&'static [u8]> {
+        None
+    }
+
+    /// [EXPERIMENTAL] Send one animation frame to a direct-mode keyboard: `(usage, colour)` for the keys of
+    /// [`Keyboard::direct_frame_keys`], unlisted keys black. Unlike `set_key_colors_direct` the frame is not
+    /// saved as the base of later per-key changes, so streaming does not write to disk every tick.
+    /// Colors are unscaled: `Some(brightness)` applies that level (0.0-1.0) instead of the saved device level;
+    /// `None` uses the saved level. Streaming never persists a brightness override.
+    async fn stream_direct_frame(&mut self, _colors: &[(u8, Color)], _brightness: Option<f32>) -> Result<()> {
+        Err(Error::DeviceCommunication(
+            "direct-mode frames are not supported by this keyboard".to_string(),
+        ))
     }
 
     // === Zone-based RGB Fallback ===
@@ -233,12 +261,83 @@ pub trait Keyboard: Device {
         ))
     }
 
-    /// [EXPERIMENTAL] Read-only Gen3 on-board profile read of one slot (0-4). Wired Apex Pro TKL 2023 only;
+    /// Read-only Gen3 on-board profile read of one slot (0-4). Wired Apex Pro TKL 2023 only;
     /// other keyboards return an error.
     fn read_gen3_profile(&mut self, _slot: u8) -> Result<apex_pro_tkl_2023::Gen3ProfileRead> {
         Err(Error::DeviceCommunication(
             "the Gen3 on-board profile read is not supported by this keyboard".to_string(),
         ))
+    }
+
+    /// [EXPERIMENTAL] Gen3 on-board profile write of one slot (0-4): erase, 25 chunks, commit. **Replaces the
+    /// slot's stored profile.** Wired Apex Pro TKL 2023 only; other keyboards return an error.
+    fn write_gen3_profile(
+        &mut self,
+        _slot: u8,
+        _blob: &[u8; apex_pro_tkl_2023_profile::PROFILE_LEN],
+    ) -> Result<Vec<apex_pro_tkl_2023::Gen3Reply>> {
+        Err(Error::DeviceCommunication(
+            "the Gen3 on-board profile write is not supported by this keyboard".to_string(),
+        ))
+    }
+
+    /// [EXPERIMENTAL] Make the board run one of its Gen3 on-board profiles (load + set-volatile). Wired Apex Pro
+    /// TKL 2023 only; other keyboards return an error.
+    fn activate_gen3_profile(&mut self, _slot: u8) -> Result<Vec<apex_pro_tkl_2023::Gen3Reply>> {
+        Err(Error::DeviceCommunication(
+            "the Gen3 on-board profile activation is not supported by this keyboard".to_string(),
+        ))
+    }
+
+    /// [EXPERIMENTAL] The firmware version from the `90 00` poll, `None` when the board does not answer. Wired
+    /// Apex Pro TKL 2023 only.
+    fn firmware_version(&mut self) -> Result<Option<String>> {
+        Err(unsupported_2023("the firmware poll"))
+    }
+
+    /// [EXPERIMENTAL] Read the bindings of one layer (`B6`). Wired Apex Pro TKL 2023 only.
+    fn read_key_mappings(&mut self, _layer: key_action::MappingLayer) -> Result<Vec<super::hid_reports::KeyBinding>> {
+        Err(unsupported_2023("the key-mapping read"))
+    }
+
+    /// [EXPERIMENTAL] Read a layer, apply `changes` and write it back (`B6`, then `36`); a failed read sends
+    /// nothing. Wired Apex Pro TKL 2023 only.
+    fn set_key_mappings(
+        &mut self,
+        _layer: key_action::MappingLayer,
+        _changes: &[super::hid_reports::KeyBinding],
+    ) -> Result<()> {
+        Err(unsupported_2023("the key-mapping write"))
+    }
+
+    /// [EXPERIMENTAL] Write the reset state of a layer (`36`). Wired Apex Pro TKL 2023 only.
+    fn reset_key_mappings(&mut self, _layer: key_action::MappingLayer) -> Result<()> {
+        Err(unsupported_2023("the key-mapping reset"))
+    }
+
+    /// [EXPERIMENTAL] Assign the SteelSeries (meta) key to a HID usage (`35`). Wired Apex Pro TKL 2023 only.
+    fn meta_key(&mut self, _hid: u8) -> Result<()> {
+        Err(unsupported_2023("the meta-key assignment"))
+    }
+
+    /// [EXPERIMENTAL] Physical layout id (`F2`). Wired Apex Pro TKL 2023 only.
+    fn device_layout(&mut self) -> Result<u8> {
+        Err(unsupported_2023("the layout query"))
+    }
+
+    /// [EXPERIMENTAL] Region id (`F5`). Wired Apex Pro TKL 2023 only.
+    fn device_region(&mut self) -> Result<u8> {
+        Err(unsupported_2023("the region query"))
+    }
+
+    /// [EXPERIMENTAL] **Writes flash**: set the region id (`75`). Wired Apex Pro TKL 2023 only.
+    fn write_region(&mut self, _region: u8) -> Result<()> {
+        Err(unsupported_2023("the region write"))
+    }
+
+    /// [EXPERIMENTAL] Read the 9600 bytes of on-board macro data (`B7`). Wired Apex Pro TKL 2023 only.
+    fn read_macro_data(&mut self) -> Result<Vec<u8>> {
+        Err(unsupported_2023("the macro data read"))
     }
 
     // === On-board profiles ===

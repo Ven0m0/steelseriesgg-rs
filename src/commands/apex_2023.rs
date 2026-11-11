@@ -5,6 +5,7 @@ use steelseries_gg::devices::hid_reports::{
     Apex2022DisplayCommand, HallLayer, HidReportBuilder, PROFILE_CHUNK_REPORT_SIZE,
 };
 use steelseries_gg::devices::keyboards::apex_pro_tkl_2023::{AnalogSetting, analog_report, key_actuation_setting};
+use steelseries_gg::devices::keyboards::oled;
 use steelseries_gg::devices::{DeviceManager, DeviceType, HidDeviceType, KeyMappingDatabase, product_ids};
 use steelseries_gg::{Error, Result};
 
@@ -125,8 +126,8 @@ pub(crate) async fn cmd_actuation(manager: &DeviceManager, action: ActuationActi
         // No APPLY/initialize: GG sends neither around these frames, and direct mode ignores APPLY.
         let reply = keyboard.send_analog_setting(&setting)?;
         println!(
-            "Sent [EXPERIMENTAL]: from GG's device spec, never confirmed on hardware; whether it survives \
-             unplugging is unknown"
+            "Sent (from GG's device spec; only `38 61` layer 0 is confirmed on hardware, anything else is \
+             [EXPERIMENTAL]); whether it survives unplugging is unknown"
         );
         match reply {
             Some(reply) => {
@@ -160,25 +161,26 @@ pub(crate) async fn cmd_oled(manager: &DeviceManager, action: OledAction) -> Res
             let bytes = tokio::fs::read(file)
                 .await
                 .map_err(|e| Error::Other(format!("read {}: {e}", file.display())))?;
-            Some(bytes.as_slice().try_into().map_err(|_| {
-                Error::InvalidConfig(format!(
-                    "{} is {} bytes, an OLED frame is 640",
-                    file.display(),
-                    bytes.len()
-                ))
-            })?)
+            Some(oled::frame_from_file(&bytes)?)
+        }
+        OledAction::TestPattern { .. } => {
+            println!("Test pattern: a one-pixel line across the top of the OLED");
+            Some(oled::test_pattern())
         }
         OledAction::Reset { .. } => None,
     };
-    let command = bitmap
-        .as_ref()
-        .map_or(Apex2022DisplayCommand::OledReset, Apex2022DisplayCommand::Oled);
-    let (OledAction::Show { dry_run, .. } | OledAction::Reset { dry_run }) = action;
+    let command = match (&bitmap, &action) {
+        (Some(frame), OledAction::Show { onboard: true, .. }) => Apex2022DisplayCommand::OnboardImage(frame),
+        (Some(frame), _) => Apex2022DisplayCommand::Oled(frame),
+        (None, _) => Apex2022DisplayCommand::OledReset,
+    };
+    let (OledAction::Show { dry_run, .. } | OledAction::TestPattern { dry_run, .. } | OledAction::Reset { dry_run }) =
+        action;
 
     if dry_run {
         let mut buf = vec![0u8; PROFILE_CHUNK_REPORT_SIZE];
         let size = HidReportBuilder::new(HidDeviceType::Keyboard).build_report(command, &mut buf)?;
-        println!("dry run, nothing sent: Apex Pro TKL 2023 (0x1628) report [EXPERIMENTAL]");
+        println!("dry run, nothing sent: Apex Pro TKL 2023 (0x1628) report");
         print_report(&buf[..size]);
         return Ok(());
     }
@@ -189,6 +191,6 @@ pub(crate) async fn cmd_oled(manager: &DeviceManager, action: OledAction) -> Res
     let mut keyboard = manager.open_keyboard(keyboard_info)?;
     crate::warn_if_gg_engine_running();
     keyboard.send_display_command(command)?;
-    println!("Sent [EXPERIMENTAL], never confirmed on hardware");
+    println!("Sent");
     Ok(())
 }

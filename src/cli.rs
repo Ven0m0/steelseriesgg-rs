@@ -4,6 +4,7 @@ use std::path::PathBuf;
 
 use steelseries_gg::devices::KeyId;
 use steelseries_gg::devices::hid_reports::RapidTapPair;
+use steelseries_gg::devices::keyboards::key_action::MappingLayer;
 use steelseries_gg::rgb::Color;
 use steelseries_gg::{Error, Result};
 
@@ -48,6 +49,18 @@ pub(crate) enum Commands {
     Oled {
         #[command(subcommand)]
         action: OledAction,
+    },
+
+    /// Apex Pro TKL 2023 live key mappings and macro data (36, B6, B7 confirmed on 0x1628, Windows; Linux untested)
+    Keymap {
+        #[command(subcommand)]
+        action: KeymapAction,
+    },
+
+    /// Apex Pro TKL 2023 device info, meta key and region (info confirmed on 0x1628, Windows; meta key and region EXPERIMENTAL)
+    Device {
+        #[command(subcommand)]
+        action: DeviceAction,
     },
 
     /// Control headsets (Arctis Nova 3/4/5/7, Nova Pro and Arctis 7+ families only, EXPERIMENTAL and untested on hardware)
@@ -247,15 +260,143 @@ pub(crate) enum OnboardAction {
     /// changes what the keyboard is running right now.** Hardware-confirmed on an Apex 7.
     Load(OnboardLoadArgs),
 
-    /// EXPERIMENTAL, untested on hardware: read one profile slot of the wired Apex Pro TKL 2023 (0x1628)
-    /// with the chunked read from GG's device spec. Read-only; nothing is written to the keyboard.
+    /// Read one profile slot of the wired Apex Pro TKL 2023 (0x1628) with the chunked read from GG's device
+    /// spec. Read-only; nothing is written to the keyboard. Confirmed on hardware (firmware 1.19.7, 2026-11-10).
     Gen3Read(OnboardGen3ReadArgs),
+
+    /// Decode a Gen3 profile blob read by `gen3-read` (no device, no hardware): a summary, or the full JSON.
+    Gen3Decode(OnboardGen3DecodeArgs),
+
+    /// Encode a Gen3 profile JSON back into a sealed 12,500-byte blob (no device, no hardware).
+    Gen3Encode(OnboardGen3EncodeArgs),
+
+    /// [EXPERIMENTAL] Write one on-board profile slot of the wired Apex Pro TKL 2023 (0x1628), GG's erase, 25
+    /// chunks and commit chain. **This replaces the slot's stored profile.** It first reads all five slots and
+    /// saves them, refuses unless the read blob of the target slot re-encodes byte for byte, and needs `--yes`.
+    /// Not yet replayed from `ssgg` on hardware. GG's capture only wrote slots 0 and 3; slot 4 (`02 01 84`,
+    /// `B1 04`) is extrapolated from the spec.
+    Gen3Write(OnboardGen3WriteArgs),
+
+    /// [EXPERIMENTAL] Make the board run one of its on-board profile slots (0x1628): GG's `B2 <slot>`, `34 00`.
+    /// **Changes what the keyboard runs now.** Not yet replayed from `ssgg` on hardware.
+    Gen3Activate(OnboardGen3ActivateArgs),
+
+    /// [EXPERIMENTAL] Write saved slot blobs (`slot<N>.bin` from a backup directory) back to the keyboard, under
+    /// the same guards as `gen3-write`. Not yet replayed from `ssgg` on hardware; slot 4 is extrapolated from the spec (GG wrote only slots 0 and 3).
+    Gen3Restore(OnboardGen3RestoreArgs),
+}
+
+/// Decode a Gen3 profile blob.
+#[derive(clap::Args)]
+pub(crate) struct OnboardGen3DecodeArgs {
+    /// Profile blob (12,500 bytes) from `gen3-read --bin` or a backup directory
+    #[arg(value_name = "BLOB")]
+    pub(crate) blob: PathBuf,
+
+    /// Print the full JSON decode report instead of a summary
+    #[arg(long)]
+    pub(crate) json: bool,
+
+    /// Decode a blob whose checksum does not match (forensics); the mismatch is reported
+    #[arg(long)]
+    pub(crate) ignore_crc: bool,
+}
+
+/// Encode a Gen3 profile JSON.
+#[derive(clap::Args)]
+pub(crate) struct OnboardGen3EncodeArgs {
+    /// JSON decode report (from `gen3-decode --json`, possibly edited)
+    #[arg(value_name = "JSON")]
+    pub(crate) json: PathBuf,
+
+    /// Where to write the sealed 12,500-byte blob
+    #[arg(long, value_name = "FILE")]
+    pub(crate) out: PathBuf,
+
+    /// Overwrite --out when it already exists (it may never be the input file)
+    #[arg(long)]
+    pub(crate) force: bool,
+}
+
+/// A gated Gen3 profile write.
+#[derive(clap::Args)]
+pub(crate) struct OnboardGen3WriteArgs {
+    /// Profile slot to replace, 0-4
+    #[arg(short, long, value_parser = clap::value_parser!(u8).range(0..=4))]
+    pub(crate) slot: u8,
+
+    /// What to write: a 12,500-byte blob (it must decode with a matching checksum) or a JSON decode report
+    #[arg(long, value_name = "BLOB_OR_JSON")]
+    pub(crate) from: PathBuf,
+
+    /// Authorise the write. Without it nothing is sent.
+    #[arg(long)]
+    pub(crate) yes: bool,
+
+    /// Print the plan (frame counts, first chunk header, backup directory) and open no keyboard
+    #[arg(long)]
+    pub(crate) dry_run: bool,
+
+    /// Also make the board run the slot afterwards (`B2`, `34 00`)
+    #[arg(long)]
+    pub(crate) activate: bool,
+
+    /// Refuse to write unless the only difference from the slot's current content is its name (and the checksum)
+    #[arg(long)]
+    pub(crate) name_only: bool,
+
+    /// With --dry-run: a blob of the slot's current content to print the field-level diff against
+    /// (a live run always diffs against the slot it just read)
+    #[arg(long, value_name = "BLOB")]
+    pub(crate) compare: Option<PathBuf>,
+
+    /// Where the pre-write backup of all five slots goes: a new or empty directory (default: the ssgg config
+    /// directory, `gen3-backups/<slot>-<unix seconds>/`)
+    #[arg(long, value_name = "DIR")]
+    pub(crate) backup_dir: Option<PathBuf>,
+}
+
+/// Activate a Gen3 profile slot.
+#[derive(clap::Args)]
+pub(crate) struct OnboardGen3ActivateArgs {
+    /// Profile slot to run, 0-4
+    #[arg(short, long, value_parser = clap::value_parser!(u8).range(0..=4))]
+    pub(crate) slot: u8,
+
+    /// Authorise the change. Without it nothing is sent.
+    #[arg(long)]
+    pub(crate) yes: bool,
+}
+
+/// Write saved Gen3 slot blobs back.
+#[derive(clap::Args)]
+pub(crate) struct OnboardGen3RestoreArgs {
+    /// Backup directory holding `slot<N>.bin` files
+    #[arg(long, value_name = "DIR")]
+    pub(crate) from: PathBuf,
+
+    /// Restore only this slot, 0-4 (default: every `slot<N>.bin` in the directory)
+    #[arg(short, long, value_parser = clap::value_parser!(u8).range(0..=4))]
+    pub(crate) slot: Option<u8>,
+
+    /// Authorise the write. Without it nothing is sent.
+    #[arg(long)]
+    pub(crate) yes: bool,
+
+    /// Print the plan for every slot and open no keyboard
+    #[arg(long)]
+    pub(crate) dry_run: bool,
+
+    /// Where the pre-restore backup of the readable slots goes: a new or empty directory (default: the ssgg
+    /// config directory)
+    #[arg(long, value_name = "DIR")]
+    pub(crate) backup_dir: Option<PathBuf>,
 }
 
 /// A read-only Gen3 on-board profile read.
 #[derive(clap::Args)]
 pub(crate) struct OnboardGen3ReadArgs {
-    /// Profile slot, 0-4 (GG's Config 1 is assumed to be slot 0; unverified)
+    /// Profile slot, 0-4 (slot 0 read back as GG's first config, 2026-11-10)
     #[arg(short, long, default_value = "0")]
     pub(crate) slot: u8,
 
@@ -278,7 +419,10 @@ impl OnboardAction {
             Self::Read(_) | Self::Load(_) => true,
             Self::Write(args) => !args.dry_run,
             Self::Gen3Read(args) => !args.dry_run,
-            Self::Decode(_) | Self::Encode(_) => false,
+            Self::Gen3Write(args) => !args.dry_run,
+            Self::Gen3Restore(args) => !args.dry_run,
+            Self::Gen3Activate(_) => true,
+            Self::Decode(_) | Self::Encode(_) | Self::Gen3Decode(_) | Self::Gen3Encode(_) => false,
         }
     }
 }
@@ -452,7 +596,9 @@ pub(crate) enum RgbAction {
         level: u8,
     },
 
-    /// Set a lighting effect
+    /// Set a lighting effect. On a direct-mode keyboard (Apex Pro TKL 2023 and the other Apex Pro direct models)
+    /// it renders the effect per key in the foreground, 25 frames a second, until Ctrl-C (EXPERIMENTAL); on
+    /// other keyboards it is saved for the daemon to animate
     Effect {
         /// Effect name: static, breathing, spectrum, wave, off
         name: String,
@@ -472,23 +618,130 @@ pub(crate) enum RgbAction {
     },
 
     /// Apex Pro TKL 2023 (0x1628): leave direct-mode lighting so the board shows its stored profile again
-    /// (`00 41` from GG's device spec; EXPERIMENTAL, untested on hardware)
+    /// (`00 41` from GG's device spec; confirmed on hardware 2026-11-10)
     Release,
 }
 
-/// Apex Pro TKL 2023 (0x1628) OLED, from GG's device spec. EXPERIMENTAL, untested on hardware; the pixel
-/// packing of the 640 bytes is not in the spec.
+/// Apex Pro TKL 2023 (0x1628) 128x40 OLED, from GG's device spec; direct write, on-board image and reset confirmed
+/// on hardware 2026-11-10 (firmware 1.19.7). Images are row-major, 16 bytes per row, MSB = leftmost pixel.
 #[derive(Subcommand)]
 pub(crate) enum OledAction {
-    /// Send a raw 640-byte frame file to the OLED
+    /// Show a 128x40 image: a binary PBM (P4) file or a raw 640-byte frame
     Show {
         file: PathBuf,
+        /// Send the image as the on-board OLED image (`38 83`, the frame GG uses; the board keeps it) instead of
+        /// the direct write (`1F 81`)
+        #[arg(long)]
+        onboard: bool,
+        /// Print the report instead of sending it; no keyboard is opened
+        #[arg(long)]
+        dry_run: bool,
+    },
+
+    /// Send a frame whose first 16 bytes are 0xFF and the rest 0: a one-pixel line across the top
+    TestPattern {
+        /// Print the report instead of sending it; no keyboard is opened
         #[arg(long)]
         dry_run: bool,
     },
 
     /// Hand the OLED back to the keyboard firmware
     Reset {
+        #[arg(long)]
+        dry_run: bool,
+    },
+}
+
+fn parse_layer(text: &str) -> std::result::Result<MappingLayer, String> {
+    match text {
+        "base" => Ok(MappingLayer::Base),
+        "meta" => Ok(MappingLayer::Meta),
+        "second" => Ok(MappingLayer::Second),
+        other => Err(format!("{other}: layer must be base, meta or second")),
+    }
+}
+
+/// Apex Pro TKL 2023 (0x1628) live key bindings (`36`, `B6`, `B7`), from GG's device spec. GG did not send these
+/// for a binding change in the 2026-11-10 capture (it rewrites the on-board profile). Confirmed from ssgg on
+/// 0x1628 (Windows, 2026-11-11; Linux untested). Whether a live mapping write survives a power cycle is unknown,
+/// so `set` and `reset` need `--yes`.
+#[derive(Subcommand)]
+pub(crate) enum KeymapAction {
+    /// Print one layer's bindings, one line per key
+    Read {
+        /// base, meta (behind the SteelSeries key) or second (second actuation point of the analog keys)
+        #[arg(long, default_value = "base", value_parser = parse_layer)]
+        layer: MappingLayer,
+    },
+
+    /// Change bindings: reads the layer, merges the changes, writes the layer back and reads it again to compare
+    /// (nothing is sent when the first read fails). Needs --yes: whether the write survives a power cycle is unknown
+    Set {
+        /// KEY=ACTION, e.g. CAPSLOCK=key:ESC or 0x39=key:0x29. KEY is a key name or 0x<hid usage>. ACTION is
+        /// key:<name|0xUSAGE>, unbound, mouse:<1-8>, wheel:up|down, pan:left|right, consumer:<hex>, meta, cpi,
+        /// consumer:<hex>, meta, cpi or raw:<function>:<kc0>,<kc1>,<kc2>,<kc3> (hex). macro:<index> and
+        /// external:<hex> are refused: ssgg does not send the macro data GG sends after a mapping write
+        #[arg(required = true, value_name = "KEY=ACTION")]
+        keys: Vec<String>,
+        /// base, meta or second. WARNING for meta: the meta-layer gap is not handled (GG follows a meta write with
+        /// a `3C` bitmask of the meta-mapped keys, which ssgg does not send), so meta bindings may not take effect
+        #[arg(long, default_value = "base", value_parser = parse_layer)]
+        layer: MappingLayer,
+        /// Confirm the write: whether a live mapping write survives a power cycle is unknown
+        #[arg(long)]
+        yes: bool,
+        /// Print the frames instead of sending them; no keyboard is opened
+        #[arg(long)]
+        dry_run: bool,
+    },
+
+    /// Write a layer's reset state: base keys bound to `key:<own usage>` (as in the owner's slot-0 profile), meta
+    /// and second layers unbound. The board itself stores "unbound" as function 0x51 with zero codes on some
+    /// layers, so the number of entries that would change is printed first (a failed read sends nothing). Needs
+    /// --yes: whether the write survives a power cycle is unknown
+    Reset {
+        #[arg(long, default_value = "base", value_parser = parse_layer)]
+        layer: MappingLayer,
+        /// Confirm the write: whether a live mapping write survives a power cycle is unknown
+        #[arg(long)]
+        yes: bool,
+        /// Print the frames instead of sending them; no keyboard is opened
+        #[arg(long)]
+        dry_run: bool,
+    },
+
+    /// Read the 9600 bytes of on-board macro data into a file (read only)
+    Macros {
+        #[arg(long, value_name = "FILE")]
+        out: PathBuf,
+    },
+}
+
+/// Apex Pro TKL 2023 (0x1628) device queries and settings, from GG's device spec. GG sends `F2`, `F5` and `90 00`
+/// at startup, so the queries are known to be answered; `35` and `75` are untested.
+#[derive(Subcommand)]
+pub(crate) enum DeviceAction {
+    /// Print firmware version, physical layout and region
+    Info,
+
+    /// Assign the SteelSeries (meta) key to a key (`00 35 <hid>`; GG uses 0xF0)
+    MetaKey {
+        /// A key name or 0x<hid usage>
+        key: String,
+        /// Print the frame instead of sending it; no keyboard is opened
+        #[arg(long)]
+        dry_run: bool,
+    },
+
+    /// Write the region id to the keyboard (`00 75 <id>`). **Persistent**: it writes flash; nothing is written
+    /// when the keyboard already reports that id. Ids the spec names:
+    /// 1 us, 3 uk, 4 germany, 6 france, 10 nordic, 13 japan, 20 turkish
+    Region {
+        id: u8,
+        /// Confirm the flash write
+        #[arg(long)]
+        yes: bool,
+        /// Print the frame instead of sending it; no keyboard is opened
         #[arg(long)]
         dry_run: bool,
     },
@@ -555,8 +808,9 @@ pub(crate) enum MouseAction {
     },
 }
 
-/// The Apex Pro TKL 2023 (0x1628) settings below come from GG's device spec and are EXPERIMENTAL: never
-/// confirmed on hardware, and whether they survive unplugging is unknown. Each one sets every analog key.
+/// The Apex Pro TKL 2023 (0x1628) settings below come from GG's device spec. Only `set` (`38 61` layer 0) is
+/// confirmed on hardware (2026-10-25); the other layers and commands are EXPERIMENTAL, and whether any survives
+/// unplugging is unknown. Each one sets every analog key.
 #[derive(Subcommand)]
 pub(crate) enum ActuationAction {
     /// Set actuation point for all keys (global). Apex Pro TKL 2023: 0.1-4.0 mm in 0.1 mm steps
@@ -1171,6 +1425,63 @@ mod tests {
         ));
         assert!(Cli::try_parse_from(["ssgg", "mouse", "save"]).is_err());
         assert!(Cli::try_parse_from(["ssgg", "pollrate", "mouse", "1000"]).is_ok());
+    }
+
+    #[test]
+    fn keymap_and_device_subcommands_parse() {
+        let parsed = Cli::try_parse_from(["ssgg", "keymap", "set", "A=key:B", "0x39=meta", "--layer", "meta"]).unwrap();
+        let Commands::Keymap {
+            action:
+                KeymapAction::Set {
+                    keys,
+                    layer,
+                    yes,
+                    dry_run,
+                },
+        } = parsed.command
+        else {
+            panic!("not keymap set");
+        };
+        assert_eq!(keys, ["A=key:B", "0x39=meta"]);
+        assert_eq!(layer, MappingLayer::Meta);
+        assert!(!dry_run);
+        assert!(!yes);
+        let parsed = Cli::try_parse_from(["ssgg", "keymap", "reset", "--yes"]).unwrap();
+        assert!(matches!(
+            parsed.command,
+            Commands::Keymap {
+                action: KeymapAction::Reset { yes: true, .. }
+            }
+        ));
+
+        let parsed = Cli::try_parse_from(["ssgg", "keymap", "read"]).unwrap();
+        assert!(matches!(
+            parsed.command,
+            Commands::Keymap {
+                action: KeymapAction::Read {
+                    layer: MappingLayer::Base
+                }
+            }
+        ));
+        assert!(Cli::try_parse_from(["ssgg", "keymap", "read", "--layer", "third"]).is_err());
+        assert!(Cli::try_parse_from(["ssgg", "keymap", "set"]).is_err());
+        assert!(Cli::try_parse_from(["ssgg", "keymap", "reset", "--layer", "second", "--dry-run"]).is_ok());
+        assert!(Cli::try_parse_from(["ssgg", "keymap", "macros", "--out", "m.bin"]).is_ok());
+        assert!(Cli::try_parse_from(["ssgg", "keymap", "macros"]).is_err());
+
+        assert!(Cli::try_parse_from(["ssgg", "device", "info"]).is_ok());
+        assert!(Cli::try_parse_from(["ssgg", "device", "meta-key", "ESC", "--dry-run"]).is_ok());
+        let parsed = Cli::try_parse_from(["ssgg", "device", "region", "3", "--yes"]).unwrap();
+        assert!(matches!(
+            parsed.command,
+            Commands::Device {
+                action: DeviceAction::Region {
+                    id: 3,
+                    yes: true,
+                    dry_run: false
+                }
+            }
+        ));
     }
 
     /// clap only checks its own definition (duplicate flags, bad defaults, conflicting shorts) when a

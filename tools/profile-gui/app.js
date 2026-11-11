@@ -617,6 +617,8 @@ const PRODUCT_NAMES = {
   0x1648: 'Apex Pro Mini (2024)',
   0x1650: 'Apex 5 (2024)',
   0x1652: 'Apex 7 (2024)',
+  0x1660: 'Apex Pro TKL (2024) Cyber',
+  0x1662: 'Apex Pro TKL (2024) Steel',
   0x1836: 'Aerox 3',
   0x1838: 'Aerox 3 Wireless (2.4 GHz)',
   0x183A: 'Aerox 3 Wireless (wired)',

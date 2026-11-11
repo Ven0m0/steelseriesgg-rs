@@ -277,12 +277,18 @@ pub(crate) async fn cmd_onboard(mut manager: Option<&mut DeviceManager>, action:
         }
 
         OnboardAction::Gen3Read(args) => cmd_gen3_read(manager, args).await?,
+        OnboardAction::Gen3Decode(args) => super::gen3_profile::cmd_gen3_decode(&args)?,
+        OnboardAction::Gen3Encode(args) => super::gen3_profile::cmd_gen3_encode(&args)?,
+        OnboardAction::Gen3Write(args) => super::gen3_profile::cmd_gen3_write(manager, args)?,
+        OnboardAction::Gen3Activate(args) => super::gen3_profile::cmd_gen3_activate(manager, &args)?,
+        OnboardAction::Gen3Restore(args) => super::gen3_profile::cmd_gen3_restore(manager, args)?,
     }
 
     Ok(())
 }
 
-/// `[EXPERIMENTAL]` Read-only Gen3 profile read of the wired Apex Pro TKL 2023 (`0x1628`), from GG's device spec.
+/// Read-only Gen3 profile read of the wired Apex Pro TKL 2023 (`0x1628`), from GG's device spec; confirmed on
+/// hardware 2026-11-10 (firmware 1.19.7).
 async fn cmd_gen3_read(manager: Option<&mut DeviceManager>, args: crate::cli::OnboardGen3ReadArgs) -> Result<()> {
     use steelseries_gg::devices::hid_reports::{HidReportBuilder, PROFILE_CHUNK_REPORT_SIZE};
     use steelseries_gg::devices::keyboards::apex_pro_tkl_2023::gen3_read_requests;
@@ -292,7 +298,7 @@ async fn cmd_gen3_read(manager: Option<&mut DeviceManager>, args: crate::cli::On
     if args.dry_run {
         let builder = HidReportBuilder::new(HidDeviceType::Keyboard);
         println!(
-            "dry run, nothing sent: {} feature reports, each answered by a feature-report read [EXPERIMENTAL]",
+            "dry run, nothing sent: {} feature reports, each answered by a feature-report read",
             requests.len()
         );
         for request in requests {
@@ -313,7 +319,7 @@ async fn cmd_gen3_read(manager: Option<&mut DeviceManager>, args: crate::cli::On
         .ok_or_else(|| Error::DeviceNotFound("no wired Apex Pro TKL 2023 (0x1628) connected".to_string()))?;
     let mut keyboard = manager.open_keyboard(info)?;
     crate::warn_if_gg_engine_running();
-    println!("reading slot {} on {} [EXPERIMENTAL, read-only]", args.slot, info.name);
+    println!("reading slot {} on {} [read-only]", args.slot, info.name);
 
     let read = keyboard.read_gen3_profile(args.slot)?;
     println!("firmware: {}", read.firmware.as_deref().unwrap_or("no answer"));
