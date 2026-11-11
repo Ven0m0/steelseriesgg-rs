@@ -1,1 +1,1 @@
-- [ ] improve the linux packaging
+- [ ] improve the linux packaging in the releases
