@@ -47,6 +47,16 @@
           },
           {
             "type": "command",
+            "if": "Edit(*apex_pro_tkl_2023_profile.rs)",
+            "command": "echo 'REMINDER: never send the on-board profile blob to hardware; no read-back exists, so a write replaces the board settings. Code may build blobs only.'"
+          },
+          {
+            "type": "command",
+            "if": "Edit(*src/commands/onboard.rs)",
+            "command": "echo 'REMINDER: persistent device writes only on explicit request (onboard write --yes) and only on a family whose write sequence is hardware-confirmed.'"
+          },
+          {
+            "type": "command",
             "if": "Edit(*Cargo.toml)",
             "command": "echo 'REMINDER: hidapi must keep its exact = version pin in Cargo.toml (CLAUDE.md hard constraint). Changing it requires explicit task justification.'"
           },
@@ -86,6 +96,18 @@
             "type": "command",
             "if": "Write(*src/devices*.rs)",
             "command": "out=$(cargo clippy --all-targets --locked --message-format short -- -D warnings 2>&1) || { printf '%s\n' \"$out\" | tail -40; exit 2; }",
+            "async": true
+          },
+          {
+            "type": "command",
+            "if": "Edit(*tools/profile-gui/*)",
+            "command": "out=$(node tools/profile-gui/selftest.mjs 2>&1) || { printf '%s\n' \"$out\" | tail -40; exit 2; }",
+            "async": true
+          },
+          {
+            "type": "command",
+            "if": "Write(*tools/profile-gui/*)",
+            "command": "out=$(node tools/profile-gui/selftest.mjs 2>&1) || { printf '%s\n' \"$out\" | tail -40; exit 2; }",
             "async": true
           }
         ]

@@ -19,14 +19,14 @@ Use `rg --files src/` for the full tree. Non-obvious entry points:
 
 ```
 src/main.rs                    main() and the active cmd_* handlers (rgb, profile, headset, mouse, remap, ...)
-src/commands/                  moved cmd_* families: onboard.rs, performance.rs, diagnostics.rs
+src/commands/                  moved cmd_* families: onboard.rs, gen3_profile.rs, keymap.rs, apex_2023.rs, performance.rs, diagnostics.rs
 src/input/                     feature `remap`: key remapper (remapper.rs pure core, linux.rs evdev/uinput)
 src/cli.rs                     clap types (Cli, Commands, *Action) and argument parse helpers
 src/daemon.rs                  daemon loop, hot-plug monitoring, GameSense startup
 src/error.rs                   crate::error::Error (thiserror) + Result alias
 src/devices/hid_reports.rs     HidReportBuilder and typed HID commands - use this, not raw bytes
 src/devices/discovery.rs       DeviceManager: enumeration, hot-plug, fingerprinting
-src/devices/keyboards/         Keyboard impls (apex.rs, apex_7.rs, apex_pro_tkl_2023.rs = experimental, apex_m750.rs)
+src/devices/keyboards/         Keyboard impls (apex.rs, apex_7.rs, apex_pro_tkl_2023.rs = mixed, status in the rules file, apex_m750.rs)
 src/devices/headsets/          generic headset + nova7.rs (Arctis Nova 7 family, experimental)
 src/devices/mice/              rivalcfg Modern family mice (modern.rs, dpi_tables.rs; experimental)
 src/gamesense/server.rs        Axum HTTP server (port 27301)
@@ -100,7 +100,7 @@ this is expected, CI builds and lints `audio` on Linux only.
 3. **GameSense CORS**: enforce localhost-only origin; the policy may only be tightened, never relaxed.
 4. **Propagate errors**: use `?` or return an explicit `Err` value — no `unwrap` or `expect` in production paths.
 5. **Error types**: `crate::error::Error` with `thiserror` at library boundaries; `anyhow` with `context()` in `src/main.rs` and binaries.
-6. **Protocol accuracy**: the direct-mode frames (`0x40`, `0x61`, `0x3A`), the profile blob and `PerKeyRgb (0x23)` are reverse-engineered; only a solid-colour and per-key `0x40` frame were replayed on hardware (wired `0x1628`). Label new protocol work clearly; never state it as confirmed unless tested on hardware.
+6. **Protocol accuracy**: the direct-mode frames (`0x40`, `0x61`, `0x3A`), the profile blob and `PerKeyRgb (0x23)` are reverse-engineered; what was replayed on hardware is listed per command in `.claude/rules/experimental-protocol.md`. Label new protocol work clearly; never state it as confirmed unless tested on hardware.
 7. **Minimal scope**: fix what the task asks, nothing more. No opportunistic refactors.
 8. **No mutable global state**, no panics in non-test code (unless explicitly fatal and documented), no ignored `Result`s.
 9. **`unsafe` blocks** must document the safety invariant inline.
@@ -123,24 +123,31 @@ this is expected, CI builds and lints `audio` on Linux only.
 - **Search before reading**: `rg 'TypeName|fn_name' src/`, then read only the relevant lines. Large files: `src/main.rs`, `src/devices/hid_reports.rs`.
 - **Documents**: only create planning or analysis documents when explicitly requested.
 
+## Project tooling (`.claude/`)
+
+- Skills: `ci-matrix` (full local CI), `hid-protocol` (auto-loads for `src/devices/`), `hw-capture`, `promote-protocol`, `dep-audit`, `fuzz-runner`, `benchmark-compare`.
+- Review agents: `protocol-reviewer` (device diffs), `security-reviewer` (GameSense server), `dependency-auditor`, `docs-drift-auditor`, `re-verifier`, `release-reviewer`.
+
 ---
 
 ## Protocol research notes
 
-- `docs/development/` was checked against source on 2026-10-15 (`docs/development/README.md` lists each file and
-  its state). Source still wins; verify before acting on a doc claim.
+- `docs/development/README.md` lists each doc and its state. Source still wins; verify before acting on a doc claim.
 - Command-code status (confirmed / experimental / placeholder): `.claude/rules/experimental-protocol.md`.
 - Apex Pro TKL 2023 wired (PID `0x1628`, firmware `1.19.7`): transport, lighting frame, profile blob, slot map,
   checksum, 64-byte commands, GG's stored config and the Frida trace are in
-  `docs/development/apex-pro-tkl-2023-gg-capture.md`. All `[EXPERIMENTAL]`. Invariants to keep in mind:
-  - **Hardware evidence is thin**: `ssgg rgb color FF0000` turned the board solid red (2026-10-14, GG stopped,
-    user-confirmed) and one per-key frame lit one key (2026-10-21). Other colours, Linux hidraw and actuation are untested.
-  - **On-board profile writes are gated, not forbidden**: the `83 01` read-back works (confirmed 2026-11-10), so a
-    write is allowed only through `ssgg onboard gen3-write --yes` (`gen3-restore` for saved blobs) after every slot was
-    read and saved in that run and the read blob of the target slot re-encodes byte-identically. The write chain is
-    GG's captured one (`[EXPERIMENTAL]`, not yet replayed from `ssgg` on hardware).
-  - **No actuation or lighting read-back exists on this firmware** (Frida trace, 2026-10-21: GG never issues
-    `GET_FEATURE`). Do not add read-back commands for `0x1628`.
+  `docs/development/apex-pro-tkl-2023-gg-capture.md`. Status per frame in the rules file. Invariants to keep in mind:
+  - **Confirmed on hardware** (Windows, fw 1.19.7): `0x40` solid colours, per-key frames, software brightness and
+    25 fps effect streaming; `0x41` release; `1F 81/82` and `38 83` OLED; `38 61` layer 0 actuation; the `83 01`
+    profile read-back of all five slots; `36`/`B6`/`B7` key mappings and macro read; `F2`/`F5` device info
+    (2026-11-10/11). Linux hidraw is untested.
+  - **On-board profile writes are gated, not forbidden** (2026-11-10): the read-back works, so a write is allowed only
+    through `ssgg onboard gen3-write --yes` (`gen3-restore` for saved blobs) after every slot was read and saved in
+    that run and the read blob of the target slot re-encodes byte-identically (`[EXPERIMENTAL]`, not yet replayed from
+    `ssgg` on hardware). GG itself persists bindings, rapid-tap pairs, lock colours and the OLED image by
+    rewriting the whole slot (`02 01`, 25 x `03 01`, `B1`, `B2`, `34 00`); it never sends `36`/`B6` on this model.
+  - **Lighting read-back**: none (the board keeps no effect; GG streams `0x40` host-rendered frames). The profile
+    blob is the only read-back for settings.
   - **GG overwrites ssgg** at about 19 fps while `SteelSeriesEngine.exe` runs. Stop GG before any hardware test.
 
 ### Verification tooling (Windows)

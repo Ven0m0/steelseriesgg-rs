@@ -33,21 +33,18 @@ repos:
         language: system
         types: [rust]
         pass_filenames: false
-        stages: [pre-push]
       - id: cargo-test
         name: cargo test
         entry: cargo test --locked
         language: system
         types: [rust]
         pass_filenames: false
-        stages: [pre-push]
       - id: cargo-fix
         name: cargo fix
         entry: cargo fix --workspace --allow-no-vcs
         language: system
         types: [rust]
         pass_filenames: false
-        stages: [pre-push]
       - id: profile-gui-selftest
         name: profile-gui selftest
         entry: node tools/profile-gui/selftest.mjs
