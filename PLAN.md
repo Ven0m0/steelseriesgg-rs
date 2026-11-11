@@ -34,7 +34,11 @@ Protocol facts for the Apex Pro TKL 2023 are in `AGENTS.md` ("Protocol research 
 
 ## P1. Apex Pro TKL 2023 wired (`0x1628`): finish lighting
 
-Lighting is the only part replayed from `ssgg` so far (one solid red, 2026-10-14).
+**Update 2026-11-10:** items 1 and 4 are done on hardware (owner-confirmed, GG stopped, fw 1.19.7): solid colours,
+software brightness (persisted next to the saved frame), per-key wave/breathing/spectrum streaming at 25 fps
+(`ssgg rgb effect` runs a foreground loop on direct boards, the daemon renders per key), and `rgb release` (`0x41`,
+also sent when the daemon exits). `0x40` and `0x41` are Confirmed in the rules file. Still open: item 3 (Linux
+hidraw) and a USBPcap comparison of the effect stream against GG's frames. The history below stays as written.
 
 1. **[HW] Lighting test matrix**, GG stopped, `.\target\debug\ssgg.exe`:
    - `rgb color 00FF00`, `rgb color 0000FF`, `rgb color FFFFFF` (all keys, correct colour?)
@@ -77,7 +81,15 @@ Lighting is the only part replayed from `ssgg` so far (one solid red, 2026-10-14
    frame on `0x1628`. If yes: update `.claude/rules/experimental-protocol.md`, the code labels and the docs in one
    commit naming "Apex Pro TKL 2023 (wired, PID 0x1628)" and the test date.
 
-## P2. Apex Pro TKL 2023 wired: actuation and profile (blocked on read-back, now confirmed permanent)
+## P2. Apex Pro TKL 2023 wired: actuation and profile (read-back confirmed 2026-11-10; write gated)
+
+**Update 2026-11-10:** the paragraph below is superseded. `ssgg onboard gen3-read` read all five slots back on
+hardware (12,500 bytes, CRC matching, header `00 83 00`), GG itself issues the same reads at startup, and the blob
+layout is fully named from the spec (`docs/development/apex-pro-tkl-2023-gg-capture.md`, "Blob layout from the spec",
+including the old unknowns at 1080, 1224, 1590 and the second-actuation tables at 1306/1376). Item 3's init bytes
+are settled by the USBPcap of 2026-11-10: `02 01 <fs>`, `03 01 <fs>` x 25, `B1`, `B2`, `34`, `90` are the profile
+rewrite chain. Writing is allowed only through the gated command (backup of all five slots in the same run, decode
+and re-encode byte-identical, `--yes`); see the branch `feat/gg-keyboard-parity` for the state of that stage.
 
 `ssgg actuation` sends the experimental `0x2D` command; confirmed no-op on hardware (owner, 2026-10-21: no
 feel or GG-visible change). GG instead rewrites the 12,500-byte on-board profile, and a live HID trace of the
