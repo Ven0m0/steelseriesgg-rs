@@ -252,8 +252,11 @@ Keyboard output reports are 65 bytes: report ID `0x00`, command byte, data, zero
 | `0x90` | `OnboardFirmwareVersion` | confirmed (`0x1612`) | `90 \| source` (`00` keyboard, `01` LED controller), answered with the ASCII firmware version on the interrupt endpoint. |
 | `0x6C` | `OnboardDriverMode` | `[EXPERIMENTAL]` | `6c 00 01` on GG's device open, `6c 00 00` on session close. Nothing in `ssgg` sends it. |
 
-No actuation read-back command is known. `src/bin/discover_actuation.rs` probed `0x00`-`0xFF` on
-2026-05-27 without a reply. GG may read the profile back at startup (open, `PLAN.md` P2).
+No live actuation read-back command exists; the actuation tables are part of the on-board profile blob. The wired
+Apex Pro TKL 2023 (`0x1628`) profile read (`83 01`, `ssgg onboard gen3-read`) is confirmed on hardware (2026-11-10): GG
+reads all five slots at startup, and `src/bin/discover_actuation.rs` (2026-05-27, no reply to a `0x00`-`0xFF` probe) only
+looked for a different command. `ssgg keymap`, `ssgg device` and `ssgg oled` frames for `0x1628` are listed with their
+status in the rules file.
 
 ### Zones
 

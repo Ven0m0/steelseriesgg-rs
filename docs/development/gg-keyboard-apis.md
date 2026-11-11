@@ -354,7 +354,7 @@ update is out of scope for ssgg and stays that way until a hardware-confirmed se
 |--------|-------------|
 | Gen 1 `base_apex_legacy` (`0x1610`, `0x1612`, `0x1614`, `0x1618`, `0x161C`, 2024 refresh) | Lighting `0x3A`, driver mode `0x6C`, onboard read/write/deploy confirmed on `0x1612`; brightness, OLED, idle, layout, meta, mappings, macros missing |
 | Gen 1 analog `base_apex_pro` (`0x1610`, `0x1614`, `0x1640`) | Nothing; the `0x2D` guess was retired on `0x1628` and is not the Gen 1 protocol |
-| Gen 3 wired `base_apex_2022_wired` (`0x1628` and siblings) | `0x38 6x` actuation, `0x40`, `0x41`, `0x1F 81/82`, read-only `0x83`; wireless-side config, mappings and macros missing |
+| Gen 3 wired `base_apex_2022_wired` (`0x1628` and siblings) | On `0x1628` (hardware-confirmed 2026-11-10/11): `0x40` lighting and per-key effects, `0x41`, `0x1F 81/82`, `38 83` on-board OLED image, `38 61` layer 0, `83 01` profile read, `36`/`B6` key mappings, `B7` macro read, `F2`/`F5`/`90` device info. `[EXPERIMENTAL]`, implemented but not replayed from ssgg: the gated profile write chain (`02 01`, `03 01` x25, `B1`, `B2`, `34`), `35`, `75`, `38 62/65/66/67`. Missing: macro write and event decoding, `37`/`3C` macro and meta-mapped data, wireless-side config. Siblings: see the capability table in the rules file |
 | Gen 3 wireless `base_apex_2022_wireless` | Only the dongle form of `direct_write` (`0x61`) |
 | Apex 3 `0x161A` | `0x0B`, `0x0A` only |
 | Apex 3 TKL `0x1622` | `0x21`, `0x22`; `0x23` is a placeholder with the wrong range |
