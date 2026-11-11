@@ -1,20 +1,25 @@
 //! Apex Pro TKL 2023 specific implementations.
 
 use super::apex_pro_tkl_2023_profile::{PROFILE_LEN, actuation_raw, checksum_matches, profile_chunks};
+use super::key_action::{
+    MappingLayer, default_key_mappings, key_mapping_read_request, key_mapping_reports, macro_data, macro_read_requests,
+    merge_key_mappings, parse_device_query, parse_key_mapping_reply,
+};
 use super::models::{DirectFrame, keyboard_model};
 use super::{GenericKeyboard, Keyboard};
-use crate::Result;
 use crate::devices::hid_reports::{
-    ActuationCommand, AnalogKeyCommand, Apex2022DisplayCommand, CommandCode, DirectFrameCommand, DirectInitCommand,
-    Gen3ProfileReadCommand, HallLayer, HidCommand, HidDeviceType, HidReportBuilder, KEYBOARD_REPORT_SIZE,
-    LoadProfileCommand, OnboardFirmwareVersionCommand, PROFILE_CHUNK_REPORT_SIZE, ProfileCommitCommand,
-    ProfileEraseCommand, RapidTapPair, SetProfileVolatileCommand,
+    ActuationCommand, AnalogKeyCommand, Apex2022DisplayCommand, CommandCode, DeviceQueryCommand, DirectFrameCommand,
+    DirectInitCommand, Gen3ProfileReadCommand, HallLayer, HidCommand, HidDeviceType, HidReportBuilder,
+    KEYBOARD_REPORT_SIZE, KeyBinding, LoadProfileCommand, MetaToggleCommand, OnboardFirmwareVersionCommand,
+    PROFILE_CHUNK_REPORT_SIZE, ProfileCommitCommand, ProfileEraseCommand, RapidTapPair, RegionWriteCommand,
+    SetProfileVolatileCommand,
 };
 use crate::devices::key_mapping::{KeyAddress, KeyId, KeyMapping};
 use crate::devices::product_ids;
 use crate::devices::zone_mapping::{ZoneEffect, ZoneMapping};
 use crate::devices::{Device, DeviceInfo, DeviceType};
 use crate::rgb::{Color, PerKeyEffect};
+use crate::{Error, Result};
 use async_trait::async_trait;
 use std::ops::{Deref, DerefMut};
 
@@ -429,6 +434,31 @@ fn assemble_gen3_replies(replies: &[Vec<u8>]) -> Result<(Vec<Vec<u8>>, Vec<u8>)>
     Ok((headers, data))
 }
 
+/// A command built into a report (report-ID byte first) of `len` bytes.
+fn command_report(command: impl HidCommand, len: usize) -> Result<Vec<u8>> {
+    let mut buf = vec![0u8; len];
+    let size = HidReportBuilder::new(HidDeviceType::Keyboard).build_report(command, &mut buf)?;
+    buf.truncate(size);
+    Ok(buf)
+}
+
+/// The id in a layout or region answer, `None` when `reply` is not that answer, `Err` when its error byte is set.
+fn device_query_answer(reply: &[u8], query: DeviceQueryCommand) -> Option<Result<u8>> {
+    let (error, id) = parse_device_query(reply, query)?;
+    Some(if error == 0 {
+        Ok(id)
+    } else {
+        Err(Error::DeviceCommunication(format!(
+            "{query:?} query answered with error byte {error:#04x}"
+        )))
+    })
+}
+
+/// The 13 ms pause the board needs between consecutive commands.
+fn command_gap() {
+    std::thread::sleep(std::time::Duration::from_millis(Gen3ProfileReadCommand::COMMAND_GAP_MS));
+}
+
 /// Whether a firmware version (`1.19.7`, `V1.19.7`, ...) is 1.19.7 or newer, OpenRGB's Gen 3 cut-off.
 fn is_gen3_firmware(version: &str) -> bool {
     let digits = version.trim_start_matches(|c: char| !c.is_ascii_digit());
@@ -547,7 +577,7 @@ impl ApexProTkl2023 {
         if self.gen3_firmware.is_some() || !probes {
             return;
         }
-        let version = self.gen3_firmware_version();
+        let version = ApexProTkl2023::firmware_version(self);
         let gen3 = version.as_deref().is_some_and(is_gen3_firmware);
         tracing::info!("firmware {version:?}: Gen 3 protocol {gen3}");
         self.gen3_firmware = Some(gen3);
@@ -772,7 +802,8 @@ impl ApexProTkl2023 {
         self.require_wired_2023("the Gen3 on-board profile read")?;
         let requests = gen3_read_requests(slot)?;
         let gap = std::time::Duration::from_millis(Gen3ProfileReadCommand::COMMAND_GAP_MS);
-        let firmware = self.gen3_firmware_version();
+        // Path call: `self.firmware_version()` would pick the `&mut self` trait method over this `&self` one.
+        let firmware = ApexProTkl2023::firmware_version(self);
         let builder = HidReportBuilder::new(HidDeviceType::Keyboard);
         let mut replies = Vec::with_capacity(requests.len());
         for request in requests {
@@ -863,8 +894,99 @@ impl ApexProTkl2023 {
         Ok(vec![reply])
     }
 
+    /// `[EXPERIMENTAL]` The bindings of one layer (`B6` request, then a feature-report read). Wired board only.
+    /// Spec-only: GG did not send `B6` on this board in the 2026-11-10 capture; untested from `ssgg`.
+    pub fn read_key_mappings(&mut self, layer: MappingLayer) -> Result<Vec<KeyBinding>> {
+        self.require_wired_2023("the key-mapping read")?;
+        self.send_report(&key_mapping_read_request(layer)?, true)?;
+        command_gap();
+        let reply = self
+            .inner
+            .read_profile_feature_packet(0x00, PROFILE_CHUNK_REPORT_SIZE)?;
+        parse_key_mapping_reply(&reply, &layer.keys())
+    }
+
+    /// `[EXPERIMENTAL]` Write a whole layer: every `36` chunk, 13 ms apart. Volatile per the spec. Wired board only.
+    pub fn write_key_mappings(&mut self, layer: MappingLayer, entries: &[KeyBinding]) -> Result<()> {
+        self.require_wired_2023("the key-mapping write")?;
+        for report in key_mapping_reports(layer, entries)? {
+            self.send_report(&report, true)?;
+            command_gap();
+        }
+        Ok(())
+    }
+
+    /// `[EXPERIMENTAL]` Read a layer, apply `changes`, write it back. A failed read sends nothing.
+    pub fn set_key_mappings(&mut self, layer: MappingLayer, changes: &[KeyBinding]) -> Result<()> {
+        let current = self.read_key_mappings(layer).map_err(|e| {
+            Error::DeviceCommunication(format!("reading the {layer} layer failed, nothing was sent: {e}"))
+        })?;
+        self.write_key_mappings(layer, &merge_key_mappings(layer, &current, changes)?)
+    }
+
+    /// `[EXPERIMENTAL]` Write the reset state of a layer (base: every key its own usage; others: unbound).
+    pub fn reset_key_mappings(&mut self, layer: MappingLayer) -> Result<()> {
+        self.write_key_mappings(layer, &default_key_mappings(layer))
+    }
+
+    /// `[EXPERIMENTAL]` Assign the SteelSeries (meta) key to a HID usage (`00 35 <hid>`). Wired board only.
+    pub fn meta_key(&mut self, hid: u8) -> Result<()> {
+        self.require_wired_2023("the meta-key assignment")?;
+        self.send_report(&command_report(MetaToggleCommand { hid }, KEYBOARD_REPORT_SIZE)?, false)
+    }
+
+    /// `[EXPERIMENTAL]` Physical layout id (`F2`). GG sends this at startup on this board.
+    pub fn device_layout(&mut self) -> Result<u8> {
+        self.query_device(DeviceQueryCommand::Layout)
+    }
+
+    /// `[EXPERIMENTAL]` Region id (`F5`). GG sends this at startup on this board.
+    pub fn device_region(&mut self) -> Result<u8> {
+        self.query_device(DeviceQueryCommand::Region)
+    }
+
+    /// `[EXPERIMENTAL]` **Writes flash**: set the region id (`00 75 <region>`). Wired board only.
+    pub fn write_region(&mut self, region: u8) -> Result<()> {
+        self.require_wired_2023("the region write")?;
+        self.send_report(
+            &command_report(RegionWriteCommand { region }, KEYBOARD_REPORT_SIZE)?,
+            false,
+        )
+    }
+
+    /// `[EXPERIMENTAL]` The 9600 bytes of on-board macro data (16 `B7` chunk reads). Read only. Wired board only.
+    pub fn read_macro_data(&mut self) -> Result<Vec<u8>> {
+        self.require_wired_2023("the macro data read")?;
+        let mut replies = Vec::new();
+        for request in macro_read_requests() {
+            command_gap();
+            self.send_report(&command_report(request, PROFILE_CHUNK_REPORT_SIZE)?, true)?;
+            command_gap();
+            replies.push(
+                self.inner
+                    .read_profile_feature_packet(0x00, PROFILE_CHUNK_REPORT_SIZE)?,
+            );
+        }
+        macro_data(&replies)
+    }
+
+    /// Send a layout or region query (output report) and take the first input report that carries its answer.
+    fn query_device(&mut self, query: DeviceQueryCommand) -> Result<u8> {
+        self.require_wired_2023("the layout/region query")?;
+        self.send_report(&command_report(query, KEYBOARD_REPORT_SIZE)?, false)?;
+        for _ in 0..5 {
+            let Some(reply) = self.inner.read_profile_input_packet(KEYBOARD_REPORT_SIZE, 500)? else {
+                break;
+            };
+            if let Some(answer) = device_query_answer(&reply, query) {
+                return answer;
+            }
+        }
+        Err(Error::DeviceCommunication(format!("no answer to the {query:?} query")))
+    }
+
     /// The `90 00` firmware poll (GG `fw_version`); informational, so a failure is logged and gives `None`.
-    fn gen3_firmware_version(&self) -> Option<String> {
+    pub fn firmware_version(&self) -> Option<String> {
         let mut buf = [0u8; KEYBOARD_REPORT_SIZE];
         let poll = HidReportBuilder::new(HidDeviceType::Keyboard)
             .build_report(OnboardFirmwareVersionCommand::KEYBOARD, &mut buf)
@@ -1045,6 +1167,43 @@ crate::impl_keyboard_with_delegation!(ApexProTkl2023, {
     fn activate_gen3_profile(&mut self, slot: u8) -> Result<Vec<Gen3Reply>> {
         self.activate_gen3_profile(slot)
     }
+
+    fn firmware_version(&mut self) -> Result<Option<String>> {
+        self.require_wired_2023("the firmware poll")?;
+        Ok(ApexProTkl2023::firmware_version(self))
+    }
+
+    fn read_key_mappings(&mut self, layer: MappingLayer) -> Result<Vec<KeyBinding>> {
+        self.read_key_mappings(layer)
+    }
+
+    fn set_key_mappings(&mut self, layer: MappingLayer, changes: &[KeyBinding]) -> Result<()> {
+        self.set_key_mappings(layer, changes)
+    }
+
+    fn reset_key_mappings(&mut self, layer: MappingLayer) -> Result<()> {
+        self.reset_key_mappings(layer)
+    }
+
+    fn meta_key(&mut self, hid: u8) -> Result<()> {
+        self.meta_key(hid)
+    }
+
+    fn device_layout(&mut self) -> Result<u8> {
+        self.device_layout()
+    }
+
+    fn device_region(&mut self) -> Result<u8> {
+        self.device_region()
+    }
+
+    fn write_region(&mut self, region: u8) -> Result<()> {
+        self.write_region(region)
+    }
+
+    fn read_macro_data(&mut self) -> Result<Vec<u8>> {
+        self.read_macro_data()
+    }
 });
 
 // Deref allows access to Device trait methods like send_raw/receive_raw
@@ -1084,6 +1243,40 @@ mod tests {
         keyboard.brightness = 100;
         keyboard.sent = None;
         keyboard
+    }
+
+    #[test]
+    fn layout_and_region_answers_need_a_clear_error_byte() {
+        assert_eq!(
+            device_query_answer(&[0x00, 0xF2, 0, 1], DeviceQueryCommand::Layout)
+                .unwrap()
+                .unwrap(),
+            1
+        );
+        assert_eq!(
+            device_query_answer(&[0xF5, 0, 13], DeviceQueryCommand::Region)
+                .unwrap()
+                .unwrap(),
+            13
+        );
+        assert!(
+            device_query_answer(&[0x00, 0xF2, 1, 0], DeviceQueryCommand::Layout)
+                .unwrap()
+                .is_err()
+        );
+        assert!(device_query_answer(&[0x00, 0xF5, 0, 3], DeviceQueryCommand::Layout).is_none());
+    }
+
+    #[test]
+    fn key_mapping_commands_are_refused_before_anything_is_sent_on_other_models() {
+        let mut keyboard = keyboard_for(product_ids::APEX_PRO_TKL_2023_WIRELESS);
+        assert!(keyboard.read_key_mappings(MappingLayer::Base).is_err());
+        assert!(keyboard.set_key_mappings(MappingLayer::Base, &[]).is_err());
+        assert!(keyboard.reset_key_mappings(MappingLayer::Meta).is_err());
+        assert!(keyboard.meta_key(0xF0).is_err());
+        assert!(keyboard.device_layout().is_err());
+        assert!(keyboard.write_region(1).is_err());
+        assert!(keyboard.read_macro_data().is_err());
     }
 
     #[test]

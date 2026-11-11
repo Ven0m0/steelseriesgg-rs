@@ -4,6 +4,7 @@ use std::path::PathBuf;
 
 use steelseries_gg::devices::KeyId;
 use steelseries_gg::devices::hid_reports::RapidTapPair;
+use steelseries_gg::devices::keyboards::key_action::MappingLayer;
 use steelseries_gg::rgb::Color;
 use steelseries_gg::{Error, Result};
 
@@ -48,6 +49,18 @@ pub(crate) enum Commands {
     Oled {
         #[command(subcommand)]
         action: OledAction,
+    },
+
+    /// Apex Pro TKL 2023 live key mappings and macro data (EXPERIMENTAL: from GG's device spec, untested from ssgg)
+    Keymap {
+        #[command(subcommand)]
+        action: KeymapAction,
+    },
+
+    /// Apex Pro TKL 2023 device info, meta key and region (EXPERIMENTAL: from GG's device spec, untested from ssgg)
+    Device {
+        #[command(subcommand)]
+        action: DeviceAction,
     },
 
     /// Control headsets (Arctis Nova 3/4/5/7, Nova Pro and Arctis 7+ families only, EXPERIMENTAL and untested on hardware)
@@ -619,6 +632,87 @@ pub(crate) enum OledAction {
 
     /// Hand the OLED back to the keyboard firmware
     Reset {
+        #[arg(long)]
+        dry_run: bool,
+    },
+}
+
+fn parse_layer(text: &str) -> std::result::Result<MappingLayer, String> {
+    match text {
+        "base" => Ok(MappingLayer::Base),
+        "meta" => Ok(MappingLayer::Meta),
+        "second" => Ok(MappingLayer::Second),
+        other => Err(format!("{other}: layer must be base, meta or second")),
+    }
+}
+
+/// Apex Pro TKL 2023 (0x1628) live key bindings (`36`, `B6`, `B7`), from GG's device spec. GG did not send these
+/// for a binding change in the 2026-11-10 capture (it rewrites the on-board profile), so they are untested from
+/// ssgg. Live writes are volatile per the spec.
+#[derive(Subcommand)]
+pub(crate) enum KeymapAction {
+    /// Print one layer's bindings, one line per key
+    Read {
+        /// base, meta (behind the SteelSeries key) or second (second actuation point of the analog keys)
+        #[arg(long, default_value = "base", value_parser = parse_layer)]
+        layer: MappingLayer,
+    },
+
+    /// Change bindings: reads the layer, merges the changes and writes the layer back (nothing is sent when the
+    /// read fails)
+    Set {
+        /// KEY=ACTION, e.g. CAPSLOCK=key:ESC or 0x39=key:0x29. KEY is a key name or 0x<hid usage>. ACTION is
+        /// key:<name|0xUSAGE>, unbound, mouse:<1-8>, wheel:up|down, pan:left|right, consumer:<hex>, meta, cpi,
+        /// macro:<index>, external:<hex> or raw:<function>:<kc0>,<kc1>,<kc2>,<kc3> (hex)
+        #[arg(required = true, value_name = "KEY=ACTION")]
+        keys: Vec<String>,
+        #[arg(long, default_value = "base", value_parser = parse_layer)]
+        layer: MappingLayer,
+        /// Print the frames instead of sending them; no keyboard is opened
+        #[arg(long)]
+        dry_run: bool,
+    },
+
+    /// Write a layer's reset state: base keys bound to their own usage, meta and second layers unbound
+    Reset {
+        #[arg(long, default_value = "base", value_parser = parse_layer)]
+        layer: MappingLayer,
+        /// Print the frames instead of sending them; no keyboard is opened
+        #[arg(long)]
+        dry_run: bool,
+    },
+
+    /// Read the 9600 bytes of on-board macro data into a file (read only)
+    Macros {
+        #[arg(long, value_name = "FILE")]
+        out: PathBuf,
+    },
+}
+
+/// Apex Pro TKL 2023 (0x1628) device queries and settings, from GG's device spec. GG sends `F2`, `F5` and `90 00`
+/// at startup, so the queries are known to be answered; `35` and `75` are untested.
+#[derive(Subcommand)]
+pub(crate) enum DeviceAction {
+    /// Print firmware version, physical layout and region
+    Info,
+
+    /// Assign the SteelSeries (meta) key to a key (`00 35 <hid>`; GG uses 0xF0)
+    MetaKey {
+        /// A key name or 0x<hid usage>
+        key: String,
+        /// Print the frame instead of sending it; no keyboard is opened
+        #[arg(long)]
+        dry_run: bool,
+    },
+
+    /// Write the region id to the keyboard (`00 75 <id>`). **Persistent**: it writes flash. Ids the spec names:
+    /// 1 us, 3 uk, 4 germany, 6 france, 10 nordic, 13 japan, 20 turkish
+    Region {
+        id: u8,
+        /// Confirm the flash write
+        #[arg(long)]
+        yes: bool,
+        /// Print the frame instead of sending it; no keyboard is opened
         #[arg(long)]
         dry_run: bool,
     },
@@ -1301,6 +1395,49 @@ mod tests {
         ));
         assert!(Cli::try_parse_from(["ssgg", "mouse", "save"]).is_err());
         assert!(Cli::try_parse_from(["ssgg", "pollrate", "mouse", "1000"]).is_ok());
+    }
+
+    #[test]
+    fn keymap_and_device_subcommands_parse() {
+        let parsed = Cli::try_parse_from(["ssgg", "keymap", "set", "A=key:B", "0x39=meta", "--layer", "meta"]).unwrap();
+        let Commands::Keymap {
+            action: KeymapAction::Set { keys, layer, dry_run },
+        } = parsed.command
+        else {
+            panic!("not keymap set");
+        };
+        assert_eq!(keys, ["A=key:B", "0x39=meta"]);
+        assert_eq!(layer, MappingLayer::Meta);
+        assert!(!dry_run);
+
+        let parsed = Cli::try_parse_from(["ssgg", "keymap", "read"]).unwrap();
+        assert!(matches!(
+            parsed.command,
+            Commands::Keymap {
+                action: KeymapAction::Read {
+                    layer: MappingLayer::Base
+                }
+            }
+        ));
+        assert!(Cli::try_parse_from(["ssgg", "keymap", "read", "--layer", "third"]).is_err());
+        assert!(Cli::try_parse_from(["ssgg", "keymap", "set"]).is_err());
+        assert!(Cli::try_parse_from(["ssgg", "keymap", "reset", "--layer", "second", "--dry-run"]).is_ok());
+        assert!(Cli::try_parse_from(["ssgg", "keymap", "macros", "--out", "m.bin"]).is_ok());
+        assert!(Cli::try_parse_from(["ssgg", "keymap", "macros"]).is_err());
+
+        assert!(Cli::try_parse_from(["ssgg", "device", "info"]).is_ok());
+        assert!(Cli::try_parse_from(["ssgg", "device", "meta-key", "ESC", "--dry-run"]).is_ok());
+        let parsed = Cli::try_parse_from(["ssgg", "device", "region", "3", "--yes"]).unwrap();
+        assert!(matches!(
+            parsed.command,
+            Commands::Device {
+                action: DeviceAction::Region {
+                    id: 3,
+                    yes: true,
+                    dry_run: false
+                }
+            }
+        ));
     }
 
     /// clap only checks its own definition (duplicate flags, bad defaults, conflicting shorts) when a

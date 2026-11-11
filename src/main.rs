@@ -13,8 +13,8 @@ use crate::cli::{
     parse_key_name, require_color,
 };
 use crate::commands::{
-    cmd_actuation, cmd_bug_report, cmd_hid_logs, cmd_oled, cmd_onboard, cmd_performance, cmd_status, cmd_test_device,
-    cmd_validate, cmd_verify_performance,
+    cmd_actuation, cmd_bug_report, cmd_device, cmd_hid_logs, cmd_keymap, cmd_oled, cmd_onboard, cmd_performance,
+    cmd_status, cmd_test_device, cmd_validate, cmd_verify_performance,
 };
 use crate::daemon::{cmd_daemon, cmd_server};
 use tracing::{Level, info};
@@ -89,6 +89,16 @@ async fn main() -> Result<()> {
         Commands::Oled { action } => {
             let manager = new_device_manager()?;
             cmd_oled(&manager, action).await?;
+        }
+
+        Commands::Keymap { action } => {
+            let manager = new_device_manager()?;
+            cmd_keymap(&manager, action).await?;
+        }
+
+        Commands::Device { action } => {
+            let manager = new_device_manager()?;
+            cmd_device(&manager, action)?;
         }
 
         Commands::Headset { action } => {
