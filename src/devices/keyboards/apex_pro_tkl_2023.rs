@@ -413,6 +413,27 @@ pub fn gen3_read_requests(slot: u8) -> Result<Vec<Gen3ProfileReadCommand>> {
         .collect())
 }
 
+/// Check the answer to an erase, commit or load frame: `command` echoed, then status byte 0, with or without
+/// hidapi's leading report-ID byte (GG's captures: erase `02 00`, commit `b1 00 03 01`, load `b2 00 03 00`).
+fn check_gen3_reply(step: &'static str, command: u8, reply: Option<Vec<u8>>) -> Result<Gen3Reply> {
+    let Some(bytes) = reply else {
+        return Err(crate::Error::DeviceCommunication(format!(
+            "no input report within {GEN3_REPLY_TIMEOUT_MS} ms after {step}"
+        )));
+    };
+    let body = match bytes.as_slice() {
+        [0x00, rest @ ..] if rest.first() == Some(&command) => rest,
+        all => all,
+    };
+    match body {
+        [echo, 0x00, ..] if *echo == command => Ok((step, Some(bytes))),
+        _ => Err(crate::Error::DeviceCommunication(format!(
+            "unexpected answer after {step}: {:02x?}, expected {command:02x} 00 ...",
+            &bytes[..bytes.len().min(8)]
+        ))),
+    }
+}
+
 /// Split chunk replies (report-ID byte first, as hidapi returns them) into their headers and the blob.
 fn assemble_gen3_replies(replies: &[Vec<u8>]) -> Result<(Vec<Vec<u8>>, Vec<u8>)> {
     let head = Gen3ProfileReadCommand::REPLY_HEADER_LEN;
@@ -427,6 +448,13 @@ fn assemble_gen3_replies(replies: &[Vec<u8>]) -> Result<(Vec<Vec<u8>>, Vec<u8>)>
                 head + chunk
             ))
         })?;
+        // GG's captured chunk replies all start `00 83 00` (report ID, command echo, status 0).
+        if reply[1] != CommandCode::OnboardBufferRead as u8 || reply[2] != 0 {
+            return Err(crate::Error::DeviceCommunication(format!(
+                "profile read chunk {i}: reply header {:02x} {:02x} {:02x}, expected 00 83 00",
+                reply[0], reply[1], reply[2]
+            )));
+        }
         headers.push(reply[..head].to_vec());
         data.extend_from_slice(body);
     }
@@ -833,42 +861,51 @@ impl ApexProTkl2023 {
         self.send_report(&buf[..size], false)
     }
 
-    /// Wait for the input report GG waits for after `step` (5000 ms). Its content is unknown, so it is only
-    /// returned for the log; no answer is an error because the chain must not go on blind.
-    fn gen3_chain_reply(&self, step: &'static str) -> Result<Gen3Reply> {
-        let reply = self
-            .inner
-            .read_profile_input_packet(KEYBOARD_REPORT_SIZE, GEN3_REPLY_TIMEOUT_MS)?;
-        if reply.is_none() {
-            return Err(crate::Error::DeviceCommunication(format!(
-                "no input report within {GEN3_REPLY_TIMEOUT_MS} ms after {step}"
-            )));
-        }
-        Ok((step, reply))
-    }
-
-    /// [EXPERIMENTAL] Write one on-board profile slot (0-4) the way GG does (USBPcap, 2026-11-10): erase
-    /// (`02 01 <fs id>`, wait for an input report), 25 feature-report chunks `03 01 <fs id> ...` 13 ms apart, commit
-    /// (`B1 <slot>`, wait for an input report). **Replaces the slot's stored profile**, and a failure after the
-    /// erase leaves it erased or half written: callers keep a backup first. Wired board only. Not yet replayed
-    /// from `ssgg` on hardware. The answers are returned for the log; what they say is unknown.
-    pub fn write_gen3_profile(&mut self, slot: u8, blob: &[u8; PROFILE_LEN]) -> Result<Vec<Gen3Reply>> {
-        self.require_wired_2023("the Gen3 on-board profile write")?;
-        let erase = ProfileEraseCommand { slot };
-        erase.validate()?;
-        let gap = std::time::Duration::from_millis(Gen3ProfileReadCommand::COMMAND_GAP_MS);
-        let builder = HidReportBuilder::new(HidDeviceType::Keyboard);
-
-        // Stale input reports must not pass for the answers awaited below.
+    /// Discard input reports still queued, so a stale one cannot pass for the answer awaited next.
+    fn drain_input_reports(&self) -> Result<()> {
         for _ in 0..32 {
             if self.inner.read_profile_input_packet(KEYBOARD_REPORT_SIZE, 0)?.is_none() {
                 break;
             }
         }
+        Ok(())
+    }
 
-        let mut replies = Vec::with_capacity(2);
+    /// Wait for the input report GG waits for after `step` (5000 ms) and check it echoes `command` with status
+    /// 0. No answer or another answer is an error because the chain must not go on blind.
+    fn gen3_chain_reply(&self, step: &'static str, command: u8) -> Result<Gen3Reply> {
+        let reply = self
+            .inner
+            .read_profile_input_packet(KEYBOARD_REPORT_SIZE, GEN3_REPLY_TIMEOUT_MS)?;
+        check_gen3_reply(step, command, reply)
+    }
+
+    /// [EXPERIMENTAL] Write one on-board profile slot (0-4) the way GG does (USBPcap, 2026-11-10): erase
+    /// (`02 01 <fs id>`, wait for an input report), 25 feature-report chunks `03 01 <fs id> ...` 13 ms apart, commit
+    /// (`B1 <slot>`, wait for an input report). **Replaces the slot's stored profile**, and a failure after the
+    /// erase leaves it erased or half written (the error says so): callers keep a backup first. Each answer must
+    /// echo its command with status 0, and no chunk follows an erase that was not answered so. Wired board only.
+    /// Not yet replayed from `ssgg` on hardware. The answers are returned for the log.
+    pub fn write_gen3_profile(&mut self, slot: u8, blob: &[u8; PROFILE_LEN]) -> Result<Vec<Gen3Reply>> {
+        self.require_wired_2023("the Gen3 on-board profile write")?;
+        let erase = ProfileEraseCommand { slot };
+        erase.validate()?;
+        self.drain_input_reports()?;
         self.send_gen3_command(erase)?;
-        replies.push(self.gen3_chain_reply("profile erase (02 01)")?);
+        // From here the slot may be erased: every failure says so.
+        self.write_gen3_chain(slot, blob).map_err(|e| {
+            crate::Error::DeviceCommunication(format!(
+                "slot {slot} may be erased or half written after the erase was sent: {e}"
+            ))
+        })
+    }
+
+    /// The part of [`Self::write_gen3_profile`] that follows the erase frame.
+    fn write_gen3_chain(&mut self, slot: u8, blob: &[u8; PROFILE_LEN]) -> Result<Vec<Gen3Reply>> {
+        let gap = std::time::Duration::from_millis(Gen3ProfileReadCommand::COMMAND_GAP_MS);
+        let builder = HidReportBuilder::new(HidDeviceType::Keyboard);
+        let mut replies = Vec::with_capacity(2);
+        replies.push(self.gen3_chain_reply("profile erase (02 01)", CommandCode::ProfileErase as u8)?);
         for chunk in profile_chunks(blob, Gen3ProfileReadCommand::FIRST_PROFILE_FS + slot) {
             std::thread::sleep(gap);
             let mut buf = vec![0u8; PROFILE_CHUNK_REPORT_SIZE];
@@ -876,20 +913,22 @@ impl ApexProTkl2023 {
             self.send_report(&buf[..size], true)?;
         }
         std::thread::sleep(gap);
+        self.drain_input_reports()?;
         self.send_gen3_command(ProfileCommitCommand { slot })?;
-        replies.push(self.gen3_chain_reply("profile commit (B1)")?);
+        replies.push(self.gen3_chain_reply("profile commit (B1)", CommandCode::ProfileCommit as u8)?);
         Ok(replies)
     }
 
-    /// [EXPERIMENTAL] Make the board run on-board profile `slot` (0-4): `B2 <slot>` (wait for an input report),
-    /// then `34 00`, as GG does to activate. **Changes what the keyboard runs now.** Wired board only. Not yet
-    /// replayed from `ssgg` on hardware.
+    /// [EXPERIMENTAL] Make the board run on-board profile `slot` (0-4): `B2 <slot>` (wait for an input report that
+    /// echoes `B2` with status 0), then `34 00`, as GG does to activate. **Changes what the keyboard runs now.**
+    /// Wired board only. Not yet replayed from `ssgg` on hardware.
     pub fn activate_gen3_profile(&mut self, slot: u8) -> Result<Vec<Gen3Reply>> {
         self.require_wired_2023("the Gen3 on-board profile activation")?;
         let load = LoadProfileCommand { slot };
         load.validate()?;
+        self.drain_input_reports()?;
         self.send_gen3_command(load)?;
-        let reply = self.gen3_chain_reply("profile load (B2)")?;
+        let reply = self.gen3_chain_reply("profile load (B2)", CommandCode::LoadProfile as u8)?;
         std::thread::sleep(std::time::Duration::from_millis(Gen3ProfileReadCommand::COMMAND_GAP_MS));
         self.send_gen3_command(SetProfileVolatileCommand { volatile: false })?;
         Ok(vec![reply])
@@ -1663,7 +1702,7 @@ mod tests {
     fn gen3_replies_reassemble_behind_the_header() {
         let replies: Vec<Vec<u8>> = (0..25u8)
             .map(|i| {
-                let mut reply = vec![0x00, 0x83, 0x01];
+                let mut reply = vec![0x00, 0x83, 0x00];
                 reply.extend(std::iter::repeat_n(i, 500));
                 reply.extend([0xEE; 142]);
                 reply
@@ -1672,10 +1711,47 @@ mod tests {
         let (headers, data) = assemble_gen3_replies(&replies).unwrap();
         assert_eq!(data.len(), PROFILE_LEN);
         assert_eq!((data[0], data[499], data[500], data[PROFILE_LEN - 1]), (0, 0, 1, 24));
-        assert!(headers.iter().all(|h| h == &[0x00, 0x83, 0x01]));
+        assert!(headers.iter().all(|h| h == &[0x00, 0x83, 0x00]));
 
         let short = vec![vec![0u8; 400]];
         assert!(assemble_gen3_replies(&short).is_err());
+
+        for (at, value) in [(1, 0x84), (2, 0x01)] {
+            let mut bad = replies.clone();
+            bad[3][at] = value;
+            let err = assemble_gen3_replies(&bad).unwrap_err().to_string();
+            assert!(err.contains("chunk 3"), "{err}");
+        }
+    }
+
+    #[test]
+    fn gen3_chain_replies_must_echo_the_command_with_status_zero() {
+        // GG's captured answers; hidapi may or may not put the report ID in front.
+        for (command, reply) in [
+            (0x02, vec![0x02, 0x00]),
+            (0x02, vec![0x00, 0x02, 0x00]),
+            (0xB1, vec![0xB1, 0x00, 0x03, 0x01]),
+            (0xB2, vec![0x00, 0xB2, 0x00, 0x03, 0x00]),
+        ] {
+            assert!(
+                check_gen3_reply("step", command, Some(reply.clone())).is_ok(),
+                "{reply:02x?}"
+            );
+        }
+        for (command, reply) in [
+            (0x02, vec![0x02, 0x01]),
+            (0x02, vec![0xB1, 0x00]),
+            (0xB1, vec![0x00, 0xB1, 0x05]),
+            (0xB2, vec![0x00, 0x00]),
+            (0xB2, vec![0xB2]),
+            (0xB2, vec![]),
+        ] {
+            assert!(
+                check_gen3_reply("step", command, Some(reply.clone())).is_err(),
+                "{reply:02x?}"
+            );
+        }
+        assert!(check_gen3_reply("step", 0x02, None).is_err(), "no answer");
     }
 
     #[test]

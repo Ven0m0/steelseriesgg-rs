@@ -311,6 +311,10 @@ pub(crate) struct OnboardGen3EncodeArgs {
     /// Where to write the sealed 12,500-byte blob
     #[arg(long, value_name = "FILE")]
     pub(crate) out: PathBuf,
+
+    /// Overwrite --out when it already exists (it may never be the input file)
+    #[arg(long)]
+    pub(crate) force: bool,
 }
 
 /// A gated Gen3 profile write.
@@ -336,8 +340,17 @@ pub(crate) struct OnboardGen3WriteArgs {
     #[arg(long)]
     pub(crate) activate: bool,
 
-    /// Where the pre-write backup of all five slots goes (default: the ssgg config directory,
-    /// `gen3-backups/<slot>-<unix seconds>/`)
+    /// Refuse to write unless the only difference from the slot's current content is its name (and the checksum)
+    #[arg(long)]
+    pub(crate) name_only: bool,
+
+    /// With --dry-run: a blob of the slot's current content to print the field-level diff against
+    /// (a live run always diffs against the slot it just read)
+    #[arg(long, value_name = "BLOB")]
+    pub(crate) compare: Option<PathBuf>,
+
+    /// Where the pre-write backup of all five slots goes: a new or empty directory (default: the ssgg config
+    /// directory, `gen3-backups/<slot>-<unix seconds>/`)
     #[arg(long, value_name = "DIR")]
     pub(crate) backup_dir: Option<PathBuf>,
 }
@@ -373,7 +386,8 @@ pub(crate) struct OnboardGen3RestoreArgs {
     #[arg(long)]
     pub(crate) dry_run: bool,
 
-    /// Where the pre-restore backup of all five slots goes (default: the ssgg config directory)
+    /// Where the pre-restore backup of the readable slots goes: a new or empty directory (default: the ssgg
+    /// config directory)
     #[arg(long, value_name = "DIR")]
     pub(crate) backup_dir: Option<PathBuf>,
 }

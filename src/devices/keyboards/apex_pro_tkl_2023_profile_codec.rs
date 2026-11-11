@@ -442,7 +442,7 @@ impl Gen3Profile {
     /// # Errors
     ///
     /// Returns an error when a table has the wrong number of entries, a mapping sits at another key's
-    /// position, an actuation is outside GG's table, or the name does not fit 24 bytes.
+    /// position, an actuation is outside GG's table, or the name does not fit 24 bytes of printable ASCII.
     pub fn encode(&self) -> Result<[u8; PROFILE_LEN]> {
         check_len("button_mappings", &self.button_mappings, MAPPING_ENTRIES)?;
         check_len("button_meta_mappings", &self.button_meta_mappings, MAPPING_ENTRIES)?;
@@ -460,10 +460,10 @@ impl Gen3Profile {
             )));
         }
         let name = self.name.as_bytes();
-        if name.len() > NAME_LEN || name.contains(&0) {
+        if name.len() > NAME_LEN || name.iter().any(|b| !(0x20..=0x7E).contains(b)) {
             return Err(Error::Profile(format!(
-                "profile name must be at most {NAME_LEN} bytes without NUL, got {}",
-                name.len()
+                "profile name must be at most {NAME_LEN} printable ASCII bytes (0x20-0x7E), got {:?}",
+                self.name
             )));
         }
 
@@ -520,6 +520,226 @@ impl Gen3Profile {
         blob[o::GUID..o::GUID + 16].copy_from_slice(&self.guid.0);
         seal_profile(&mut blob);
         Ok(blob)
+    }
+
+    /// Field-level differences from `self` (the stored profile) to `new`, one line per changed field, mapping
+    /// entry or actuation entry, and one line per raw region with the offsets (inside the region) that differ.
+    /// Empty when the two are equal.
+    #[must_use]
+    pub fn diff(&self, new: &Self) -> Vec<String> {
+        let mut out = Vec::new();
+        fn scalar<T: PartialEq + fmt::Debug>(out: &mut Vec<String>, name: &str, old: &T, new: &T) {
+            if old != new {
+                out.push(format!("{name}: {old:?} -> {new:?}"));
+            }
+        }
+        fn each<T: PartialEq>(
+            out: &mut Vec<String>,
+            name: &str,
+            old: &[T],
+            new: &[T],
+            label: impl Fn(usize, &T) -> String,
+            show: impl Fn(&T) -> String,
+        ) {
+            if old.len() != new.len() {
+                out.push(format!("{name}: {} entries -> {} entries", old.len(), new.len()));
+                return;
+            }
+            for (i, (a, b)) in old.iter().zip(new).enumerate() {
+                if a != b {
+                    out.push(format!("{name}[{}]: {} -> {}", label(i, a), show(a), show(b)));
+                }
+            }
+        }
+        fn raw(out: &mut Vec<String>, name: &str, old: &[u8], new: &[u8]) {
+            let differing: Vec<usize> = (0..old.len().min(new.len())).filter(|&i| old[i] != new[i]).collect();
+            let Some(&first) = differing.first() else {
+                return;
+            };
+            let (mut runs, mut start, mut prev) = (Vec::new(), first, first);
+            for &at in &differing[1..] {
+                if at != prev + 1 {
+                    runs.push((start, prev));
+                    start = at;
+                }
+                prev = at;
+            }
+            runs.push((start, prev));
+            let shown: Vec<String> = runs
+                .iter()
+                .take(6)
+                .map(|&(a, b)| {
+                    if a == b {
+                        format!("+{a}")
+                    } else {
+                        format!("+{a}..=+{b}")
+                    }
+                })
+                .collect();
+            let more = if runs.len() > 6 { ", ..." } else { "" };
+            out.push(format!(
+                "{name}: {} bytes differ at offsets {}{more}",
+                differing.len(),
+                shown.join(", ")
+            ));
+        }
+        let binding_label = |_: usize, b: &Binding| format!("{:#04x}", b.hid);
+        let binding_show = |b: &Binding| b.key.to_string();
+        let index_label = |i: usize, _: &Actuation| i.to_string();
+        let byte_label = |i: usize, _: &u8| i.to_string();
+        let byte_show = |b: &u8| b.to_string();
+
+        scalar(&mut out, "name", &self.name, &new.name);
+        scalar(
+            &mut out,
+            "lock_keys_brightness",
+            &self.lighting.lock_keys_brightness,
+            &new.lighting.lock_keys_brightness,
+        );
+        scalar(
+            &mut out,
+            "lock_keys_color",
+            &self.lighting.lock_keys_color,
+            &new.lighting.lock_keys_color,
+        );
+        scalar(
+            &mut out,
+            "lock_keys_phys_hids",
+            &self.lighting.lock_keys_phys_hids,
+            &new.lighting.lock_keys_phys_hids,
+        );
+        scalar(
+            &mut out,
+            "meta_keys_brightness",
+            &self.lighting.meta_keys_brightness,
+            &new.lighting.meta_keys_brightness,
+        );
+        scalar(
+            &mut out,
+            "meta_keys_color",
+            &self.lighting.meta_keys_color,
+            &new.lighting.meta_keys_color,
+        );
+        raw(
+            &mut out,
+            "meta_keys_phys_hids_msk",
+            &self.lighting.meta_keys_phys_hids_msk.0,
+            &new.lighting.meta_keys_phys_hids_msk.0,
+        );
+        scalar(
+            &mut out,
+            "meta_background_dimmer",
+            &self.lighting.meta_background_dimmer,
+            &new.lighting.meta_background_dimmer,
+        );
+        raw(
+            &mut out,
+            "lighting.reserved",
+            &self.lighting.reserved.0,
+            &new.lighting.reserved.0,
+        );
+        scalar(
+            &mut out,
+            "meta_key_phys_hid",
+            &self.meta_key_phys_hid,
+            &new.meta_key_phys_hid,
+        );
+        each(
+            &mut out,
+            "button_mappings",
+            &self.button_mappings,
+            &new.button_mappings,
+            binding_label,
+            binding_show,
+        );
+        each(
+            &mut out,
+            "button_meta_mappings",
+            &self.button_meta_mappings,
+            &new.button_meta_mappings,
+            binding_label,
+            binding_show,
+        );
+        each(
+            &mut out,
+            "actuation",
+            &self.actuation,
+            &new.actuation,
+            index_label,
+            Actuation::to_string,
+        );
+        scalar(&mut out, "zone_levels", &self.zone_levels, &new.zone_levels);
+        raw(
+            &mut out,
+            "zone_key_subscriptions",
+            &self.zone_key_subscriptions.0,
+            &new.zone_key_subscriptions.0,
+        );
+        each(
+            &mut out,
+            "second_actuation",
+            &self.second_actuation,
+            &new.second_actuation,
+            index_label,
+            Actuation::to_string,
+        );
+        each(
+            &mut out,
+            "release_mode",
+            &self.release_mode,
+            &new.release_mode,
+            byte_label,
+            byte_show,
+        );
+        each(
+            &mut out,
+            "adaptive_dist_10",
+            &self.adaptive_dist_10,
+            &new.adaptive_dist_10,
+            byte_label,
+            byte_show,
+        );
+        scalar(
+            &mut out,
+            "protection_dur_ms",
+            &self.protection_dur_ms,
+            &new.protection_dur_ms,
+        );
+        each(
+            &mut out,
+            "protection_dist_10",
+            &self.protection_dist_10,
+            &new.protection_dist_10,
+            byte_label,
+            byte_show,
+        );
+        each(
+            &mut out,
+            "ma_mappings",
+            &self.ma_mappings,
+            &new.ma_mappings,
+            binding_label,
+            binding_show,
+        );
+        raw(&mut out, "oled", &self.oled.0, &new.oled.0);
+        each(
+            &mut out,
+            "rapid_tap",
+            &self.rapid_tap,
+            &new.rapid_tap,
+            |i, _| i.to_string(),
+            |p| format!("{p:?}"),
+        );
+        scalar(
+            &mut out,
+            "rapid_tap_enable",
+            &self.rapid_tap_enable,
+            &new.rapid_tap_enable,
+        );
+        raw(&mut out, "padding", &self.padding.0, &new.padding.0);
+        raw(&mut out, "macro_events", &self.macro_events.0, &new.macro_events.0);
+        raw(&mut out, "guid", &self.guid.0, &new.guid.0);
+        out
     }
 
     /// The decode report `ssgg onboard gen3-decode --json` prints.
@@ -772,6 +992,40 @@ mod tests {
         assert!(Gen3Profile::from_json(&json.to_string()).is_err());
     }
 
+    #[test]
+    fn names_must_be_printable_ascii_within_24_bytes() {
+        let mut profile = Gen3Profile::decode(&synthetic()[..]).unwrap();
+        for ok in ["", "main", " ~", &"x".repeat(24)] {
+            profile.name = ok.to_string();
+            assert!(profile.encode().is_ok(), "{ok:?}");
+        }
+        for bad in ["tab\there", "nul\0", "caf\u{e9}", "\u{7f}", "line\n", &"x".repeat(25)] {
+            profile.name = bad.to_string();
+            assert!(profile.encode().is_err(), "{bad:?}");
+        }
+    }
+
+    #[test]
+    fn diff_is_empty_for_equal_profiles_and_names_changed_entries() {
+        let old = Gen3Profile::decode(&synthetic()[..]).unwrap();
+        assert!(old.diff(&old).is_empty());
+        let mut new = old.clone();
+        new.button_mappings[3].key = KeyAction::Key(0x04);
+        new.actuation[0] = Actuation::Raw { h: 1, l: 2 };
+        new.macro_events.0[0] ^= 1;
+        new.macro_events.0[9] ^= 1;
+        let diff = old.diff(&new).join("\n");
+        assert!(
+            diff.contains(&format!("button_mappings[{:#04x}]:", DEVICE_KEY_HID[3])),
+            "{diff}"
+        );
+        assert!(diff.contains("actuation[0]:") && diff.contains("raw:1:2"), "{diff}");
+        assert!(
+            diff.contains("macro_events: 2 bytes differ at offsets +0, +9"),
+            "{diff}"
+        );
+    }
+
     /// Round-trips every `*.bin` in `SSGG_GEN3_PROFILE_DIR` (blobs read back from a keyboard) byte for byte.
     /// Ignored because it needs saved read-backs: `SSGG_GEN3_PROFILE_DIR=<dir> cargo test -- --ignored`.
     #[test]
@@ -791,6 +1045,11 @@ mod tests {
         assert!(!files.is_empty(), "no .bin files in {dir}");
         for path in files {
             let bytes = std::fs::read(&path).unwrap();
+            if bytes.len() != PROFILE_LEN {
+                // The capture directory also holds other dumps (a 9,600-byte macro read).
+                println!("{}: {} bytes, not a profile blob, skipped", path.display(), bytes.len());
+                continue;
+            }
             let profile = check_lossless(&bytes).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
             println!("{}: {} ok, name {:?}", path.display(), bytes.len(), profile.name);
         }

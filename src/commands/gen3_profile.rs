@@ -13,14 +13,14 @@ use steelseries_gg::devices::hid_reports::{
     ProfileEraseCommand, SetProfileVolatileCommand,
 };
 use steelseries_gg::devices::keyboards::Keyboard;
-use steelseries_gg::devices::keyboards::apex_pro_tkl_2023::Gen3Reply;
+use steelseries_gg::devices::keyboards::apex_pro_tkl_2023::{Gen3ProfileRead, Gen3Reply};
 use steelseries_gg::devices::keyboards::apex_pro_tkl_2023_profile::{PROFILE_LEN, profile_chunks};
 use steelseries_gg::devices::keyboards::apex_pro_tkl_2023_profile_codec::{
-    Actuation, DEVICE_KEY_HID, Gen3Profile, check_lossless,
+    Actuation, DEVICE_KEY_HID, Gen3Profile, NAME_LEN, check_lossless, offsets,
 };
 use steelseries_gg::devices::keyboards::key_action::KeyAction;
 use steelseries_gg::devices::{DeviceManager, DeviceType, HidDeviceType, product_ids};
-use steelseries_gg::fs_utils::secure_write;
+use steelseries_gg::fs_utils::{secure_open, secure_write};
 use steelseries_gg::{Error, Result};
 
 use crate::cli::{
@@ -45,6 +45,86 @@ fn require_yes(yes: bool, what: &str) -> Result<()> {
     Err(Error::InvalidConfig(format!(
         "{what} changes what the keyboard stores or runs; nothing was sent. Pass --yes to authorise it"
     )))
+}
+
+/// Create `path`, refusing to touch a file that is already there.
+fn write_new(path: &Path, bytes: &[u8]) -> Result<()> {
+    use std::io::Write;
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let mut file = secure_open(path, &options).map_err(|e| {
+        Error::FileSystemError(format!(
+            "{}: {e} (an existing file is never overwritten)",
+            path.display()
+        ))
+    })?;
+    file.write_all(bytes)?;
+    Ok(())
+}
+
+/// A backup directory must be new or empty, so one run can never overwrite an earlier run's backup.
+fn ensure_fresh_dir(dir: &Path) -> Result<()> {
+    if !dir.exists() {
+        return Ok(());
+    }
+    let mut entries = std::fs::read_dir(dir).map_err(|e| Error::Other(format!("read {}: {e}", dir.display())))?;
+    if entries.next().is_some() {
+        return Err(Error::FileSystemError(format!(
+            "{} already holds files; pass a new or empty --backup-dir. Nothing was sent",
+            dir.display()
+        )));
+    }
+    Ok(())
+}
+
+/// The SteelSeries processes (GG's engine, client, ...) among `names`.
+fn steelseries_processes<S: AsRef<str>>(names: impl IntoIterator<Item = S>) -> Vec<String> {
+    let mut found: Vec<String> = names
+        .into_iter()
+        .map(|n| n.as_ref().to_string())
+        .filter(|n| n.to_ascii_lowercase().starts_with("steelseries"))
+        .collect();
+    found.sort();
+    found.dedup();
+    found
+}
+
+/// GG rewrites the board about 19 times a second and would race a profile write, so the write commands refuse
+/// while any SteelSeries process runs.
+fn refuse_while_gg_runs(names: &[String]) -> Result<()> {
+    let running = steelseries_processes(names);
+    if running.is_empty() {
+        return Ok(());
+    }
+    Err(Error::InvalidConfig(format!(
+        "SteelSeries GG is running ({}); it rewrites the keyboard and would race this command. Close GG \
+         (including its tray icon) and run again. Nothing was sent",
+        running.join(", ")
+    )))
+}
+
+/// Names of the running processes. Windows only: GG has no Linux build.
+#[cfg(windows)]
+fn running_process_names() -> Vec<String> {
+    use sysinfo::{ProcessesToUpdate, System};
+    let Ok(mut sys) = System::new() else {
+        return Vec::new();
+    };
+    sys.refresh_processes(ProcessesToUpdate::All, true);
+    sys.processes()
+        .values()
+        .map(|p| p.name().to_string_lossy().into_owned())
+        .collect()
+}
+
+#[cfg(not(windows))]
+fn running_process_names() -> Vec<String> {
+    Vec::new()
 }
 
 /// The bytes to write: a blob (it must decode with a matching checksum) or a JSON decode report (encoded and
@@ -128,6 +208,7 @@ fn plan_lines(slot: u8, blob: &[u8; PROFILE_LEN], backup: &Path, activate: bool)
 
 /// The keyboard this family's commands run on: the first wired Apex Pro TKL 2023.
 fn open_wired_2023(manager: Option<&mut DeviceManager>) -> Result<(Box<dyn Keyboard>, String)> {
+    refuse_while_gg_runs(&running_process_names())?;
     let Some(manager) = manager else {
         return Err(Error::Other("the Gen3 profile command needs a device".to_string()));
     };
@@ -138,41 +219,121 @@ fn open_wired_2023(manager: Option<&mut DeviceManager>) -> Result<(Box<dyn Keybo
         .ok_or_else(|| Error::DeviceNotFound("no wired Apex Pro TKL 2023 (0x1628) connected".to_string()))?;
     let name = info.name.to_string();
     let keyboard = manager.open_keyboard(info)?;
-    crate::warn_if_gg_engine_running();
     Ok((keyboard, name))
 }
 
-/// Read all five slots and save each as `<dir>/slot<N>.bin` before anything is written.
-fn backup_all(keyboard: &mut dyn Keyboard, dir: &Path) -> Result<Vec<Vec<u8>>> {
+/// Read all five slots and save each readable one as `<dir>/slot<N>.bin` (never over an existing file) before
+/// anything is written. A slot in `tolerated` may fail to read or fail its checksum (the slot being repaired by
+/// `gen3-restore`): it is skipped, a garbled read is kept as `slot<N>.damaged.bin`, and its entry is `None`.
+/// Any other slot that does not read cleanly aborts the run.
+fn backup_slots(
+    read: &mut dyn FnMut(u8) -> Result<Gen3ProfileRead>,
+    dir: &Path,
+    tolerated: &[u8],
+) -> Result<Vec<Option<Vec<u8>>>> {
     std::fs::create_dir_all(dir).map_err(|e| Error::Other(format!("create {}: {e}", dir.display())))?;
     let mut reads = Vec::with_capacity(usize::from(SLOTS));
     for slot in 0..SLOTS {
-        let read = keyboard.read_gen3_profile(slot)?;
-        if !read.checksum_ok() {
-            return Err(Error::Profile(format!(
-                "slot {slot} read back with a wrong checksum; nothing was written"
-            )));
+        match read(slot) {
+            Ok(r) if r.data.len() == PROFILE_LEN && r.checksum_ok() => {
+                let path = dir.join(format!("slot{slot}.bin"));
+                write_new(&path, &r.data)?;
+                println!(
+                    "slot {slot} read ({} bytes) and saved to {}",
+                    r.data.len(),
+                    path.display()
+                );
+                reads.push(Some(r.data));
+            }
+            Ok(r) if tolerated.contains(&slot) => {
+                if r.data.is_empty() {
+                    eprintln!("warning: slot {slot} read back empty");
+                } else {
+                    let path = dir.join(format!("slot{slot}.damaged.bin"));
+                    write_new(&path, &r.data)?;
+                    eprintln!(
+                        "warning: slot {slot} read back damaged ({} bytes, checksum {}); raw read kept in {}",
+                        r.data.len(),
+                        if r.checksum_ok() { "ok" } else { "wrong" },
+                        path.display()
+                    );
+                }
+                reads.push(None);
+            }
+            Ok(_) => {
+                return Err(Error::Profile(format!(
+                    "slot {slot} read back with a wrong checksum; nothing was written"
+                )));
+            }
+            Err(e) if tolerated.contains(&slot) => {
+                eprintln!("warning: slot {slot} could not be read: {e}");
+                reads.push(None);
+            }
+            Err(e) => return Err(e),
         }
-        let path = dir.join(format!("slot{slot}.bin"));
-        secure_write(&path, &read.data)?;
-        println!(
-            "slot {slot} read ({} bytes) and saved to {}",
-            read.data.len(),
-            path.display()
-        );
-        reads.push(read.data);
     }
     Ok(reads)
 }
 
 /// Write gate (b): the slot about to be replaced must be a blob the codec reproduces exactly.
-fn check_target_is_lossless(reads: &[Vec<u8>], slot: u8) -> Result<()> {
+fn check_target_is_lossless(reads: &[Option<Vec<u8>>], slot: u8) -> Result<()> {
     let read = reads
         .get(usize::from(slot))
-        .ok_or_else(|| Error::Profile(format!("slot {slot} was not read")))?;
+        .and_then(Option::as_ref)
+        .ok_or_else(|| Error::Profile(format!("slot {slot} was not read; nothing was written")))?;
     check_lossless(read)
         .map(|_| ())
         .map_err(|e| Error::Profile(format!("slot {slot}: {e}; nothing was written")))
+}
+
+/// The field-level changes from the stored `old` blob to the `new` one, as printable lines.
+fn diff_lines(old: &[u8], new: &[u8]) -> Vec<String> {
+    match (Gen3Profile::decode_forensic(old), Gen3Profile::decode_forensic(new)) {
+        (Ok((old, _)), Ok((new, _))) => {
+            let diff = old.diff(&new);
+            if diff.is_empty() {
+                vec!["no field differs".to_string()]
+            } else {
+                diff
+            }
+        }
+        (Err(e), _) | (_, Err(e)) => vec![format!("no diff: {e}")],
+    }
+}
+
+fn print_diff(slot: u8, old: Option<&[u8]>, new: &[u8]) {
+    match old {
+        Some(old) => {
+            println!("slot {slot}: changes from what the board holds to what will be written:");
+            for line in diff_lines(old, new) {
+                println!("  {line}");
+            }
+        }
+        None => println!("slot {slot}: the board's current content is not readable, no diff"),
+    }
+}
+
+/// `--name-only`: the blobs may differ only in the name field and the checksum.
+fn only_name_and_crc_differ(old: &[u8], new: &[u8]) -> bool {
+    let name = offsets::NAME..offsets::NAME + NAME_LEN;
+    let crc = offsets::CRC..offsets::CRC + 4;
+    old.len() == new.len()
+        && old
+            .iter()
+            .zip(new)
+            .enumerate()
+            .all(|(i, (a, b))| a == b || name.contains(&i) || crc.contains(&i))
+}
+
+/// The diff and `--name-only` step of a write, between the backup and the first frame.
+fn review_change(slot: u8, current: Option<&[u8]>, new: &[u8], name_only: bool) -> Result<()> {
+    print_diff(slot, current, new);
+    if name_only && !current.is_some_and(|old| only_name_and_crc_differ(old, new)) {
+        return Err(Error::InvalidConfig(format!(
+            "--name-only: more than the name of slot {slot} differs from what the board holds; nothing was written"
+        )));
+    }
+    Ok(())
 }
 
 fn print_replies(replies: &[Gen3Reply]) {
@@ -184,23 +345,38 @@ fn print_replies(replies: &[Gen3Reply]) {
     }
 }
 
+/// What to tell the user when a write failed after the erase may have been sent.
+fn recovery_error(cause: Error, retry_from: &Path, slot: u8) -> Error {
+    Error::DeviceCommunication(format!(
+        "{cause}\nslot {slot} may be erased or half written. Restore it with: \
+         ssgg onboard gen3-restore --from {} --slot {slot} --yes",
+        retry_from.display()
+    ))
+}
+
 /// Write one slot on an open keyboard, then read it back and compare. The caller has made the backup and
-/// passed the guards.
-fn write_and_verify(keyboard: &mut dyn Keyboard, slot: u8, blob: &[u8; PROFILE_LEN], activate: bool) -> Result<()> {
-    let replies = keyboard.write_gen3_profile(slot, blob)?;
+/// passed the guards. `retry_from` is the directory a recovery `gen3-restore` takes its `slot<N>.bin` from.
+fn write_and_verify(
+    keyboard: &mut dyn Keyboard,
+    slot: u8,
+    blob: &[u8; PROFILE_LEN],
+    activate: bool,
+    retry_from: &Path,
+) -> Result<()> {
+    let fail = |cause: Error| recovery_error(cause, retry_from, slot);
+    let replies = keyboard.write_gen3_profile(slot, blob).map_err(fail)?;
     print_replies(&replies);
-    let back = keyboard.read_gen3_profile(slot)?;
-    if let Some(at) = back.data.iter().zip(blob.iter()).position(|(a, b)| a != b) {
-        return Err(Error::DeviceCommunication(format!(
-            "slot {slot} read back differs from what was written at offset {at}; the slot was NOT activated, \
-             restore with gen3-restore"
-        )));
-    }
+    let back = keyboard.read_gen3_profile(slot).map_err(fail)?;
     if back.data.len() != PROFILE_LEN {
-        return Err(Error::DeviceCommunication(format!(
+        return Err(fail(Error::DeviceCommunication(format!(
             "slot {slot} read back {} bytes, expected {PROFILE_LEN}",
             back.data.len()
-        )));
+        ))));
+    }
+    if let Some(at) = back.data.iter().zip(blob.iter()).position(|(a, b)| a != b) {
+        return Err(fail(Error::DeviceCommunication(format!(
+            "slot {slot} read back differs from what was written at offset {at}; the slot was NOT activated"
+        ))));
     }
     println!("slot {slot} written and read back identical");
     if activate {
@@ -266,10 +442,32 @@ fn summary_lines(profile: &Gen3Profile, crc_ok: bool) -> Vec<String> {
     ]
 }
 
+/// `gen3-encode --out` never replaces its own input, and replaces any other existing file only with `--force`.
+fn check_encode_target(input: &Path, out: &Path, force: bool) -> Result<()> {
+    let same = match (input.canonicalize(), out.canonicalize()) {
+        (Ok(a), Ok(b)) => a == b,
+        _ => input == out,
+    };
+    if same {
+        return Err(Error::InvalidConfig(format!(
+            "--out {} is the input file; pick another path",
+            out.display()
+        )));
+    }
+    if out.exists() && !force {
+        return Err(Error::FileSystemError(format!(
+            "{} already exists; pass --force to overwrite it",
+            out.display()
+        )));
+    }
+    Ok(())
+}
+
 pub(crate) fn cmd_gen3_encode(args: &OnboardGen3EncodeArgs) -> Result<()> {
     let text = String::from_utf8(read_file(&args.json)?)
         .map_err(|e| Error::Profile(format!("{}: {e}", args.json.display())))?;
     let blob = Gen3Profile::from_json(&text)?.encode()?;
+    check_encode_target(&args.json, &args.out, args.force)?;
     secure_write(&args.out, blob)?;
     println!(
         "{PROFILE_LEN}-byte blob with a fresh checksum written to {}",
@@ -285,15 +483,30 @@ pub(crate) fn cmd_gen3_write(manager: Option<&mut DeviceManager>, args: OnboardG
         for line in plan_lines(args.slot, &blob, &backup, args.activate)? {
             println!("{line}");
         }
+        match &args.compare {
+            Some(path) => {
+                let current = read_file(path)?;
+                review_change(args.slot, Some(&current), &blob[..], args.name_only)?;
+            }
+            None if args.name_only => {
+                return Err(Error::InvalidConfig(
+                    "--name-only with --dry-run needs --compare <blob of the slot's current content>".to_string(),
+                ));
+            }
+            None => println!("no diff: pass --compare <blob of the slot's current content> to print one"),
+        }
         return Ok(());
     }
     require_yes(args.yes, "gen3-write")?;
+    ensure_fresh_dir(&backup)?;
 
     let (mut keyboard, name) = open_wired_2023(manager)?;
     println!("writing slot {} on {name}", args.slot);
-    let reads = backup_all(keyboard.as_mut(), &backup)?;
+    let reads = backup_slots(&mut |slot| keyboard.read_gen3_profile(slot), &backup, &[])?;
     check_target_is_lossless(&reads, args.slot)?;
-    write_and_verify(keyboard.as_mut(), args.slot, &blob, args.activate)
+    let current = reads.get(usize::from(args.slot)).and_then(Option::as_deref);
+    review_change(args.slot, current, &blob[..], args.name_only)?;
+    write_and_verify(keyboard.as_mut(), args.slot, &blob, args.activate, &backup)
 }
 
 pub(crate) fn cmd_gen3_activate(manager: Option<&mut DeviceManager>, args: &OnboardGen3ActivateArgs) -> Result<()> {
@@ -304,23 +517,32 @@ pub(crate) fn cmd_gen3_activate(manager: Option<&mut DeviceManager>, args: &Onbo
     Ok(())
 }
 
-pub(crate) fn cmd_gen3_restore(manager: Option<&mut DeviceManager>, args: OnboardGen3RestoreArgs) -> Result<()> {
-    let slots: Vec<u8> = match args.slot {
+/// The `slot<N>.bin` files `gen3-restore` takes, each checked as a restore source: 12,500 bytes, known schema,
+/// its own checksum and a byte-exact codec round trip.
+fn load_restore_blobs(from: &Path, only: Option<u8>) -> Result<Vec<(u8, Box<[u8; PROFILE_LEN]>)>> {
+    let slots: Vec<u8> = match only {
         Some(slot) => vec![slot],
         None => (0..SLOTS)
-            .filter(|slot| args.from.join(format!("slot{slot}.bin")).is_file())
+            .filter(|slot| from.join(format!("slot{slot}.bin")).is_file())
             .collect(),
     };
     if slots.is_empty() {
-        return Err(Error::InvalidConfig(format!(
-            "no slot<N>.bin in {}",
-            args.from.display()
-        )));
+        return Err(Error::InvalidConfig(format!("no slot<N>.bin in {}", from.display())));
     }
-    let mut blobs = Vec::with_capacity(slots.len());
-    for &slot in &slots {
-        blobs.push((slot, load_blob(&args.from.join(format!("slot{slot}.bin")))?));
-    }
+    slots
+        .into_iter()
+        .map(|slot| {
+            let path = from.join(format!("slot{slot}.bin"));
+            let blob = load_blob(&path)?;
+            check_lossless(&blob[..]).map_err(|e| Error::Profile(format!("{}: {e}", path.display())))?;
+            Ok((slot, blob))
+        })
+        .collect()
+}
+
+pub(crate) fn cmd_gen3_restore(manager: Option<&mut DeviceManager>, args: OnboardGen3RestoreArgs) -> Result<()> {
+    let blobs = load_restore_blobs(&args.from, args.slot)?;
+    let slots: Vec<u8> = blobs.iter().map(|(slot, _)| *slot).collect();
     let backup = backup_dir(args.backup_dir.as_deref(), "restore")?;
     if args.dry_run {
         for (slot, blob) in &blobs {
@@ -331,15 +553,18 @@ pub(crate) fn cmd_gen3_restore(manager: Option<&mut DeviceManager>, args: Onboar
         return Ok(());
     }
     require_yes(args.yes, "gen3-restore")?;
+    ensure_fresh_dir(&backup)?;
 
     let (mut keyboard, name) = open_wired_2023(manager)?;
     println!("restoring slots {slots:?} on {name}");
-    let reads = backup_all(keyboard.as_mut(), &backup)?;
-    for (slot, _) in &blobs {
-        check_target_is_lossless(&reads, *slot)?;
+    // A slot being repaired may be unreadable or fail its checksum: the saved file is validated instead.
+    let reads = backup_slots(&mut |slot| keyboard.read_gen3_profile(slot), &backup, &slots)?;
+    for (slot, blob) in &blobs {
+        let current = reads.get(usize::from(*slot)).and_then(Option::as_deref);
+        print_diff(*slot, current, &blob[..]);
     }
     for (slot, blob) in &blobs {
-        write_and_verify(keyboard.as_mut(), *slot, blob, false)?;
+        write_and_verify(keyboard.as_mut(), *slot, blob, false, &args.from)?;
     }
     Ok(())
 }
@@ -407,14 +632,192 @@ mod tests {
 
     #[test]
     fn target_slot_must_reencode_exactly() {
-        let good = sealed_blob().to_vec();
+        let good = Some(sealed_blob().to_vec());
         let mut lossy = sealed_blob();
         lossy[4 + 10] = b'x'; // name byte behind the NUL: the codec cannot keep it
         seal_profile(&mut lossy);
 
-        let reads = vec![good.clone(), lossy.to_vec(), good.clone(), good.clone(), good];
+        let reads = vec![good.clone(), Some(lossy.to_vec()), good.clone(), None, good];
         assert!(check_target_is_lossless(&reads, 0).is_ok());
         assert!(check_target_is_lossless(&reads, 1).is_err());
+        assert!(check_target_is_lossless(&reads, 3).is_err(), "an unreadable slot");
         assert!(check_target_is_lossless(&reads[..2], 4).is_err(), "an unread slot");
+    }
+
+    fn read_of(blob: &[u8]) -> Result<Gen3ProfileRead> {
+        Ok(Gen3ProfileRead {
+            firmware: None,
+            headers: Vec::new(),
+            data: blob.to_vec(),
+        })
+    }
+
+    #[test]
+    fn backup_aborts_on_a_bad_slot_unless_it_is_the_one_being_restored() {
+        let good = sealed_blob();
+        let mut bad = sealed_blob();
+        bad[2000] ^= 1; // checksum no longer matches
+
+        let dir = tempfile::tempdir().unwrap();
+        let strict = dir.path().join("strict");
+        let mut read = |slot: u8| if slot == 2 { read_of(&bad) } else { read_of(&good) };
+        assert!(
+            backup_slots(&mut read, &strict, &[]).is_err(),
+            "write: any bad slot aborts"
+        );
+
+        let restore = dir.path().join("restore");
+        let reads = backup_slots(&mut read, &restore, &[2]).unwrap();
+        assert_eq!(
+            reads.iter().map(Option::is_some).collect::<Vec<_>>(),
+            [true, true, false, true, true]
+        );
+        assert!(restore.join("slot0.bin").is_file() && restore.join("slot4.bin").is_file());
+        assert!(!restore.join("slot2.bin").exists());
+        assert_eq!(std::fs::read(restore.join("slot2.damaged.bin")).unwrap(), bad.to_vec());
+
+        let failing = dir.path().join("failing");
+        let mut read = |slot: u8| {
+            if slot == 3 {
+                Err(Error::DeviceCommunication("no answer".to_string()))
+            } else {
+                read_of(&good)
+            }
+        };
+        assert!(
+            backup_slots(&mut read, &failing, &[0]).is_err(),
+            "an untolerated read failure aborts"
+        );
+        let tolerated = dir.path().join("tolerated");
+        let reads = backup_slots(&mut read, &tolerated, &[3]).unwrap();
+        assert!(reads[3].is_none() && reads[4].is_some());
+    }
+
+    #[test]
+    fn restore_sources_are_validated_before_the_keyboard_is_touched() {
+        let dir = tempfile::tempdir().unwrap();
+        let good = sealed_blob();
+        std::fs::write(dir.path().join("slot1.bin"), good).unwrap();
+        let found = load_restore_blobs(dir.path(), None).unwrap();
+        assert_eq!(found.iter().map(|(slot, _)| *slot).collect::<Vec<_>>(), [1]);
+
+        let mut lossy = sealed_blob();
+        lossy[4 + 10] = b'x';
+        seal_profile(&mut lossy);
+        std::fs::write(dir.path().join("slot2.bin"), lossy).unwrap();
+        let mut bad_crc = sealed_blob();
+        bad_crc[2000] ^= 1;
+        std::fs::write(dir.path().join("slot3.bin"), bad_crc).unwrap();
+        std::fs::write(dir.path().join("slot4.bin"), &good[..100]).unwrap();
+        assert!(
+            load_restore_blobs(dir.path(), Some(2)).is_err(),
+            "not a lossless round trip"
+        );
+        assert!(load_restore_blobs(dir.path(), Some(3)).is_err(), "own checksum wrong");
+        assert!(load_restore_blobs(dir.path(), Some(4)).is_err(), "wrong length");
+        assert!(load_restore_blobs(dir.path(), Some(0)).is_err(), "missing file");
+        assert!(load_restore_blobs(&dir.path().join("none"), None).is_err());
+    }
+
+    #[test]
+    fn backups_and_encode_output_never_overwrite() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("slot0.bin");
+        write_new(&file, b"first").unwrap();
+        assert!(write_new(&file, b"second").is_err());
+        assert_eq!(std::fs::read(&file).unwrap(), b"first");
+
+        assert!(ensure_fresh_dir(dir.path()).is_err(), "a directory with files");
+        assert!(ensure_fresh_dir(&dir.path().join("new")).is_ok());
+        let empty = dir.path().join("empty");
+        std::fs::create_dir(&empty).unwrap();
+        assert!(ensure_fresh_dir(&empty).is_ok());
+
+        let json = dir.path().join("in.json");
+        let out = dir.path().join("out.bin");
+        std::fs::write(&json, "{}").unwrap();
+        assert!(check_encode_target(&json, &out, false).is_ok());
+        std::fs::write(&out, "x").unwrap();
+        assert!(check_encode_target(&json, &out, false).is_err(), "exists, no --force");
+        assert!(check_encode_target(&json, &out, true).is_ok());
+        assert!(check_encode_target(&json, &json, true).is_err(), "never its own input");
+    }
+
+    #[test]
+    fn steelseries_processes_are_refused() {
+        let names = [
+            "explorer.exe",
+            "SteelSeriesEngine.exe",
+            "steelseriesgg.exe",
+            "SteelSeriesEngine.exe",
+            "ssgg.exe",
+        ];
+        assert_eq!(
+            steelseries_processes(names),
+            ["SteelSeriesEngine.exe", "steelseriesgg.exe"]
+        );
+        let running: Vec<String> = names.iter().map(ToString::to_string).collect();
+        let err = refuse_while_gg_runs(&running).unwrap_err().to_string();
+        assert!(
+            err.contains("SteelSeriesEngine.exe") && err.contains("Nothing was sent"),
+            "{err}"
+        );
+        assert!(refuse_while_gg_runs(&running[..1]).is_ok());
+        assert!(refuse_while_gg_runs(&[]).is_ok());
+    }
+
+    #[test]
+    fn name_only_guard_allows_only_name_and_checksum() {
+        let old = sealed_blob();
+        let mut renamed = Gen3Profile::decode(&old).unwrap();
+        renamed.name = "renamed".to_string();
+        let renamed = renamed.encode().unwrap();
+        assert!(only_name_and_crc_differ(&old, &renamed));
+        assert!(review_change(0, Some(&old), &renamed, true).is_ok());
+
+        let mut other = Gen3Profile::decode(&renamed).unwrap();
+        other.lighting.lock_keys_brightness = 7;
+        let other = other.encode().unwrap();
+        assert!(!only_name_and_crc_differ(&old, &other));
+        assert!(review_change(0, Some(&old), &other, true).is_err());
+        assert!(
+            review_change(0, Some(&old), &other, false).is_ok(),
+            "without the flag a diff is only printed"
+        );
+        assert!(review_change(0, None, &renamed, true).is_err(), "unreadable slot");
+    }
+
+    #[test]
+    fn diff_lines_name_each_changed_field() {
+        let old = sealed_blob();
+        let mut changed = Gen3Profile::decode(&old).unwrap();
+        changed.name = "new".to_string();
+        changed.lighting.lock_keys_color = [1, 2, 3];
+        changed.release_mode[4] = 9;
+        changed.oled.0[10] = 0xAA;
+        changed.oled.0[11] = 0xBB;
+        let lines = diff_lines(&old, &changed.encode().unwrap()).join("\n");
+        assert!(lines.contains("name: \"\" -> \"new\""), "{lines}");
+        assert!(lines.contains("lock_keys_color: [0, 0, 0] -> [1, 2, 3]"), "{lines}");
+        assert!(lines.contains("release_mode[4]: 0 -> 9"), "{lines}");
+        assert!(lines.contains("oled: 2 bytes differ at offsets +10..=+11"), "{lines}");
+        assert_eq!(diff_lines(&old, &old), ["no field differs"]);
+        assert!(diff_lines(&old[..10], &old)[0].starts_with("no diff"));
+    }
+
+    #[test]
+    fn failures_after_the_erase_name_the_restore_command() {
+        let err = recovery_error(
+            Error::DeviceCommunication("boom".to_string()),
+            Path::new("backups/1"),
+            2,
+        )
+        .to_string();
+        assert!(err.contains("boom"), "{err}");
+        assert!(
+            err.contains("ssgg onboard gen3-restore --from backups/1 --slot 2 --yes"),
+            "{err}"
+        );
+        assert!(err.contains("erased or half written"), "{err}");
     }
 }
