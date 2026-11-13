@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Releases and this changelog are generated automatically from
 [Conventional Commits](https://www.conventionalcommits.org/) by release-please.
 
+## [0.1.21](https://github.com/Ven0m0/steelseriesgg-rs/compare/v0.1.20...v0.1.21) (2026-11-13)
+
+
+### Changed
+
+* update dependency rust to v1.100.0 ([0a688f3](https://github.com/Ven0m0/steelseriesgg-rs/commit/0a688f3117357834f26b1a0fb7f42120926e772f))
+
 ## [0.1.20](https://github.com/Ven0m0/steelseriesgg-rs/compare/v0.1.19...v0.1.20) (2026-11-11)
 
 
