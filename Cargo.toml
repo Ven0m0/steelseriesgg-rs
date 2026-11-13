@@ -6,7 +6,7 @@ repository = "https://github.com/Ven0m0/steelseriesgg-rs"
 readme = "README.md"
 license = "MIT"
 edition = "2024"
-rust-version = "1.99.1"
+rust-version = "1.100.0"
 keywords = ["steelseries", "rgb", "gaming", "linux", "audio"]
 categories = ["hardware-support", "games"]
 

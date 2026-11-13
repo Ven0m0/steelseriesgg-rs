@@ -27,7 +27,7 @@ jobs:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.99.1
+          toolchain: 1.100.0
           components: rustfmt, llvm-tools-preview
       - uses: Swatinem/rust-cache@v2
       - name: Check formatting
@@ -53,7 +53,7 @@ jobs:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.99.1
+          toolchain: 1.100.0
           components: clippy
 
       - name: Install audio dependencies (for audio feature)
@@ -95,7 +95,7 @@ jobs:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.99.1
+          toolchain: 1.100.0
 
       - name: Install desktop dependencies (for desktop feature)
         if: contains(matrix.features, 'desktop')
@@ -123,7 +123,7 @@ jobs:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.99.1
+          toolchain: 1.100.0
       - uses: Swatinem/rust-cache@v2
       - name: Run tests
         run: cargo test --locked
@@ -155,7 +155,7 @@ jobs:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.99.1
+          toolchain: 1.100.0
       - name: Install desktop dependencies
         run: |
           sudo apt-get update
@@ -191,7 +191,7 @@ jobs:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.99.1
+          toolchain: 1.100.0
 
       - name: Install audio dependencies (for audio feature)
         if: contains(matrix.features, 'audio')
