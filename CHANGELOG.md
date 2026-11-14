@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Releases and this changelog are generated automatically from
 [Conventional Commits](https://www.conventionalcommits.org/) by release-please.
 
+## [0.1.21](https://github.com/Ven0m0/steelseriesgg-rs/compare/v0.1.20...v0.1.21) (2026-11-14)
+
+
+### Fixed
+
+* **actuation:** limit live rapid-tap pairs to 5 to match the profile editor ([a97d299](https://github.com/Ven0m0/steelseriesgg-rs/commit/a97d299ce1f6cb7f3971683019ee259116ee8a16))
+* **audio:** build the audio feature on non-Linux targets without libpulse ([5e53fe1](https://github.com/Ven0m0/steelseriesgg-rs/commit/5e53fe163cd4a70e618866a2f211feb0297efb20))
+
+
+### Changed
+
+* update dependency rust to v1.100.0 ([0a688f3](https://github.com/Ven0m0/steelseriesgg-rs/commit/0a688f3117357834f26b1a0fb7f42120926e772f))
+
+
+### Documentation
+
+* **firmware:** Ghidra pass over GG firmware and engine, correct first-pass notes ([cbea218](https://github.com/Ven0m0/steelseriesgg-rs/commit/cbea2180212a7aa912d8b5b28acdd432df97d864))
+
 ## [0.1.20](https://github.com/Ven0m0/steelseriesgg-rs/compare/v0.1.19...v0.1.20) (2026-11-11)
 
 
