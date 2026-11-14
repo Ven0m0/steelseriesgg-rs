@@ -908,8 +908,9 @@ pub enum AnalogKeyCommand<'a> {
 }
 
 impl AnalogKeyCommand<'_> {
-    /// Rapid-tap pairs the spec's `rapid_tap_pairs` struct holds.
-    pub const MAX_RAPID_TAP_PAIRS: usize = 10;
+    /// Rapid-tap pairs accepted. The spec's `rapid_tap_pairs` struct holds 10; the owner reports the keyboard
+    /// supports 5 (not hardware-verified), matching the profile editor.
+    pub const MAX_RAPID_TAP_PAIRS: usize = 5;
     /// Release modes the spec's `single_key_release_mode` accepts.
     pub const RELEASE_MODES: [u8; 4] = [0x00, 0x02, 0x03, 0x04];
 
@@ -4964,13 +4965,13 @@ mod tests {
             mode,
             report_both: false,
         };
-        let eleven = [pair(0); 11];
+        let six = [pair(0); 6];
         for bad in [
             AnalogKeyCommand::ReleaseMode(&[(0x04, 1)]),
             AnalogKeyCommand::ReleaseMode(&[]),
             AnalogKeyCommand::RapidTriggerSensitivity(&[(0x04, 1), (0x04, 2)]),
             AnalogKeyCommand::RapidTriggerSensitivity(&[(0x00, 1)]),
-            AnalogKeyCommand::RapidTapPairs(&eleven),
+            AnalogKeyCommand::RapidTapPairs(&six),
             AnalogKeyCommand::RapidTapPairs(&[pair(4)]),
         ] {
             assert!(builder.build_report(bad, &mut buffer).is_err(), "{bad:?}");
@@ -4990,7 +4991,7 @@ mod tests {
         );
         assert!(
             builder
-                .build_report(AnalogKeyCommand::RapidTapPairs(&[pair(0); 10]), &mut buffer)
+                .build_report(AnalogKeyCommand::RapidTapPairs(&[pair(0); 5]), &mut buffer)
                 .is_ok()
         );
     }

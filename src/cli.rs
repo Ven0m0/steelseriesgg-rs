@@ -883,7 +883,7 @@ pub(crate) enum ActuationAction {
 
     /// Apex Pro TKL 2023: replace the rapid-tap pair list (none given clears it)
     RapidTapPairs {
-        /// Up to 10 pairs as hex HID usages KEY1:KEY2[:MODE[:both]], e.g. 04:07 or 04:07:1:both (mode 0-3)
+        /// Up to 5 pairs as hex HID usages KEY1:KEY2[:MODE[:both]], e.g. 04:07 or 04:07:1:both (mode 0-3)
         #[arg(value_parser = parse_rapid_tap_pair)]
         pairs: Vec<RapidTapPair>,
         #[arg(long)]
