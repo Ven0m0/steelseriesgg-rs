@@ -5,13 +5,13 @@
 //! - Per-application audio routing
 //! - Streamer mode with separate streaming/monitoring sliders (the slider volumes are stored, not yet applied)
 
-#[cfg(feature = "audio")]
+#[cfg(all(feature = "audio", target_os = "linux"))]
 pub mod pulse;
 
 #[cfg(feature = "sonar")]
 pub mod sonar;
 
-#[cfg(feature = "audio")]
+#[cfg(all(feature = "audio", target_os = "linux"))]
 use pulse::PulseHandler;
 
 #[cfg(feature = "sonar")]
@@ -125,9 +125,9 @@ impl Default for MixerState {
 /// Audio mixer for controlling channel volumes.
 pub struct AudioMixer {
     state: MixerState,
-    #[cfg(feature = "audio")]
+    #[cfg(target_os = "linux")]
     pulse: Option<PulseHandler>,
-    #[cfg(feature = "audio")]
+    #[cfg(target_os = "linux")]
     router: AudioRouter,
 }
 
@@ -135,6 +135,7 @@ pub struct AudioMixer {
 impl AudioMixer {
     /// Create a new audio mixer.
     pub fn new() -> Result<Self> {
+        #[cfg(target_os = "linux")]
         let pulse = match PulseHandler::new() {
             Ok(p) => Some(p),
             Err(e) => {
@@ -142,10 +143,14 @@ impl AudioMixer {
                 None
             }
         };
+        #[cfg(not(target_os = "linux"))]
+        tracing::warn!("PulseAudio is Linux-only; channel volumes are stored but not applied");
 
         Ok(Self {
             state: MixerState::default(),
+            #[cfg(target_os = "linux")]
             pulse,
+            #[cfg(target_os = "linux")]
             router: AudioRouter::new(),
         })
     }
@@ -314,6 +319,7 @@ impl AudioMixer {
     }
 
     /// Determine which channel a sink input belongs to.
+    #[cfg(target_os = "linux")]
     fn determine_channel(&self, sink_input: &pulse::SinkInput) -> Channel {
         // Check router first
         if let Some(app_name) = &sink_input.app_name
@@ -350,6 +356,13 @@ impl AudioMixer {
     }
 
     /// Update sink inputs for a specific channel or all channels.
+    #[cfg(not(target_os = "linux"))]
+    fn update_sink_inputs(&mut self, _target_channel: Option<Channel>) -> Result<()> {
+        Ok(())
+    }
+
+    /// Update sink inputs for a specific channel or all channels.
+    #[cfg(target_os = "linux")]
     fn update_sink_inputs(&mut self, target_channel: Option<Channel>) -> Result<()> {
         let mut pulse = match self.pulse.take() {
             Some(p) => p,

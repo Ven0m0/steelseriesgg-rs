@@ -15,8 +15,7 @@ Protocol facts for the Apex Pro TKL 2023 are in `AGENTS.md` ("Protocol research 
   ignored on Linux with `--features remap` (WSL Ubuntu, before the last review-fix commit).
 - Linux `cargo clippy --all-targets -- -D warnings`, also with `--features sonar`: clean (WSL, 2026-10-15).
 - `cargo report future-incompatibilities --id 1`: "no reports are currently available".
-- `cargo test --locked --features audio`: fails to link on Windows (no libpulse). Expected; not a code bug. CI covers
-  `audio` on Linux for clippy and release build.
+- `audio` builds on Windows but applies nothing (PulseAudio backend is Linux-only); CI covers the real backend on Linux.
 
 ## How to work this list
 

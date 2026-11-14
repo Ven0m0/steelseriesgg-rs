@@ -73,8 +73,7 @@ Run the smallest relevant subset for any given change.
 `RUSTFLAGS=-Ctarget-cpu=x86-64` (env overrides the config; `SSGG_TARGET_CPU` does the same inside the PKGBUILD).
 Add `--features <flag>` when touching feature-gated code. The CI feature matrix is in
 `.github/workflows/ci.yml`; the `ci-matrix` skill runs it locally. The `audio` feature needs `libpulse-dev` on
-Debian/Ubuntu. On Windows, `--features audio` does not link (`LNK1181: cannot open input file ':libpulse-0.dll.lib'`);
-this is expected, CI builds and lints `audio` on Linux only.
+Debian/Ubuntu. `audio` builds on Windows but applies nothing (the PulseAudio backend is Linux-only).
 
 ---
 
