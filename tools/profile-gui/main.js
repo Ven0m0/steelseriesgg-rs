@@ -26,4 +26,14 @@ function syncLayerButtons() {
   controls.layerMetaBtn.classList.toggle('active', state.layer === 'meta');
 }
 
+// Technical details (hex, offsets, protocol notes) are hidden unless this is on; the choice is remembered.
+const devBtn = document.getElementById('devBtn');
+function setDev(on) {
+  document.body.classList.toggle('show-dev', on);
+  devBtn.setAttribute('aria-pressed', String(on));
+  try { globalThis.localStorage.setItem('ssgg-dev', on ? '1' : '0'); } catch { /* storage may be blocked */ }
+}
+devBtn.addEventListener('click', () => setDev(!document.body.classList.contains('show-dev')));
+try { if (globalThis.localStorage.getItem('ssgg-dev') === '1') setDev(true); } catch { /* storage may be blocked */ }
+
 init(controls);

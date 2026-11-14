@@ -16,13 +16,13 @@
 <header class="bar">
   <div class="brand">
     <h1>ssgg on-board profile editor</h1>
-    <p class="mono">edits the JSON of <code>ssgg onboard read --json</code> / <code>ssgg onboard decode --json</code> &middot;
-      files only, no device (live lighting only under <code>ssgg-gui</code>) &middot; read, write and deploy are hardware-tested on an Apex 7 (`0x1612`)
-      <span class="tag">reverse-engineered protocol</span></p>
+    <p>Change key bindings, lighting and the OLED image of a keyboard profile. <span class="tag">reverse-engineered protocol</span></p>
+    <p class="dev">Edits the JSON of <code>ssgg onboard read --json</code> and <code>decode --json</code>. Files only, no device.</p>
   </div>
   <div class="toolbar">
     <label class="btn file">Open JSON<input id="fileInput" type="file" accept=".json,application/json"></label>
     <button id="saveBtn" class="btn primary">Save a copy</button>
+    <button id="devBtn" type="button" class="btn" aria-pressed="false" title="Show hex bytes, offsets and protocol notes">Technical details</button>
     <span class="seg">
       <button id="layerBaseBtn" class="btn seg active">Base layer</button>
       <button id="layerMetaBtn" class="btn seg">META layer</button>
@@ -43,23 +43,25 @@
     <div id="nameBar" class="name-bar"></div>
     <div id="boardMount"></div>
     <div id="legend" class="legend"></div>
-    <p class="mono note">
-      The field above the board edits the profile name (the 24-byte name field of the payload) and marks
-      it when it differs from the file as loaded, with a button that takes the name back.
-      The board is an ANSI full-size drawing that scales to the column (no scrolling, never cropped).
-      Each cap shows its key legend and, under it, what the current layer binds it to; the mapping
-      offset, function byte and codes are in the hover tooltip and the Key panel. Keys with no offset
-      in the legacy family's HID table are dim. Rapid Tap pairs bind raw HID codes, marked
-      <span class="mono">[RT n]</span>. The two half caps above the numpad <span class="mono">-</span>
-      are the wheel mappings, and clicking one binds it in the Key panel like any key; the rectangle above the numpad is the on-board OLED, drawn from
-      the <span class="mono">oled.bytes_hex</span> block as a 128x40 monochrome bitmap, bit 7 of
-      each byte its left pixel; click the rect to edit the block.
-    </p>
+    <details class="explain dev"><summary>How to read the board</summary>
+        <p class="note">
+        The field above the board edits the profile name (the 24-byte name field of the payload) and marks
+        it when it differs from the file as loaded, with a button that takes the name back.
+        The board is an ANSI full-size drawing that scales to the column (no scrolling, never cropped).
+        Each cap shows its key legend and, under it, what the current layer binds it to; the mapping
+        offset, function byte and codes are in the hover tooltip and the Key panel. Keys with no offset
+        in the legacy family's HID table are dim. Rapid Tap pairs bind raw HID codes, marked
+        <span class="mono">[RT n]</span>. The two half caps above the numpad <span class="mono">-</span>
+        are the wheel mappings, and clicking one binds it in the Key panel like any key; the rectangle above the numpad is the on-board OLED, drawn from
+        the <span class="mono">oled.bytes_hex</span> block as a 128x40 monochrome bitmap, bit 7 of
+        each byte its left pixel; click the rect to edit the block.
+      </p>
+    </details>
     <div id="belowBox" class="below-box"></div>
   </section>
   <section id="inspector" class="inspector"></section>
 </main>
-<footer class="foot mono">
+<footer class="foot dev">
   Key binding source: <span class="mono">lisp/base_apex_legacy.lisp</span> (decrypted <span class="mono">.edevice</span> spec)
   model names and the per-model feature set are imported from Rust
   (<span class="mono">device_name_from_product_id</span> and <span class="mono">keyboard_class</span>,

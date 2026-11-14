@@ -300,8 +300,8 @@ can be read at a glance, and `selftest.mjs` enforces that: every colour (except 
 sits at least 35 luminance points above the cap it fills, `no-offset` is the one colour that
 recedes into the cap, the two neutral states are 20+ luminance points apart, macro (green)
 and media (magenta) are 40 degrees of hue and 20 points of lightness apart, **no two**
-colours are close in both hue and lightness, every fill stays dark enough for the light
-`#eef3f9` legend to read, and the cap stroke is 40+ points above the cap fill. The legend
+colours are close in both hue and lightness, every fill stays dark enough for white
+cap text (`#fff`, at least 4.8:1) to read, and the cap stroke is 40+ points above the cap fill. The legend
 swatches in `style.css` must carry the same hex values as `FILL_COLORS` - the checks compare
 the two lists, so the palette cannot drift between the board and the legend.
 
@@ -309,6 +309,8 @@ the two lists, so the palette cannot drift between the board and the legend.
 the page's stylesheet, not a copy of it.
 
 ## What you can edit
+
+The page hides hex bytes, offsets, protocol notes and the File and Macro records panels by default. The **Technical details** button in the toolbar shows them again (the choice is remembered). Markup that carries such text has class `dev`.
 
 - **profile name, in the bar above the keyboard** (see [The name editor](#the-name-editor)),
 - per key: a binding type and its option, on the base or META layer - `Deactivated`, `Mouse Key`
@@ -320,7 +322,7 @@ the page's stylesheet, not a copy of it.
   copy, paste (Shift-click a key), copy base -> META, apply one mapping to all mapped offsets,
 - lighting block: the three colours, lock-key codes, META mask, OLED option
   bytes, Win key code, both dimmers, idle timeout,
-- Rapid Tap enable byte and the ten pairs,
+- Rapid Tap enable byte and the Rapid Tap pairs (the first 5 are shown; the file keeps 10),
 - the two wheel mappings of the layer being edited, in the key panel (click a wheel cap on the
   board: same binding select, same code selects, `wheel_mappings[n]` as the target),
 - `meta_toggle_hid` - the META toggle binding, written by the `Lock Win (0x05)` action of a

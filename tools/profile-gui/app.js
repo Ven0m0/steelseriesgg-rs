@@ -976,6 +976,10 @@ function bindingCounts(doc) {
   });
 }
 
+// The block stores 10 pairs; the owner says the keyboard supports 5, so the editor shows and marks those (not hardware-verified here).
+// Pairs 6-10 stay in the file untouched.
+const RAPID_TAP_MAX_PAIRS = 5;
+
 function rapidTap(doc) {
   return doc.rapid_tap ?? null;
 }
@@ -992,6 +996,7 @@ function rapidTapKeysFor(doc, hid) {
   const rt = rapidTap(doc);
   if (!rt) return [];
   return rt.pairs
+    .slice(0, RAPID_TAP_MAX_PAIRS)
     .map((pair, index) => ({ index, pair }))
     .filter(({ pair }) => pair.hid_1 === hid || pair.hid_2 === hid);
 }
@@ -1554,12 +1559,18 @@ function paintOled(board, doc) {
       : 'this dump has no oled.bytes_hex, re-decode the saved image with `ssgg onboard decode`.');
 }
 
-function panel(title, rows) {
-  return el('section', { class: 'panel' }, [el('h2', { text: title }), ...rows]);
+function panel(title, rows, extra) {
+  return el('section', { class: extra ? `panel ${extra}` : 'panel' }, [el('h2', { text: title }), ...rows]);
 }
 
-function line(label, control, note) {
-  return el('div', { class: 'line' }, [
+// Technical text (hex bytes, offsets, protocol notes) carries class `dev`: hidden unless "Technical details" is on.
+function setStatus(summary, detail) {
+  ui.status.textContent = summary;
+  if (detail) ui.status.appendChild(el('span', { class: 'dev', text: ` - ${detail}` }));
+}
+
+function line(label, control, note, extra) {
+  return el('div', { class: extra ? `line ${extra}` : 'line' }, [
     el('span', { class: 'line-label', text: label }),
     el('span', { class: 'line-control' }, [control]),
     note ? el('span', { class: 'line-note', text: note }) : null,
@@ -1613,7 +1624,7 @@ function renderNameBar(file) {
         render();
         return;
       }
-      ui.status.textContent = `reverted the profile name to "${original.name}", as the file was loaded (${original.name_hex})`;
+      setStatus(`reverted the profile name to "${original.name}"`, `as the file was loaded (${original.name_hex})`);
       render();
     },
   });
@@ -1621,8 +1632,8 @@ function renderNameBar(file) {
     const changed = isChanged();
     state.className = `name-state${changed ? ' changed' : ''}`;
     state.textContent = changed
-      ? `changed - the file as loaded had "${original.name}" (${original.name_hex})`
-      : `as the file - ${doc.name_hex}`;
+      ? `changed - the file had "${original.name}"`
+      : 'as the file';
     if (changed) revert.removeAttribute('disabled');
     else revert.setAttribute('disabled', 'true');
   };
@@ -1641,7 +1652,7 @@ function renderNameBar(file) {
     state,
     revert,
     el('span', {
-      class: 'hint name-note',
+      class: 'hint name-note dev',
       text: `the name field of the profile is ${NAME_FIELD_BYTES} bytes (name_hex: ${doc.name_hex}); the changes list marks it, and Save writes it with the rest of the JSON`,
     }),
   );
@@ -1767,7 +1778,7 @@ function renderHeader(file, changes) {
   }), blockBytes
     ? `fnv1a ${macro.fnv1a_64} - the block's ${blockBytes.length} bytes ride in the report and a write sends them back verbatim, the page edits none of them`
     : `fnv1a ${macro.fnv1a_64} - this report carries no block bytes (a read from before the codec shipped them): re-read the profile before writing it`));
-  return panel(`File: ${file.filename}${edited ? ' (edited)' : ''}`, rows);
+  return panel(`File: ${file.filename}${edited ? ' (edited)' : ''}`, rows, 'dev');
 }
 
 function mappingRows(doc, listName, index, mapping) {
@@ -1839,7 +1850,7 @@ function renderBindingPanel(file, target) {
   const entry = doc[listName][index];
   const codes = mappingCodes(entry).list;
   const name = hid === null || hid === undefined ? `${listName}[${index}]` : keyName(hid);
-  const rows = [el('p', { class: 'hint', text: target.intro })];
+  const rows = [el('p', { class: 'hint dev', text: target.intro })];
 
   const write = (mutate) => {
     mutate();
@@ -1868,7 +1879,7 @@ function renderBindingPanel(file, target) {
     write(() => {
       doc.meta_toggle_hid = next;
     });
-    ui.status.textContent = `meta_toggle_hid 0x${hex2(previous)} -> 0x${hex2(next)}: ${on ? `${keyName(hid)} is now the key GG switches META mode with` : 'this file names no toggle key'} - the byte is the whole of the binding, this entry's bytes are untouched, and the board paints the named key as a meta key with META in its cap. [EXPERIMENTAL] the byte's meaning is read-side evidence; writes of encoded profiles are hardware-tested on an Apex 7 (2026-10-20)`;
+    setStatus(on ? `${keyName(hid)} is now the Meta key` : 'no Meta key set', `meta_toggle_hid 0x${hex2(previous)} -> 0x${hex2(next)}: ${on ? `${keyName(hid)} is now the key GG switches META mode with` : 'this file names no toggle key'} - the byte is the whole of the binding, this entry's bytes are untouched, and the board paints the named key as a meta key with META in its cap. [EXPERIMENTAL] the byte's meaning is read-side evidence; writes of encoded profiles are hardware-tested on an Apex 7 (2026-10-20)`);
     render();
   };
 
@@ -1915,12 +1926,12 @@ function renderBindingPanel(file, target) {
   if (!group) {
     rows.push(...mappingRows(doc, listName, index, entry));
     rows.push(el('p', {
-      class: 'hint',
+      class: 'hint dev',
       text: `0x${hex2(entry.function)} is not one of the binding types this editor knows, so the function byte and the four code bytes are shown as they are.`,
     }));
   } else if (group.id === 'none') {
     rows.push(el('p', {
-      class: 'hint',
+      class: 'hint dev',
       text: 'Deactivated: function 0x00 with the four code bytes 00, which is what GG writes for a key the profile does not bind. Nothing else to choose.',
     }));
   } else if (group.id === 'mouse') {
@@ -1933,7 +1944,7 @@ function renderBindingPanel(file, target) {
       'fn-select',
     ));
     rows.push(el('p', {
-      class: 'hint',
+      class: 'hint dev',
       text: '[EXPERIMENTAL] the mouse action is the function byte; the four code bytes are left exactly as the file has them. No factory read contains a mouse binding - a stock slot read holds 0x51, 0x61 and 0x00 entries only - so what GG writes into the code bytes of a mouse key is not measured.',
     }));
   } else if (group.id === 'keyboard') {
@@ -1947,7 +1958,7 @@ function renderBindingPanel(file, target) {
       ));
     });
     rows.push(el('p', {
-      class: 'hint',
+      class: 'hint dev',
       text: 'function 0x51 (combo_key) is GG keyboard binding: up to four key codes, 0x00 for a slot left empty. A key bound to itself is its own usage in code 1 and 00 00 00 after it, which is every bound key of a factory profile.',
     }));
   } else if (group.id === 'media') {
@@ -1959,7 +1970,7 @@ function renderBindingPanel(file, target) {
       (value) => writeCodeByte(0, value),
     ));
     rows.push(el('p', {
-      class: 'hint',
+      class: 'hint dev',
       text: 'function 0x61 (media_key): the code is a consumer-page usage (USB HID Usage Tables). The same number under any other function is a keyboard-page key - 0xE2 is Mute here and LAlt there.',
     }));
   } else if (group.id === 'meta') {
@@ -1971,7 +1982,7 @@ function renderBindingPanel(file, target) {
       (value) => writeCodeByte(0, value),
     ));
     rows.push(el('p', {
-      class: 'hint',
+      class: 'hint dev',
       text: `function 0x62 (meta): the action is code 1, and it is named like the other actions - picking one writes code 1 and keeps the rest of the code bytes. A factory META layer binds four meta keys to META+F9..F12 (measured in a stock slot read: 01 00 00 00 on the F9 slot, then 02, 03 and 04, each with 01 in code 2). ${META_ACTION_NAMES[META_LOCK_WIN_ACTION]} (0x${hex2(META_LOCK_WIN_ACTION)}) is a meta action like those: it writes this entry's code 1 and touches nothing else - the META toggle is the profile byte below, and picking Lock Win no longer moves it (operator, 2026-10-19). GG's own reads carry 62 05 on the META layer of slot 13 = LWin${lockWinMarkers(doc).length ? ` (slots ${lockWinMarkers(doc).map((m) => String(m.offset)).join(', ')} in this file)` : ''}. [EXPERIMENTAL] measured in reads; writes of encoded profiles are hardware-tested on an Apex 7 (2026-10-20)`,
     }));
   } else {
@@ -2033,7 +2044,7 @@ function renderBindingPanel(file, target) {
   }
   if (buttons.length) rows.push(el('div', { class: 'btnrow' }, buttons));
   rows.push(el('p', {
-    class: 'hint',
+    class: 'hint dev',
     text: (factory
       ? `${target.wheelSlot
         ? `Factory binding of ${listName}[${index}] - measured in a stock slot read and byte for byte the same in every read this page decodes: GG pairs the scroll wheel with the numpad + and / keys, binds Media Vol+ on the up row and Media Vol- on the down row, and leaves both META-layer rows deactivated`
@@ -2112,9 +2123,9 @@ function renderBindingsPanel(file) {
     rows.push(el('table', { class: 'grid' }, [
       el('tr', {}, [
         el('th', { text: 'key' }),
-        el('th', { text: 'slot' }),
+        el('th', { class: 'dev', text: 'slot' }),
         el('th', { text: 'function' }),
-        el('th', { text: 'codes' }),
+        el('th', { class: 'dev', text: 'codes' }),
         el('th', { text: 'reads as' }),
       ]),
       ...list.map(({ entry, offset, hid, board }) => {
@@ -2122,9 +2133,9 @@ function renderBindingsPanel(file) {
         const state = keyState(doc, layer, hid);
         const tr = el('tr', { class: 'clickable' }, [
           el('td', { class: 'mono', text: hid === null || hid === undefined ? '-' : keyName(board) }),
-          el('td', { class: 'mono', text: String(offset) }),
-          el('td', { class: 'mono', text: `0x${hex2(entry.function)} ${functionName(entry.function)}` }),
-          el('td', { class: 'mono', text: hexOf(codes) }),
+          el('td', { class: 'mono dev', text: String(offset) }),
+          el('td', { class: 'mono' }, [el('span', { class: 'dev', text: `0x${hex2(entry.function)} ` }), el('span', { text: functionName(entry.function) })]),
+          el('td', { class: 'mono dev', text: hexOf(codes) }),
           el('td', { text: state.label }),
         ]);
         tr.addEventListener('click', () => {
@@ -2159,7 +2170,7 @@ function renderLightingPanel(file) {
     }
     light[field] = hexOf(parsed);
     render();
-  }), `${field}: ${bytes} bytes, hex`);
+  }), `${field}: ${bytes} bytes, hex`, 'dev');
   const winRow = line('Win key code', buildKeySelect(light.win_key_hid_code, { noneLabel: '0x00 - none' }), `0x${hex2(light.win_key_hid_code)} ${keyName(light.win_key_hid_code)}`);
   winRow.querySelector('select').addEventListener('change', (event) => {
     light.win_key_hid_code = Number(event.target.value);
@@ -2174,7 +2185,7 @@ function renderLightingPanel(file) {
       const derived = computeMetaMask(doc);
       const stored = light.meta_mapped_elements;
       const bits = metaMaskDiffers(stored, derived);
-      return line('META mapped mask', el('span', { class: 'mono', text: derived }), `derived from the META layer, so it is not editable: bit n is set for every key whose META-layer entry carries a binding (function byte != 0), the bit index is that key's own HID usage, the key meta_toggle_hid names (0x${hex2(Number(doc.meta_toggle_hid ?? 0))}) is left out, and the wheel's two entries are never in it. ${bits === 0 ? 'the bytes this read carries (meta_mapped_elements) are the same' : `this read carries ${stored}, which differs from the derived mask in ${bits} bit(s) - a write sends the derived mask`} [EXPERIMENTAL] measured bit-for-bit in the reports this page decodes, and verified on hardware 2026-10-20 (a write carrying it applied: the META lighting followed the META-layer bindings with the meta_toggle_hid key left out)`);
+      return line('META mapped mask', el('span', { class: 'mono', text: derived }), `derived from the META layer, so it is not editable: bit n is set for every key whose META-layer entry carries a binding (function byte != 0), the bit index is that key's own HID usage, the key meta_toggle_hid names (0x${hex2(Number(doc.meta_toggle_hid ?? 0))}) is left out, and the wheel's two entries are never in it. ${bits === 0 ? 'the bytes this read carries (meta_mapped_elements) are the same' : `this read carries ${stored}, which differs from the derived mask in ${bits} bit(s) - a write sends the derived mask`} [EXPERIMENTAL] measured bit-for-bit in the reports this page decodes, and verified on hardware 2026-10-20 (a write carrying it applied: the META lighting followed the META-layer bindings with the meta_toggle_hid key left out)`, 'dev');
     })(),
     hexFieldRow('OLED illumination options', 'oled_illumination_options', 6),
     winRow,
@@ -2191,7 +2202,7 @@ function renderLightingPanel(file) {
       render();
     })),
   ];
-  return panel('Lighting block', rows);
+  return panel('Lighting', rows);
 }
 
 function renderRapidTapPanel(file) {
@@ -2201,34 +2212,37 @@ function renderRapidTapPanel(file) {
     return panel('Rapid Tap', [el('p', { class: 'hint', text: 'this dump has no Rapid Tap block: it is only in schema b (0x0B)' })]);
   }
   const rows = [
-    line('Enable byte', numberInput(rt.enable, 0, 255, (value) => {
+    line('Enabled', numberInput(rt.enable, 0, 255, (value) => {
       rt.enable = value;
       render();
     }), 'the decoder shows the raw byte; ssgg never writes it'),
   ];
-  rt.pairs.forEach((pair, index) => {
-    const row = el('div', { class: 'line pair' }, [
-      el('span', { class: 'line-label', text: `Pair ${index + 1}` }),
-      el('span', { class: 'line-control' }, [
-        buildKeySelect(pair.hid_1, { noneLabel: '0x00' }),
-        buildKeySelect(pair.hid_2, { noneLabel: '0x00' }),
-        numberInput(pair.mode, 0, 255, (value) => {
-          pair.mode = value;
-          render();
-        }),
+  const table = el('table', { class: 'grid rapid' }, [
+    el('tr', {}, ['Pair', 'Key 1', 'Key 2', 'Mode', 'Report both', 'Bytes'].map((text) => el('th', { scope: 'col', ...(text === 'Bytes' ? { class: 'dev' } : {}), text }))),
+  ]);
+  rt.pairs.slice(0, RAPID_TAP_MAX_PAIRS).forEach((pair, index) => {
+    const row = el('tr', {}, [
+      el('td', { class: 'pair-id', text: String(index + 1) }),
+      el('td', {}, [buildKeySelect(pair.hid_1, { noneLabel: '0x00' })]),
+      el('td', {}, [buildKeySelect(pair.hid_2, { noneLabel: '0x00' })]),
+      el('td', {}, [numberInput(pair.mode, 0, 255, (value) => {
+        pair.mode = value;
+        render();
+      })]),
+      el('td', {}, [
         el('label', { class: 'check' }, [
           el('input', {
             type: 'checkbox',
+            'aria-label': `Pair ${index + 1} report both keys`,
             ...(pair.report_both_keys ? { checked: 'checked' } : {}),
             onchange: (event) => {
               pair.report_both_keys = event.target.checked;
               render();
             },
           }),
-          el('span', { text: 'report both' }),
         ]),
       ]),
-      el('span', { class: 'line-note', text: `mode 0x${hex2(pair.mode)} report bit 0x${hex2(MASK_MODE_REPORT_BOTH)} reserved ${pair.reserved || '00 00'}` }),
+      el('td', { class: 'pair-bytes dev', text: `mode 0x${hex2(pair.mode)} report bit 0x${hex2(MASK_MODE_REPORT_BOTH)} reserved ${pair.reserved || '00 00'}` }),
     ]);
     const selects = row.querySelectorAll('select');
     selects[0].addEventListener('change', (event) => {
@@ -2239,11 +2253,13 @@ function renderRapidTapPanel(file) {
       pair.hid_2 = Number(event.target.value);
       render();
     });
-    rows.push(row);
+    table.appendChild(row);
   });
+  rows.push(el('p', { class: 'hint', text: `Up to ${RAPID_TAP_MAX_PAIRS} key pairs.` }));
+  rows.push(table);
   rows.push(el('p', {
-    class: 'hint',
-    text: 'pairs reference keys by raw HID code, not by mapping offset. Each pair is 5 bytes: hid_1, hid_2, the mode byte, the report bit and the reserved bytes the decoder carries as hex - this page edits the first four and writes the reserved bytes back exactly as the file has them. A Rapid Tap key is marked on the board with a bracket.',
+    class: 'hint dev',
+    text: `up to ${RAPID_TAP_MAX_PAIRS} pairs (any further pair in the file is kept as is). Pairs reference keys by raw HID code, not by mapping offset. Each pair is 5 bytes: hid_1, hid_2, the mode byte, the report bit and the reserved bytes the decoder carries as hex - this page edits the first four and writes the reserved bytes back exactly as the file has them. A Rapid Tap key is marked on the board with a bracket.`,
   }));
   return panel('Rapid Tap', rows);
 }
@@ -2429,7 +2445,7 @@ function renderMacrosPanel(file) {
     }));
     rows.push(el('p', { class: 'hint mono', text: record.raw }));
   }
-  return panel('Macro records (packed list at the macro data offset)', rows);
+  return panel('Macro records (packed list at the macro data offset)', rows, 'dev');
 }
 
 function renderOledPanel(file) {
@@ -2442,7 +2458,7 @@ function renderOledPanel(file) {
       class: 'mono',
       text: `offset ${oled.offset}, ${oled.len} bytes, ${oled.nonzero} non-zero, fnv1a ${oled.fnv1a_64}`
         + (bytes && bytes.length && fnv1a64(bytes) !== oled.fnv1a_64 ? ` - the stored hash does not match the ${bytes.length} bytes in bytes_hex (those hash to ${fnv1a64(bytes)}); the picture is drawn from bytes_hex` : ''),
-    }), `${OLED_W} x ${OLED_H} monochrome pixels = 8 px per byte, 16 bytes per row, ${OLED_BYTES} bytes; bit 7 of a byte is its left pixel (confirmed on an Apex 7, 0x1612: the image GG paints on its panel decodes to these bytes, and writing them back paints that picture), so there is no bit-order switch. The decoder writes the whole block as bytes_hex.`),
+    }), `${OLED_W} x ${OLED_H} monochrome pixels = 8 px per byte, 16 bytes per row, ${OLED_BYTES} bytes; bit 7 of a byte is its left pixel (confirmed on an Apex 7, 0x1612: the image GG paints on its panel decodes to these bytes, and writing them back paints that picture), so there is no bit-order switch. The decoder writes the whole block as bytes_hex.`, 'dev'),
   ];
   rows.push(line('Drawn',
     url
@@ -2456,7 +2472,7 @@ function renderOledPanel(file) {
           : 'this dump has no oled.bytes_hex: it was written before the decoder started dumping the block. Run `ssgg onboard decode <image.bin>` on the saved image to get it.',
       })));
   rows.push(line('Bitmap data', el('span', { class: 'mono', text: `${OLED_W} x ${OLED_H} pixels, ${OLED_BYTES} bytes, 1 bit per pixel` }),
-    `oled.bytes_hex (${OLED_BYTES} bytes) is the whole picture; the top-left pixel is byte 0 bit 7 (confirmed on hardware). The summary row shows the hash the dump records and the same FNV-1a-64 recomputed from these bytes.`));
+    `oled.bytes_hex (${OLED_BYTES} bytes) is the whole picture; the top-left pixel is byte 0 bit 7 (confirmed on hardware). The summary row shows the hash the dump records and the same FNV-1a-64 recomputed from these bytes.`, 'dev'));
   rows.push(line('Blank', button('Set all black', () => {
     setOledBitmap(doc, new Array(OLED_BYTES).fill(0));
     render();
@@ -2466,7 +2482,7 @@ function renderOledPanel(file) {
     setOledBitmap(doc, src.map((byte) => byte ^ 0xff));
     render();
   }, 'btn oled-invert'), `flips every bit of oled.bytes_hex: ${OLED_BYTES} bytes, ${OLED_W * OLED_H} pixels, lit becomes off and off becomes lit. Bit 7 stays the left pixel of its byte, so the picture is mirrored in colour only, never moved. len, nonzero, fnv1a_64 and head are recomputed, and inverting twice is the identity. A block with no bytes_hex inverts to every pixel lit. Only the JSON changes: this page opens configs read from an Apex 7 and writes files, never a keyboard - the write to the board is ssgg onboard write.`));
-  return panel(`On-board OLED (the board rect, ${OLED_W}x${OLED_H} 1bpp)`, rows);
+  return panel('On-board OLED display', rows);
 }
 
 function renderChangesPanel(file) {
@@ -2475,7 +2491,7 @@ function renderChangesPanel(file) {
     el('p', { class: 'hint', text: `${changes.length} change(s) against the file as loaded. Saving writes the whole JSON, unknown fields included.` }),
   ];
   if (changes.length) {
-    const list = el('ul', { class: 'changes' });
+    const list = el('ul', { class: 'changes dev' });
     for (const [path, count] of summarizeChanges(changes)) {
       list.appendChild(el('li', { class: 'mono', text: `${path} x${count}` }));
     }
@@ -2499,35 +2515,32 @@ function renderChangesPanel(file) {
 // ---------------------------------------------------------------------------
 
 function legendRows() {
+  // [swatch class, short name, detail, wide]; the swatch classes mirror FILL_COLORS.
   const items = [
-    ['self', 'bound to itself - GG\'s factory default, not a remap (function 0x51 + its own code)'],
-    ['none', 'empty slot - GG writes all zero, the key types normally'],
-    ['deactivated', 'function 0x00 with other codes'],
-    ['combo_key', 'function 0x51 combo_key'],
-    ['meta', 'function 0x62 meta'],
-    ['macro', 'function 0x71 macro'],
-    ['media_key', 'function 0x61 media_key'],
-    ['function', 'mouse / cpi / wheel function (0x01-0x34)'],
-    ['no-offset', 'code has no mapping offset in the legacy HID table'],
-    ['meta', 'a meta key (function 0x62): the cap prints its action - Profile, Macro, Bright up, Bright down, Lock Win, Rapid Tap - and the meta action select names code 1. META in a cap comes from meta_toggle_hid alone: the key that byte names is the key GG switches META mode with, painted this way on both layers, and it binds like any other key'],
+    ['self', 'Default', "bound to itself - GG's factory default, not a remap (function 0x51 + its own code)"],
+    ['none', 'Empty', 'empty slot - GG writes all zero, the key types normally'],
+    ['deactivated', 'Disabled', 'function 0x00 with other codes'],
+    ['combo_key', 'Combo', 'function 0x51 combo_key'],
+    ['meta', 'Meta', 'a meta key (function 0x62): the cap prints its action - Profile, Macro, Bright up, Bright down, Lock Win, Rapid Tap - and the meta action select names code 1. META in a cap comes from meta_toggle_hid alone: the key that byte names is the key GG switches META mode with, painted this way on both layers, and it binds like any other key', true],
+    ['macro', 'Macro', 'function 0x71 macro'],
+    ['media_key', 'Media', 'function 0x61 media_key'],
+    ['function', 'Mouse/wheel', 'mouse / cpi / wheel function (0x01-0x34)'],
+    ['no-offset', 'Not bindable', 'code has no mapping offset in the legacy HID table'],
+    ['changed', 'Edited', 'edited in this session (corner marked) - a key whose mapping entry differs from the file as loaded'],
+    ['selected', 'Selected', 'selected key'],
   ];
   const box = el('div', { class: 'legend' });
-  for (const [kind, text] of items) {
-    box.appendChild(el('span', { class: 'legend-item' }, [
+  for (const [kind, name, detail, wide] of items) {
+    box.appendChild(el('span', { class: wide ? 'legend-item wide' : 'legend-item' }, [
       el('span', { class: `swatch sw-${kind.replace(/[^a-z]/gi, '')}` }),
-      el('span', { class: 'mono', text }),
+      el('span', { class: 'legend-name', text: name }),
+      el('span', { class: 'legend-detail dev', text: detail }),
     ]));
   }
-  box.appendChild(el('span', { class: 'legend-item' }, [
-    el('span', { class: 'swatch sw-changed' }),
-    el('span', { class: 'mono', text: 'edited in this session (corner marked) - a key whose mapping entry differs from the file as loaded' }),
-  ]));
-  box.appendChild(el('span', { class: 'legend-item' }, [
-    el('span', { class: 'swatch sw-selected' }),
-    el('span', { class: 'mono', text: 'selected key' }),
-  ]));
-  box.appendChild(el('span', { class: 'legend-item' }, [
-    el('span', { class: 'mono', text: 'text low in a cap = the binding target, and only of a remapped key (a factory key prints nothing); "[RT n]" = Rapid Tap pair n uses this key\'s HID code; the two caps with arrows in the Ke - column are the wheel mappings of the current layer, and click one to bind it in the Key panel like any key; offset, function and codes are in the cap tooltip' }),
+  box.appendChild(el('span', { class: 'legend-item wide dev' }, [
+    el('span', { class: 'legend-mark' }),
+    el('span', { class: 'legend-name', text: 'Cap text' }),
+    el('span', { class: 'legend-detail dev', text: 'text low in a cap = the binding target, and only of a remapped key (a factory key prints nothing); "[RT n]" = Rapid Tap pair n uses this key\'s HID code; the two caps with arrows in the Ke - column are the wheel mappings of the current layer, and click one to bind it in the Key panel like any key; offset, function and codes are in the cap tooltip' }),
   ]));
   return box;
 }
@@ -2559,7 +2572,7 @@ function render() {
   ui.inspector.replaceChildren();
   ui.below.replaceChildren();
   if (!file) {
-    ui.status.textContent = 'load one or more profile JSON dumps (schema a or b). The board binds keys through the legacy HID -> offset table.';
+    setStatus('Open a profile JSON to start: use Open JSON or drop a file on the page.', 'schema a or b; the board binds keys through the legacy HID -> offset table');
     ui.legend.replaceChildren();
     return;
   }
@@ -2587,9 +2600,9 @@ function loadFiles(list) {
       const doc = result.file.doc;
       const extra = list.length > 1 ? `, ${list.length - 1} more file(s) ignored - the editor loads one profile` : '';
       const device = deviceLabel(doc);
-      ui.status.textContent = `loaded ${file.name} (${text.length} chars${device ? `, ${device.name} ${device.hex}` : ''}, slot ${doc.slot ?? 'n/a'}, ${payloadSplit(doc)}, schema `
+      setStatus(`loaded ${file.name}${device ? ` - ${device.name}` : ''}${extra}`, `${text.length} chars${device ? `, ${device.hex}` : ''}, slot ${doc.slot ?? 'n/a'}, ${payloadSplit(doc)}, schema `
         + `${doc.schema_name}, ${doc.guid_padding ? 'b: no padding field' : `a: checksum ${doc.crc_ok ? 'matches' : 'MISMATCH'}`}`
-        + `, ${macroSummary(doc)}${extra})`;
+        + `, ${macroSummary(doc)}`);
     }
     render();
   };
@@ -2609,7 +2622,7 @@ function init(controls) {
     if (!file) return;
     const name = saveFile(file);
     const changes = fileChanges(file).length;
-    ui.status.textContent = `saved a copy as ${name} (${changes} change(s) against the file as loaded; the loaded file is untouched)`;
+    setStatus(`saved a copy as ${name} - ${changes} change(s)`, 'the loaded file is untouched');
   });
   ui.layerBaseBtn.addEventListener('click', () => {
     state.layer = LAYER_BASE;
@@ -2653,9 +2666,8 @@ function handleKeyClick(hid) {
   if (hid === SELECT_OLED) {
     state.selected = SELECT_OLED;
     const oled = file.doc.oled;
-    ui.status.textContent = oled && oled.bytes_hex
-      ? `on-board OLED selected - ${OLED_W}x${OLED_H} bitmap at payload offset ${oled.offset}, ${oled.nonzero}/${oled.len} bytes non-zero; the panel next to the board shows the bitmap data and can blank the block`
-      : 'on-board OLED selected - this dump has no oled.bytes_hex, re-decode the saved image with ssgg onboard decode';
+    if (oled && oled.bytes_hex) setStatus('on-board OLED selected', `${OLED_W}x${OLED_H} bitmap at payload offset ${oled.offset}, ${oled.nonzero}/${oled.len} bytes non-zero; the panel next to the board shows the bitmap data and can blank the block`);
+    else setStatus('on-board OLED selected', 'this dump has no oled.bytes_hex, re-decode the saved image with ssgg onboard decode');
     render();
     return;
   }
@@ -2663,10 +2675,12 @@ function handleKeyClick(hid) {
     const index = hid === WHEEL_UP ? 0 : 1;
     state.selected = hid;
     const entry = wheelEntry(file.doc, state.layer, index);
-    ui.status.textContent = entry
-      ? `wheel mapping ${index + 1} (${state.layer}) selected - function 0x${hex2(entry.entry.function)} `
-        + `${functionName(entry.entry.function)} codes ${hexOf(entry.codes)} (${entry.label}); the Key panel binds it like any key`
-      : `wheel mapping ${index + 1} (${state.layer}) is missing from this file: the wheel lists hold 2 entries each`;
+    if (entry) {
+      setStatus(`wheel mapping ${index + 1} (${state.layer}) selected`, `function 0x${hex2(entry.entry.function)} `
+        + `${functionName(entry.entry.function)} codes ${hexOf(entry.codes)} (${entry.label}); the Key panel binds it like any key`);
+    } else {
+      setStatus(`wheel mapping ${index + 1} (${state.layer}) is missing from this file`, 'the wheel lists hold 2 entries each');
+    }
     render();
     return;
   }

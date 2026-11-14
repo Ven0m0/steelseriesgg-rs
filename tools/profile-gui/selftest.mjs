@@ -1275,13 +1275,14 @@ ok('the payload length the page names follows the schema word, and mirrors the R
     && app.payloadLenForSchema(0x000a) === a && app.payloadLenForSchema(0x000b) === b
     && app.payloadLenForSchema(0x0009) === null;
 }, () => [app.PAYLOAD_LEN_A, app.PAYLOAD_LEN_B, app.PROFILE_REGION_BYTES, app.MACRO_DATA_LEN]);
-ok('the Rapid Tap pairs print their reserved bytes and write them back unchanged', () => withFile(app.addFile('rt.json', app.serializeDoc(app.cloneDoc(apex))).file, () => {
+ok('the Rapid Tap panel shows 5 pairs, prints their reserved bytes and leaves all 10 in the file unchanged', () => withFile(app.addFile('rt.json', app.serializeDoc(app.cloneDoc(apex))).file, () => {
   const file = app.state.files.find((f) => f.filename === 'rt.json');
   const before = file.doc.rapid_tap.pairs.map((pair) => pair.reserved);
   const panel = app.renderRapidTapPanel(file);
   const text = panel.textContent;
   return before.length === 10 && before.every((r) => r.split(' ').length === 2)
-    && text.includes(`reserved ${before[0]}`) && text.includes(`reserved ${before[9]}`);
+    && text.includes(`reserved ${before[0]}`) && text.includes(`reserved ${before[4]}`)
+    && panel.querySelectorAll('tr').length === 1 + 5 && app.rapidTap(file.doc).pairs.length === 10;
 }), () => [app.rapidTap(apex).pairs.map((pair) => pair.reserved)]);
 okMacros('the macro block ships its bytes in the report, and a save writes them back byte for byte', () => {
   const bytes = app.macroBlockBytes(app.cloneDoc(macrosDoc));

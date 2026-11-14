@@ -129,8 +129,10 @@
       polling = true;
       try {
         render(await call('/api/headset/status'));
+        polled.className = 'mono note dev';
         polled.textContent = `status polled every ${POLL_MS / 1000} s while this tab is open · last update ${new Date().toLocaleTimeString()}`;
       } catch (e) {
+        polled.className = 'mono note';
         polled.textContent = `status failed: ${e.message}`;
       } finally {
         polling = false;
@@ -244,7 +246,8 @@
     root.replaceChildren(node('section', { className: 'panel hs-panel' }, [
       node('div', { className: 'hs-head' }, [
         node('h2', {}, [`${info.name} `, node('span', { className: 'tag', textContent: '[EXPERIMENTAL]' })]),
-        node('p', { className: 'mono note', textContent: `${pid} · close GG first, it overwrites other programs` }),
+        node('p', { className: 'note', textContent: 'Close GG first: it overwrites other programs.' }),
+        node('p', { className: 'mono note dev', textContent: pid }),
       ]),
       ...(supported ? [] : [node('p', { textContent: 'ssgg detects this headset but knows no commands for it. Nothing can be read or set yet.' })]),
       ...(caps.status ? [node('div', { className: 'hs-cards' }, cards), polled] : []),

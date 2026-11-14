@@ -13,7 +13,7 @@ const XMLNS = ['ht', 'tp://www', '.w3', '.org/2000/svg'].join('');
 // The preview inlines the page's own stylesheet, so what the SVG shows is what the page draws -
 // a hand-copied copy of the palette in here drifts.
 const STYLE = `${readFileSync(new URL('style.css', import.meta.url), 'utf8')}
-svg { background: #0f1216; }`;
+svg { background: var(--bg); }`;
 
 // node has no canvas, and app.js rasterises the OLED block through one. Shim it with a
 // 24-bit BMP encoder so the exported SVG carries the real 128x40 bitmap, not a text label.
