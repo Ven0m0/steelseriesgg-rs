@@ -1043,8 +1043,10 @@ pub const MACRO_MODE_ONCE: u8 = 1;
 pub const MACRO_INDEX_STRIDE: usize = 7;
 
 /// One action of a packed macro record. `[EXPERIMENTAL]`: the split below is what makes the 134
-/// non-zero bytes of the only read that carries macros parse exactly, and the press `word` (4 in
-/// every press seen) is still unexplained.
+/// non-zero bytes of the only read that carries macros parse exactly. The press `word` (`04 00`)
+/// is most likely the type and zero byte of a delay event that follows the key event (static, from
+/// the Gen 3 firmware and the engine's convert_libsteel.go, docs/development/firmware-notes.md).
+/// Mouse, wheel, pan and consumer-page events that the engine also writes are not parsed here.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub struct MacroAction {
     /// `press`, `release` or `delay`.
@@ -1074,7 +1076,8 @@ pub struct OnboardMacro {
     pub mode: u8,
     /// Mode as a word, for the summary line.
     pub mode_name: &'static str,
-    /// Record id (3 and 27 in the only read with macros; read as GG's database id).
+    /// Record id (3 and 27 in the only read with macros). Most likely the event count: records of 20
+    /// and 116 bytes fit `8 + 4 * id`, and the engine reads this u16 that way (`[EXPERIMENTAL]`).
     pub id: u16,
     /// The two bytes every record seen carries as `01 01`, unexplained.
     pub flags: u16,

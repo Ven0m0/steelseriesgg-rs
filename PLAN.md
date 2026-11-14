@@ -112,7 +112,9 @@ brightness `00 23 <0..=16>`), and the likely cause of #173/#257 was found: until
 report went out shifted (`00 00 21 ...`, handoff R1). Fixed; needs the outside test below. Changed on the
 branch (untested): `Apex3Tkl` no longer sends the APPLY `0x09` from `initialize()`/`apply()`, which OpenRGB's
 8-zone controller never sends (checked against its source 2026-10-21) and which our own notes say reverts direct
-lighting on other models. Open differences:
+lighting on other models. Firmware check 2026-11-14 (static, `[EXPERIMENTAL]`, `firmware-notes.md`): 3.0.4 has no `09`
+handler (ignored), `21 <mask> <RGB x8>` sets the zones' enable flags with no further command, `23` accepts `0..=0x10`
+only. The frames ssgg sends match; no firmware reason found. Open differences:
 
 1. **[HW, outside tester]** `yann-morin-1998` offered to test on #257. Push a branch, post exact commands
    (`ssgg -d rgb color FF0000`, `ssgg rgb off`, `ssgg rgb brightness 50`) and ask for debug logs. Confirm with the
@@ -125,7 +127,11 @@ Reporter (NixOS) sees successful HID writes but no change. `0x1610` uses the gen
 
 Done 2026-10-15: ssgg sent a 65-byte `0x21` output report; OpenRGB uses a 643-byte feature
 report `00 3A N [usage R G B] xN` on interface 1 with no init. `0x1610` now goes through `ApexProTkl2023` with packet
-ID `0x3A`, the 112-key table, and Unix hidraw interface 1. Remaining: ask the reporter to test (confirm with the user before posting). Which
+ID `0x3A`, the 112-key table, and Unix hidraw interface 1. Firmware check 2026-11-14 (static, `firmware-notes.md`): `lighting-app.bin` of `0x1610` and `0x1640` differ in two table bytes
+and the trailer only (Cortex-M images, not AVR), so the `0x3A` handler is the same code as the one whose frame is hardware-confirmed on `0x1640` (static comparison only), and both
+keyboard apps route `3A`/`21`/`22` the same way. Transport is the remaining suspect; the RAM flag that gates the
+keyboard app's forwarding stub was not decoded, so a state-dependent refusal is not ruled out.
+Remaining: ask the reporter to test (confirm with the user before posting). Which
 collection Windows discovery picks for `0x1610` is unknown.
 
 ## P5. GitHub close-out (ask before any GitHub write)

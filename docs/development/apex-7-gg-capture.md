@@ -231,6 +231,13 @@ release 0x02 | key | 0x01 0x00                                         (4 bytes)
 delay   0x04 | 0x00 | ms u16 LE                                        (4 bytes)
 ```
 
+Static note (Apex Pro TKL 2023, 2026-11-14, `firmware-notes.md`): the Gen 3 firmware steps over a `0x77` record by
+`2 + u16 at +2` events, and the engine's `convert_libsteel.go` reads that u16 as the event count (record length
+`8 + 4 * count`), so the u16 called `id` here is probably the event count. The Apex 7 read supports it: ids 3 and 27 with records of 20 and
+116 bytes fit `8 + 4 * id`. The press `word` (`04 00`) is then the type and zero byte of the delay event that follows the key
+  event, not an unknown field. The engine also has mouse button (`00`), wheel (`01`), pan (`0c`) and consumer-page key events,
+which `decode_macros` does not parse.
+
 Modes seen: `1` = play once, stepping `interval` ms between actions; `4` = play again every `interval`
 (a mode-4 record with `interval` 5000 presses `4`, which is the META + Insert binding of profile 1). A `0x71`
 mapping row carries `record ordinal × 7` in its third code byte, so `index / 7` names the record

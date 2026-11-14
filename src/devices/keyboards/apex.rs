@@ -41,8 +41,9 @@ impl Device for Apex3Tkl {
 
     fn initialize(&mut self) -> Result<()> {
         // [EXPERIMENTAL] OpenRGB's 8-zone controller never sends the APPLY/save command (0x09), only
-        // `21 FF <R G B x8>` and `23 <level>`. Sending it here is the suspected reason the board
-        // ignored every colour (issues #173, #257); untested on hardware.
+        // `21 FF <R G B x8>` and `23 <level>`. The 3.0.4 firmware has no 0x09 handler (static,
+        // Ghidra 2026-11-14, docs/development/firmware-notes.md), so omitting it is unlikely to be
+        // what fixes issues #173, #257; untested on hardware.
         Ok(())
     }
 

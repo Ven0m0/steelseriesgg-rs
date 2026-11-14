@@ -131,7 +131,7 @@ and re-encode round trip is byte-identical; the write stays behind `--yes` (see 
 | `38 66 01` / `38 66 00` | Rapid Tap on / off in GG | `38 00 66` |
 | `38 67 0a 00 04 07 <n> ...` | 4 times while cycling a 4-state option; `<n>` was 1, 2, 3, 0 | not captured |
 
-`b1 <slot>` commits a rewritten profile slot, `b2 <slot>` loads it and `34 00` sets the profile volatile (see the
+`b1 <slot>` commits a rewritten profile slot, `b2 <slot>` loads it and `34 <flag>` sets or clears the profile-volatile flag (GG sends `34 00` after `B2`) (see the
 2026-11-10 live trace below). The `38 67` payload layout is still unknown.
 
 ## Live HID trace and engine memory read (2026-10-21)
@@ -152,7 +152,7 @@ Over about one minute, including the owner opening the keyboard's actuation sett
   Original conclusion of this trace: this firmware/GG version has no actuation (or lighting) read-back at all. GG's actuation
   UI is backed entirely by its own cached config, not a hardware query. This matches what `ssgg actuation`
   already showed indirectly (`0x2D` has no effect on `0x1628`, confirmed by the owner 2026-10-21) and
-  explains it: there is nothing on the wire to read, not a missing `ssgg` command.
+  explains it: GG does not read it; firmware 1.19.7 has a `B8 61` read handler (static, 2026-11-14, untested), so "nothing to read" is not established.
 - The engine's heap held the exact live JSON settings object GG keeps for this device (device id 242,
   profile name `Config 5`), decoded whole via `ReadProcessMemory` + JSON parsing of the heap bytes
   (no decryption of anything was needed or attempted; this is the engine's live, already-decoded state).
@@ -483,7 +483,7 @@ land on every offset measured above, and the slot-0 read-back of 2026-11-10 deco
 | 2010 | `oled[640]` | on-board OLED image, row-major |
 | 2650 / 2700 | `rapid_tap` 10 x {hid1, hid2, mode + report_both bit 7, 0, 0} / `rapid_tap_enable` | |
 | 2701 | padding[3] | |
-| 2704 | `macro_events[9600]` | 4-byte events, format not decoded |
+| 2704 | `macro_events[9600]` | 4-byte events, static decode in `firmware-notes.md` Q6 (`[EXPERIMENTAL]`) |
 | 12304 | `guid[16]` | GG's config guid |
 | 12320 | crc u32 LE | see "Checksum" |
 | 12324 | `FF` x176 | pad to 25 x 500 |
