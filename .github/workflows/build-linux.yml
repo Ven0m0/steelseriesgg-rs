@@ -29,7 +29,7 @@ jobs:
       - name: Install dependencies
         run: |
           pacman -Syu --noconfirm
-          pacman -S --needed --noconfirm git rust systemd
+          pacman -S --needed --noconfirm git rustup systemd
 
       - uses: actions/checkout@v7
         with:
@@ -39,6 +39,7 @@ jobs:
       - name: Create unprivileged build user (makepkg refuses to run as root)
         run: |
           useradd -m builder
+          su - builder -c "rustup default stable"
           echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
           chown -R builder:builder .
 
