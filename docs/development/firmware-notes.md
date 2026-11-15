@@ -364,8 +364,45 @@ report size) is the remaining suspect, as `PLAN.md` P4 already assumes. Not deco
 the forwarding stub means (it has many readers in both keyboard apps) and the forwarding routine itself, so a
 state-dependent refusal on `0x1610` (for example a mode the board must be in) is **not ruled out**.
 
+### Apex 7 `0x1612` 4.16.8: `60` and `41` (issue #336)
+
+Static, read-only, 2026-11-15. Sources: GG's decrypted spec `base_apex_legacy.lisp` and the installed
+`firmware-apex-7-v4.16.8.bin` (the reporter's firmware). Container as above: keyboard app at `0x1000`, size
+`0x1d000`, load base `0x0800a000`. Disassembled with capstone, not Ghidra; nothing was imported. Nothing here was
+tested on hardware.
+
+- **Frame**: spec `(struct meta_toggle_hid report_id 0x00, command 0x60, code uint8)`, `api-write HID (chunk HIDIO 65)`:
+  a 65-byte output report `00 60 <code>` plus zeros. The profile's config path marks the field `no_live_deploy: 1`,
+  so GG writes byte 84 of the profile and never sends `60` live.
+- **Table**: the keyboard app's 64-entry `{tag, read, write}` table is at `0x0801b73c` (same tag order as `0x1610` /
+  `0x1640`). Tag `60` has its own write `0x0801164c` and read `0x08011a8c`. The shared "unsupported" stub is
+  `0x0800a799` (used by `35` and `36` here).
+- **Write handler**: `strb payload[1]` into `[0x20003628 + 0x54]`, reply length 0. `0x20003628` is the RAM copy of the
+  active profile (the loader `0x08016100` fills it from file `slot | 0x200`); `0x54` = 84 = the profile's
+  `meta_toggle_hid` byte. No validation, no flash call, no lighting access. The read handler returns that byte
+  (length 1).
+- **Readers of the byte**: `0x0800d8f4` and `0x0800eb64`. Both map it through the usage-to-slot table at
+  `0x0801bea4`; `0xF0` is slot 93, and usage `0x00` plus every unassigned usage (134 of 256, e.g. `0x00-0x03`,
+  `0x65-0x84`) map to slot `0xFF`.
+  - `0x0800eb64` tests bit `0xFF` of the 33-byte key bitmap. No physical key has that slot, so the meta key can
+    never register as held and the META layer becomes unreachable: the setting disables the meta key rather than
+    moving it.
+  - `0x0800d8f4` indexes a per-slot RAM array with slot `0xFF` (an out-of-range read at `0x2000313a`). Its purpose
+    is not decoded. This is a risk, not a proven fault.
+- **Fn combos**: Fn+F9..F12 are META-layer bindings (`62 01..04`; the repo's captures show only the `62` META
+  function, so the F9..F12 / `01..04` part is from the spec read and not re-checked here), so they cannot fire while
+  META is unreachable. Hard-coded combos are not ruled out. What the physical key then sends (base binding `51 F0`, a combo key on usage
+  `0xF0`) is unknown.
+- **Persistence**: the handler writes RAM only. A profile load (`00 89 <1..5>`, loader `0x08016100`) or a power cycle
+  reloads byte 84 from flash; `00 60 F0` restores the original. Not settled: whether a later firmware path saves the
+  RAM profile to the active slot. `41` (`set_profile_volatile`) stores `payload != 0` in `0x2000298b`; that flag
+  gates calls after the firmware's own RAM mapping edits (`0x0801664a`, `0x080167d6`) and the profile load clears it
+  (`0x0801655e`). Those callees are not decoded.
+- **Lighting and OLED**: the handler touches neither (lighting is the separate lighting app). Static evidence only.
+
 ## Method and limits
 
+- The Apex 7 image (`0x1612`) was read with capstone (`uv run --with capstone`), not Ghidra.
 - Ghidra 12.2, JDK 25, `ARM:LE:32:Cortex`, `BinaryLoader`. The Java scripts (seed, decompile-to-file, literal-pool
   reference finder, call-reachability, base statistics) and all decompiled output stay outside the repo in
   `%USERPROFILE%\gg-capture-artifacts\ghidra\`, as do the copies of the images.
@@ -396,3 +433,6 @@ state-dependent refusal on `0x1610` (for example a mode the board must be in) is
 5. Trace how the Apex 3 TKL effect engine consumes the `21` zone records.
 6. Identify the RAM flag that gates `3A`/`3B`/`21`/`22`/`23` forwarding in the Gen 1 keyboard apps and the forwarding
    routine.
+7. Hardware test on an Apex 7 (`0x1612`, 4.16.8): dump all slots with `ssgg onboard read`, send `00 60 <unassigned
+   usage>`, test the Fn key, power-cycle, re-read and compare byte 84 (issue #336). `ssgg` has no `60` command, so
+   this needs a typed `HidReportBuilder` command first (not written).

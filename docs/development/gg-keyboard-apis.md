@@ -185,7 +185,7 @@ refresh of those three. Report id `0`, output report 65, feature report 513 for 
 | `enter_exit_idle` | `HIDIO` | `00 6E` |
 | `load_profile` | `HIDIO` | `00 89 <1..5>` |
 | `set_profile_volatile` | `HIDIO` | `00 41` |
-| `meta_toggle_hid` | `HIDIO` | `00 60` |
+| `meta_toggle_hid` | `HIDIO` | `00 60 <code>` (65-byte output report; field is `no_live_deploy`, GG writes profile byte 84 instead; static firmware reading in [firmware-notes.md](firmware-notes.md), "Apex 7 `0x1612` 4.16.8: `60` and `41`") |
 | `layout` | `HIDIO` | `00 74` |
 | `rapid_tap_enable` | `HIDIO` | `00 1A` |
 | `rapid_tap_pairs` | `HIDIO` | see the specifications, pairs table |
