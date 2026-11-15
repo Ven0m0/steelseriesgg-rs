@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Releases and this changelog are generated automatically from
 [Conventional Commits](https://www.conventionalcommits.org/) by release-please.
 
+## [0.1.22](https://github.com/Ven0m0/steelseriesgg-rs/compare/v0.1.21...v0.1.22) (2026-11-15)
+
+
+### Fixed
+
+* **ci:** install rustup in the Arch release container so the build tracks stable rustc ([abd1922](https://github.com/Ven0m0/steelseriesgg-rs/commit/abd192259e4e5cb63021f0aa6f595b21e749f788))
+
+
+### Documentation
+
+* **protocol:** Gen 1 0x60 meta_toggle_hid static analysis ([#336](https://github.com/Ven0m0/steelseriesgg-rs/issues/336)) ([facf5a0](https://github.com/Ven0m0/steelseriesgg-rs/commit/facf5a00a3f6f86dab1d582944415beb02416399))
+
 ## [0.1.21](https://github.com/Ven0m0/steelseriesgg-rs/compare/v0.1.20...v0.1.21) (2026-11-14)
 
 
