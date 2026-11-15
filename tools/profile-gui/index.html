@@ -15,20 +15,17 @@
 <body>
 <header class="bar">
   <div class="brand">
-    <h1>ssgg on-board profile editor</h1>
-    <p>Change key bindings, lighting and the OLED image of a keyboard profile. <span class="tag">reverse-engineered protocol</span></p>
+    <h1>ssgg</h1>
+    <p>Profile editor <span class="tag">reverse-engineered protocol</span></p>
     <p class="dev">Edits the JSON of <code>ssgg onboard read --json</code> and <code>decode --json</code>. Files only, no device.</p>
   </div>
+  <div class="side-label">Profiles</div>
+  <div id="tabs" class="tabs"></div>
   <div class="toolbar">
     <label class="btn file">Open JSON<input id="fileInput" type="file" accept=".json,application/json"></label>
     <button id="saveBtn" class="btn primary">Save a copy</button>
     <button id="devBtn" type="button" class="btn" aria-pressed="false" title="Show hex bytes, offsets and protocol notes">Technical details</button>
-    <span class="seg">
-      <button id="layerBaseBtn" class="btn seg active">Base layer</button>
-      <button id="layerMetaBtn" class="btn seg">META layer</button>
-    </span>
   </div>
-  <div id="tabs" class="tabs"></div>
   <nav id="viewTabs" class="view-tabs" aria-label="Device" hidden>
     <button type="button" class="btn seg active" data-view="keyboardView" aria-pressed="true">Keyboard</button>
     <button type="button" class="btn seg" data-view="headsetView" aria-pressed="false">Headset</button>
@@ -40,6 +37,13 @@
 <section id="controlBox" class="panel live" hidden></section>
 <main>
   <section id="boardBox" class="board-box">
+    <div class="board-head">
+      <h2>Keyboard</h2>
+      <span class="seg" role="group" aria-label="Layer">
+        <button id="layerBaseBtn" class="btn seg active">Base layer</button>
+        <button id="layerMetaBtn" class="btn seg">META layer</button>
+      </span>
+    </div>
     <div id="nameBar" class="name-bar"></div>
     <div id="boardMount"></div>
     <div id="legend" class="legend"></div>

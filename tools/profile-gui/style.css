@@ -1,17 +1,18 @@
 /* Steel + signal orange. System fonts only: the editor runs offline in a webview. */
 :root {
-  --bg: #15181c;
-  --panel: #1d2127;
-  --raised: #262b33;
-  --line: #363d47;
-  --text: #e7eaee;
-  --muted: #9ca4af;
-  --accent: #ff7a1a;
-  --on-accent: #15181c;
+  --bg: #0e1013;
+  --rail: #0a0b0d;
+  --panel: #16191d;
+  --raised: #21252b;
+  --line: #2c323a;
+  --text: #eceef1;
+  --muted: #9aa2ad;
+  --accent: #ff5200;
+  --on-accent: #0e1013;
   --warn: #f2c94c;
   --good: #4fd18b;
   --bad: #ff6363;
-  --plate: #0f1215;
+  --plate: #08090b;
   --cap-edge: #5a6674;
   --ctl: #5a6674;
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -26,12 +27,17 @@
 
 * { box-sizing: border-box; }
 
+/* GG layout: a fixed left rail (profiles, file actions) and the content to its right. */
 body {
   margin: 0;
-  background: var(--bg);
+  display: grid;
+  grid-template-columns: 232px minmax(0, 1fr);
+  align-items: start;
+  background: radial-gradient(900px 360px at 100% 0, rgba(255, 82, 0, 0.07), transparent 70%), var(--bg);
   color: var(--text);
   font: var(--fs-md)/1.5 var(--sans);
 }
+#keyboardView, .headset-view { grid-column: 2; min-width: 0; }
 
 /* Mono is for codes, hex and status data; prose stays in the UI font. */
 .mono { font-family: var(--mono); font-size: var(--fs-xs); }
@@ -55,30 +61,32 @@ summary:focus-visible, table.grid tr.clickable:focus-visible {
 }
 
 .bar {
+  grid-column: 1;
+  grid-row: 1 / span 6;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
   display: flex;
-  flex-wrap: wrap;
-  gap: 12px 16px;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--line);
-  background: var(--panel);
+  flex-direction: column;
+  gap: 8px;
+  padding: 20px 12px;
+  border-right: 1px solid var(--line);
+  background: var(--rail);
 }
 
-.brand h1 { margin: 0; font-size: var(--fs-xl); font-weight: 650; letter-spacing: 0.01em; line-height: 1.25; }
-.brand h1::before {
-  content: '';
-  display: inline-block;
-  width: 8px;
-  height: 18px;
-  margin-right: 10px;
-  border-radius: 2px;
-  background: var(--accent);
-  vertical-align: -2px;
-}
-.brand p { margin: 2px 0 0; color: var(--muted); font-size: var(--fs-sm); }
+.brand { padding: 0 8px 16px; }
+.brand h1 { margin: 0; font-size: 26px; font-weight: 800; letter-spacing: 0.04em; line-height: 1.1; }
+.brand h1::after { content: ''; display: block; width: 28px; height: 3px; margin-top: 8px; border-radius: 2px; background: var(--accent); }
+.brand p { margin: 6px 0 0; color: var(--muted); font-size: var(--fs-sm); }
+.side-label { padding: 0 8px; color: var(--muted); font-size: var(--fs-xs); font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; }
 
-.toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+/* Rail order: brand, device nav, profiles (grow), file actions pinned to the bottom. */
+.view-tabs { order: 1; }
+.side-label { order: 2; }
+.tabs { order: 3; flex: 1; align-content: flex-start; }
+.toolbar { order: 4; display: flex; flex-direction: column; gap: 8px; padding-top: 12px; border-top: 1px solid var(--line); }
+.toolbar .btn { width: 100%; }
 
 .btn {
   display: inline-flex;
@@ -99,8 +107,8 @@ summary:focus-visible, table.grid tr.clickable:focus-visible {
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .btn:disabled:hover { border-color: var(--ctl); background: var(--raised); }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
-.btn.primary:hover { background: #ff8f3d; border-color: #ff8f3d; }
-.btn.primary:active { background: #e86a0c; }
+.btn.primary:hover { background: #ff6a22; border-color: #ff6a22; }
+.btn.primary:active { background: #e04800; }
 .btn.warn { background: var(--raised); border-color: var(--warn); color: var(--warn); }
 .btn.file { gap: 8px; position: relative; }
 /* A display:none input is not labelable: clicking the label would open nothing.
@@ -116,14 +124,18 @@ summary:focus-visible, table.grid tr.clickable:focus-visible {
 
 /* Segmented control: one shared track, the active segment raised with an orange marker. */
 .seg { display: inline-flex; }
-.toolbar > .seg, .view-tabs {
-  display: inline-flex;
+span.seg {
   gap: 2px;
   padding: 2px;
   background: var(--bg);
   border: 1px solid var(--line);
   border-radius: 8px;
 }
+/* Device nav (Keyboard / Headset) in the rail: full-width items, active one marked on the left. */
+.view-tabs { display: flex; flex-direction: column; gap: 2px; padding-bottom: 12px; }
+.view-tabs .btn.seg { justify-content: flex-start; min-height: 36px; padding: 4px 12px; color: var(--text); }
+.view-tabs .btn.seg.active { background: var(--raised); }
+.view-tabs .btn.seg.active::after { left: 0; right: auto; top: 8px; bottom: 8px; width: 3px; height: auto; }
 .btn.seg { min-height: 28px; background: transparent; border-color: transparent; color: var(--muted); position: relative; }
 .btn.seg:hover { color: var(--text); background: var(--panel); border-color: transparent; }
 .btn.seg.active { background: var(--raised); color: var(--text); border-color: var(--line); }
@@ -138,21 +150,27 @@ summary:focus-visible, table.grid tr.clickable:focus-visible {
   background: var(--accent);
 }
 
-.tabs { display: flex; flex-wrap: wrap; gap: 4px; width: 100%; }
+/* One profile per row, like GG's profile list; the file name can be long, so it truncates. */
+.tabs { display: flex; flex-direction: column; gap: 4px; width: 100%; }
 .tab {
-  background: var(--bg);
-  border: 1px solid var(--line);
-  border-radius: 6px;
+  position: relative;
+  text-align: left;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
   color: var(--muted);
-  font-family: var(--mono);
-  font-size: var(--fs-xs);
-  padding: 4px 12px;
-  min-height: 28px;
+  font: var(--fs-sm)/1.3 var(--sans);
+  padding: 8px 12px;
+  min-height: 36px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   cursor: pointer;
-  transition: color var(--t), border-color var(--t);
+  transition: color var(--t), background-color var(--t);
 }
-.tab:hover { color: var(--text); border-color: var(--muted); }
-.tab.active { color: var(--text); border-color: var(--accent); background: var(--raised); }
+.tab:hover { color: var(--text); background: var(--panel); }
+.tab.active { color: var(--text); background: var(--raised); border-color: var(--line); font-weight: 600; }
+.tab.active::before { content: ''; position: absolute; left: 0; top: 8px; bottom: 8px; width: 3px; border-radius: 2px; background: var(--accent); }
 
 .status { margin: 0; padding: 8px 16px; color: var(--muted); font-family: var(--sans); font-size: var(--fs-sm); border-bottom: 1px solid var(--line); }
 .status:empty { display: none; }
@@ -161,13 +179,19 @@ main {
   display: grid;
   /* Left: the board plus the summary panels under it. Right: the inspector, which always
      edits what is selected on the board (a key, a wheel cap, or the OLED). */
-  grid-template-columns: minmax(760px, 1.9fr) minmax(360px, 1fr);
+  grid-template-columns: minmax(600px, 1.9fr) minmax(340px, 1fr);
   gap: 16px;
-  padding: 16px;
+  padding: 20px;
   align-items: start;
 }
 
-@media (max-width: 1320px) { main { grid-template-columns: 1fr; } }
+@media (max-width: 1280px) { main { grid-template-columns: 1fr; } }
+/* Narrow window: the rail becomes a top bar. */
+@media (max-width: 900px) {
+  body { display: block; }
+  .bar { position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--line); }
+  .tabs { flex-direction: row; flex-wrap: wrap; }
+}
 
 .board-box {
   background: var(--panel);
@@ -184,6 +208,8 @@ body.dropping .board-box { border-color: var(--accent); box-shadow: 0 0 0 2px va
 /* The profile name editor sits above the board, where the profile being edited is visible while the
    board is. app.js builds it (renderNameBar) and marks it when the name differs from the file as
    loaded; the revert button is enabled only then. */
+.board-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+.board-head h2 { margin: 0; font-size: var(--fs-lg); font-weight: 700; }
 .name-bar {
   display: flex;
   flex-wrap: wrap;
@@ -324,7 +350,7 @@ details.explain > .note { margin-top: 8px; }
   padding: 12px 16px 16px;
 }
 .below-box .panel { background: var(--bg); min-width: 0; overflow-x: auto; }
-.panel h2 { margin: 0 0 8px; font-size: var(--fs-lg); font-weight: 600; color: var(--text); }
+.panel h2 { margin: 0 0 8px; font-size: var(--fs-sm); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text); }
 .panel h2::before {
   content: '';
   display: inline-block;
@@ -365,7 +391,35 @@ select:hover, input[type="text"]:hover, input[type="number"]:hover { border-colo
 input[type="number"].num { width: 96px; }
 input[type="text"].text { min-width: 220px; }
 input[type="color"].color { width: 54px; height: 28px; padding: 2px; background: var(--bg); border: 1px solid var(--ctl); border-radius: 6px; }
-input[type="checkbox"], input[type="range"] { accent-color: var(--accent); }
+input[type="range"] { accent-color: var(--accent); }
+/* Checkboxes read as on/off switches, as in GG. */
+input[type="checkbox"] {
+  appearance: none;
+  flex: none;
+  position: relative;
+  width: 34px;
+  height: 20px;
+  margin: 0;
+  border-radius: 10px;
+  background: var(--raised);
+  border: 1px solid var(--ctl);
+  cursor: pointer;
+  transition: background-color var(--t), border-color var(--t);
+}
+input[type="checkbox"]::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--muted);
+  transition: transform var(--t), background-color var(--t);
+}
+input[type="checkbox"]:checked { background: var(--accent); border-color: var(--accent); }
+input[type="checkbox"]:checked::after { transform: translateX(14px); background: #fff; }
+input[type="checkbox"]:disabled { opacity: 0.5; cursor: not-allowed; }
 .check { display: inline-flex; gap: 6px; align-items: center; color: var(--muted); font-size: var(--fs-sm); }
 .btnrow { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
 
