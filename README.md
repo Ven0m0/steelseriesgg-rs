@@ -36,6 +36,7 @@ systemctl --user enable --now ssgg.service
 ### Keyboards
 - Apex Pro TKL 2023 wired (`0x1628`): confirmed on hardware (Windows; Linux untested)
 - Apex Pro (2024) (`0x1640`): lighting confirmed on hardware (Linux, 2026-11-02; ISO-DE only)
+- Apex 5 (2024) (`0x1650`): lighting frame confirmed by a user report (Linux, 2026-11-15; US), ssgg's own frame not yet replayed
 - Apex Pro TKL 2023 wireless (`0x1630`): experimental, pending hardware confirmation
 - Apex 3 / Apex 3 TKL
 - Apex 5

@@ -2149,6 +2149,7 @@ mod tests {
     fn gen1_fork_models_use_the_0x3a_frame_without_init() {
         for pid in [
             product_ids::APEX_5,
+            product_ids::APEX_5_2024,
             product_ids::APEX_7_TKL,
             product_ids::APEX_PRO_TKL,
             product_ids::APEX_PRO_2024,
@@ -2246,7 +2247,7 @@ mod tests {
                 WIRELESS,
             ),
             (0x1648, K::ApexProTkl2023, "Apex Pro Mini (2024)", MINI, MINI),
-            (0x1650, K::Generic, "Apex 5 (2024)", None, None),
+            (0x1650, K::ApexProTkl2023, "Apex 5 (2024)", GEN1, GEN1),
             (0x1652, K::Generic, "Apex 7 (2024)", None, None),
             (0x1660, K::ApexProTkl2023, "Apex Pro TKL (2024) Cyber", GEN3, GEN3),
             (0x1662, K::ApexProTkl2023, "Apex Pro TKL (2024) Steel", GEN3, GEN3),

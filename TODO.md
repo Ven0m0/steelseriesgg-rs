@@ -1,2 +1,2 @@
-- [ ] read pr #339 "https://github.com/Ven0m0/steelseriesgg-rs/issues/339" and implement/fix the code
-- [ ] ensure pr #336 "https://github.com/Ven0m0/steelseriesgg-rs/issues/336" is done and close it afterwards
+- [x] read pr #339 "https://github.com/Ven0m0/steelseriesgg-rs/issues/339" and implement/fix the code
+- [x] ensure pr #336 "https://github.com/Ven0m0/steelseriesgg-rs/issues/336" is done and close it afterwards

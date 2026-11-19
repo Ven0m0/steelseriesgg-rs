@@ -200,7 +200,7 @@ pub const KEYBOARD_MODELS: &[KeyboardModel] = &[
         false,
         GEN3,
     ),
-    model(APEX_5_2024, "Apex 5 (2024)", C::Generic, false, None),
+    model(APEX_5_2024, "Apex 5 (2024)", C::ApexProTkl2023, false, GEN1),
     model(APEX_7_2024, "Apex 7 (2024)", C::Generic, false, None),
     model(APEX_M750, "Apex M750", C::ApexM750, false, None),
 ];

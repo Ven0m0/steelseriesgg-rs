@@ -177,7 +177,7 @@ Taken on the branch (all `[EXPERIMENTAL]`, none run on hardware):
   stick on Gen 2 (`0x227E`, 2026-10-25: it falls back to the headset's saved level after a power cycle); instead
   `--persistent` keeps them in `[headset]` and the daemon re-applies them on power-on (2026-10-26).
 - OpenRGB / fork keyboard families: Apex 9 TKL/Mini (`0x40`, 513 bytes, no init), Gen 1 `0x3A` models (Apex 5,
-  Apex 7 TKL, Apex Pro TKL, Apex Pro 2024) on the direct path, Apex M750 solid colour (slot-to-key map unknown).
+  Apex 5 2024, Apex 7 TKL, Apex Pro TKL, Apex Pro 2024) on the direct path, Apex M750 solid colour (slot-to-key map unknown).
 
 Still open:
 - Other mice families (Prime/Prime+, Old, Rival 3, 310/TEN, wireless-old) and the rest of Sarhan's mouse table.
@@ -206,7 +206,7 @@ only per `.claude/rules/experimental-protocol.md`.
   new no-APPLY behaviour.
 - **[HW, outside]** #283 `0x1610`, #276 (`0x1858` `ssgg mouse`, `0x22A1` `ssgg headset`, `0x0616` `rgb color`),
   Apex 9 (`0x1634`, `0x1620`), Apex 5 / Apex 7 TKL / Apex Pro TKL (`0x161C`, `0x1618`, `0x1614`; Apex Pro
-  2024 `0x1640` done 2026-11-02, #318), other Nova 7 PIDs (`0x227E` done 2026-10-25: status, sidetone, mic volume, auto-off work), other
+  2024 `0x1640` done 2026-11-02, #318), Apex 5 2024 `0x1650` (#339: user-reported frame, replay ssgg's own), other Nova 7 PIDs (`0x227E` done 2026-10-25: status, sidetone, mic volume, auto-off work), other
   Modern-family mice.
 - **[HW, Linux]** `ssgg remap run` on a real keyboard, including the escape chord and unplug behaviour.
 
