@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Releases and this changelog are generated automatically from
 [Conventional Commits](https://www.conventionalcommits.org/) by release-please.
 
+## [0.1.23](https://github.com/Ven0m0/steelseriesgg-rs/compare/v0.1.22...v0.1.23) (2026-11-19)
+
+
+### Fixed
+
+* **keyboards:** route the Apex 5 (2024) 0x1650 to the Gen 1 0x3A direct frame ([#339](https://github.com/Ven0m0/steelseriesgg-rs/issues/339)) ([d031416](https://github.com/Ven0m0/steelseriesgg-rs/commit/d03141692acaef85133bdc0512c4e7e6aa23be71))
+
+
+### Changed
+
+* bump sysinfo from 0.40.1 to 0.40.3 in the cargo-all group ([#341](https://github.com/Ven0m0/steelseriesgg-rs/issues/341)) ([1175995](https://github.com/Ven0m0/steelseriesgg-rs/commit/1175995071bb316269d219984d761478804975d4))
+
 ## [0.1.22](https://github.com/Ven0m0/steelseriesgg-rs/compare/v0.1.21...v0.1.22) (2026-11-15)
 
 
