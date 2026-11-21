@@ -36,7 +36,7 @@ pub enum BatteryScale {
 pub enum StatusQuery {
     /// `00 b0`, answered `b0 power [gap] battery charge chat_game chat_chat`.
     B0,
-    /// `06 b7`, answered `[06] b7 headset_battery charger_battery charging` (Nova Pro Wireless).
+    /// `06 b7`, answered `[06] b7 headset_battery charger_battery state` (Nova Pro Wireless).
     ProBattery,
     /// No status query in the spec (wired Nova Pro, Nova 3).
     None,
@@ -252,16 +252,25 @@ fn steps8_percent(level: u8) -> u8 {
     (u16::from(level.min(8)) * 100 / 8) as u8
 }
 
-/// Decode a Nova Pro Wireless `b7` battery reply, the slice starting at `b7`. The charging byte's values
-/// (`1 2 4 8`) are not explained by the spec, so charging and connection are left unknown.
+/// Decode a Nova Pro Wireless `b7` battery reply, the slice starting at `b7`: `b7 headset_battery
+/// charger_battery state`. The spec lists the state values `1 2 4 8` without naming them. On a Nova Pro
+/// Wireless (0x12E0, 2026-11-21) `1` is the headset off or unpaired and `8` the headset on air; `2` is
+/// charging over the cable per HeadsetControl, not yet seen on hardware; `4` stays unknown.
 pub fn decode_pro_battery(reply: &[u8]) -> Result<HeadsetStatus> {
     let level = *reply
         .get(1)
         .ok_or_else(|| Error::DeviceCommunication(format!("Headset battery reply too short: {} bytes", reply.len())))?;
+    let (connected, charging) = match reply.get(3) {
+        Some(1) => (Some(false), None),
+        Some(2) => (Some(true), Some(true)),
+        Some(8) => (Some(true), Some(false)),
+        _ => (None, None),
+    };
     Ok(HeadsetStatus {
-        connected: None,
-        charging: None,
-        battery_percent: Some(steps8_percent(level)),
+        connected,
+        charging,
+        // An offline headset reports level 0, which is not its charge.
+        battery_percent: (connected != Some(false)).then(|| steps8_percent(level)),
         chat_mix: None,
     })
 }
@@ -518,7 +527,27 @@ mod tests {
             };
             assert_eq!(m.status, expected, "{pid:#06x}");
         }
-        assert_eq!(decode_pro_battery(&[0xB7, 4, 8, 1]).unwrap().battery_percent, Some(50));
+        // Replies read from a Nova Pro Wireless (0x12E0): headset off, then on air at 2/8.
+        let off = decode_pro_battery(&[0xB7, 0, 8, 1]).unwrap();
+        assert_eq!(
+            (off.connected, off.charging, off.battery_percent),
+            (Some(false), None, None)
+        );
+        let on = decode_pro_battery(&[0xB7, 2, 8, 8]).unwrap();
+        assert_eq!(
+            (on.connected, on.charging, on.battery_percent),
+            (Some(true), Some(false), Some(25))
+        );
+        let cable = decode_pro_battery(&[0xB7, 4, 8, 2]).unwrap();
+        assert_eq!(
+            (cable.connected, cable.charging, cable.battery_percent),
+            (Some(true), Some(true), Some(50))
+        );
+        let odd = decode_pro_battery(&[0xB7, 4, 8, 4]).unwrap();
+        assert_eq!(
+            (odd.connected, odd.charging, odd.battery_percent),
+            (None, None, Some(50))
+        );
         assert_eq!(decode_pro_battery(&[0xB7, 9]).unwrap().battery_percent, Some(100));
         assert!(decode_pro_battery(&[0xB7]).is_err());
         assert_eq!(reply_body(&[0x06, 0xB7, 4], 6, 0xB7), Some(&[0xB7, 4][..]));
