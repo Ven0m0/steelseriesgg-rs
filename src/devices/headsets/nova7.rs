@@ -108,12 +108,12 @@ const fn nova_pro_model(product_id: u16, wireless: bool) -> Nova7Model {
 /// [EXPERIMENTAL] Nova 5 / Nova 3 Wireless family: the Nova 7 frames with sidetone `0..=10`, mic volume
 /// `0..=15`, and an unused byte before the percent battery in the status reply, per GG's decrypted device
 /// specs (`base_arctis_nova_5_tx`, `base_arctis_nova_3_wireless_tx`, 2026-10-25). Untested on hardware.
-const fn nova5_model(product_id: u16) -> Nova7Model {
+const fn nova5_model(product_id: u16, chat_mix: bool) -> Nova7Model {
     Nova7Model {
         product_id,
         battery: BatteryScale::Percent,
         sidetone: true,
-        chat_mix: true,
+        chat_mix,
         mic_min: 0,
         sidetone_max: 10,
         mic_max: 15,
@@ -169,11 +169,13 @@ pub const NOVA7_MODELS: &[Nova7Model] = &[
     model(ARCTIS_NOVA_4X, BatteryScale::Steps4, true),
     // GG spec `arctis_nova_7_wow_upgrade_tx` (`base_arctis_nova_7_gen2_tx`): percent battery.
     model(ARCTIS_NOVA_7_WOW_UPGRADE, BatteryScale::Percent, true),
-    nova5_model(ARCTIS_NOVA_5_TX),
-    nova5_model(ARCTIS_NOVA_5X),
-    nova5_model(ARCTIS_NOVA_5X_WHITE),
-    nova5_model(ARCTIS_NOVA_3_WIRELESS_TX),
-    nova5_model(ARCTIS_NOVA_3X_WIRELESS),
+    // No ChatMix dial on the Nova 5 (`0x2232`): owner report, Linux, 2026-11-24; the status reply's game and
+    // chat bytes stayed at the middle. The other PIDs keep the spec's value until someone checks them.
+    nova5_model(ARCTIS_NOVA_5_TX, false),
+    nova5_model(ARCTIS_NOVA_5X, true),
+    nova5_model(ARCTIS_NOVA_5X_WHITE, true),
+    nova5_model(ARCTIS_NOVA_3_WIRELESS_TX, true),
+    nova5_model(ARCTIS_NOVA_3X_WIRELESS, true),
     nova_pro_model(ARCTIS_NOVA_PRO_WIRED, false),
     nova_pro_model(ARCTIS_NOVA_PRO_XBOX, false),
     nova_pro_model(ARCTIS_NOVA_PRO_V2, false),
@@ -529,6 +531,17 @@ mod tests {
         );
     }
 
+    #[test]
+    fn nova_5_has_no_chat_mix_dial() {
+        let m = nova7_model(0x2232).unwrap();
+        assert!(m.sidetone && !m.chat_mix);
+        let s = decode_status(m, &[0xb0, 3, 0, 17, 3, 50, 50]).unwrap();
+        assert_eq!((s.battery_percent, s.chat_mix), (Some(17), None));
+        for pid in [0x2253, 0x2264, 0x2269, 0x226D] {
+            assert!(nova7_model(pid).unwrap().chat_mix, "{pid:#06x}");
+        }
+    }
+
     // Vectors from the `base_arctis_nova_5_tx` / `base_arctis_nova_3_wireless_tx` structs: sidetone 0-10,
     // mic 0-15, status `b0 power unused battery(0-100) charge game chat`.
     #[test]
@@ -541,7 +554,7 @@ mod tests {
                 "{pid:#06x}"
             );
         }
-        let five = nova5_model(0x2232);
+        let five = nova5_model(0x2232, true);
         let s = decode_status(&five, &[0xb0, 3, 0xEE, 87, 3, 100, 0, 0]).unwrap();
         assert_eq!(
             (s.connected, s.battery_percent, s.chat_mix),
@@ -598,6 +611,7 @@ mod tests {
     fn table_attributes_match_the_brief() {
         let steps4 = [0x2202, 0x2206, 0x220A, 0x223A, 0x227A, 0x22A4, 0x12F2, 0x12F6];
         let no_extras = [0x220A, 0x2298, 0x22A7];
+        let sidetone_without_chat_mix = [ARCTIS_NOVA_5_TX];
         for m in NOVA7_MODELS
             .iter()
             .filter(|m| !matches!(m.battery, BatteryScale::Steps5 | BatteryScale::Steps8))
@@ -609,7 +623,12 @@ mod tests {
                 m.product_id
             );
             assert_eq!(m.sidetone, !no_extras.contains(&m.product_id), "{:#06x}", m.product_id);
-            assert_eq!(m.chat_mix, m.sidetone, "{:#06x}", m.product_id);
+            assert_eq!(
+                m.chat_mix,
+                m.sidetone && !sidetone_without_chat_mix.contains(&m.product_id),
+                "{:#06x}",
+                m.product_id
+            );
         }
     }
 
