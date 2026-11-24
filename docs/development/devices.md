@@ -213,7 +213,8 @@ scope belongs to this family in the fork; none was dropped.
   Gen 2 and in the contributor's 2026-11-17/18 run, below), with a 50 ms timeout, and prints how many frames were echoed
   and their status (`Echo from the mouse (EXPERIMENTAL): ..`, `Mouse::last_acknowledgements`); a status other than `00`
   has no known meaning. Queued reports are dropped right before each write, after the 50 ms spacing. A missing echo is
-  not an error. Whether models other than the Rival 3 Gen 2 echo is unknown.
+  not an error; a failed read is (since 2026-11-24), and its message says the frame was sent. Whether models other than
+  the Rival 3 Gen 2 echo is unknown.
 - DPI: `00 2D 01 <preset> <code>`; the Rival 3 Gen 2 uses opcode `34` and sends the code once per axis. Preset
   index is 1 on Aerox 3, 0 elsewhere; the Rival 3 Gen 2 takes it 0-based per rivalcfg PR #292 (merged 2026-10-07;
   its author's wired `0x1870` under macOS ignored `34 01 01 08 08` and applied `34 01 00 12 12`), where the fork

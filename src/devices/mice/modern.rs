@@ -13,8 +13,8 @@
 //! A wired Rival 3 Gen 2 echoes each setting as `<opcode> 00`, in GG's capture (the USBPcap text attached to
 //! rivalcfg issue #249, 2025-07-29; the PID comes from the issue, the capture does not decode the descriptors) and
 //! to `ssgg`'s own frames (contributor, Linux, 2026-11-17/18); other models [EXPERIMENTAL]. The echo is read after
-//! every frame and kept as a [`SettingAck`], and a missing one is not an error. The read-only firmware (`90 00`) and
-//! polling-rate (`AB`) queries go only to the models without a wireless mode.
+//! every frame and kept as a [`SettingAck`]; a missing one is not an error, a failed read is. The read-only
+//! firmware (`90 00`) and polling-rate (`AB`) queries go only to the models without a wireless mode.
 
 use super::dpi_tables::{TRUEMOVE_AIR, TRUEMOVE_CORE};
 use super::{Mouse, PollRateReadback, SettingAck, unsupported};
@@ -550,6 +550,27 @@ pub fn echo_ack(reply: &[u8]) -> SettingAck {
     }
 }
 
+/// [EXPERIMENTAL] The acknowledgement of a setting frame from what [`await_reply`] read after it: no reply in time is
+/// [`SettingAck::NoReply`], a failed read is an error that says the frame went out all the same.
+fn echo_outcome(reply: Result<Option<Vec<u8>>>, frame: &str) -> Result<SettingAck> {
+    match reply {
+        Ok(Some(reply)) => Ok(echo_ack(&reply)),
+        Ok(None) => Ok(SettingAck::NoReply),
+        Err(err) => Err(Error::DeviceCommunication(format!(
+            "{frame} was sent, but reading the mouse's echo failed: {err}"
+        ))),
+    }
+}
+
+/// An echo read that a signal interrupted counts as a timeout (0 bytes): hidapi's Linux backend does not retry its
+/// `poll` after `EINTR`, so a signal handler in the process would otherwise turn a late echo into a failed setting.
+fn interrupted_as_timeout(read: std::result::Result<usize, hidapi::HidError>) -> Result<usize> {
+    match read {
+        Err(hidapi::HidError::IoError { error }) if error.kind() == std::io::ErrorKind::Interrupted => Ok(0),
+        other => Ok(other?),
+    }
+}
+
 /// [EXPERIMENTAL] Modern-family mouse.
 pub struct ModernMouse {
     info: DeviceInfo,
@@ -604,7 +625,7 @@ impl ModernMouse {
     }
 
     /// Send a setting, then read its answer: a 2.4 GHz receiver's acknowledgement is read and dropped like
-    /// rivalcfg does, a wired mouse's echo is kept in `acks`. A missing echo is not an error.
+    /// rivalcfg does, a wired mouse's echo is kept in `acks`. A missing echo is not an error; a failed read is.
     fn send_setting(&mut self, command: &dyn HidCommand) -> Result<()> {
         if self.model.dongle {
             self.send(command)?;
@@ -613,13 +634,14 @@ impl ModernMouse {
             return Ok(());
         }
         // The queue is emptied after the spacing, right before the write, so an answer to the previous frame that
-        // arrives during the spacing is not taken for this frame's echo (the colour frames all echo `21`).
+        // arrives during the spacing is not taken for this frame's echo (the colour frames all echo `21`). A failed
+        // drain does not stop the write: a read failure that lasts shows up in the echo read after it.
         self.pace();
         if let Err(err) = self.drop_stale_reports() {
             tracing::debug!("dropping stale mouse reports failed: {err}");
         }
         let opcode = self.send(command)?;
-        let ack = self.read_echo(opcode);
+        let ack = self.read_echo(opcode, &command.description())?;
         self.acks.push(ack);
         Ok(())
     }
@@ -636,20 +658,16 @@ impl ModernMouse {
         Ok(())
     }
 
-    /// The echo of the frame just sent, [`SettingAck::NoReply`] when none came or the read failed.
-    fn read_echo(&self, opcode: u8) -> SettingAck {
+    /// The echo of `frame`, the frame just sent ([`echo_outcome`]).
+    fn read_echo(&self, opcode: u8, frame: &str) -> Result<SettingAck> {
         let reply = self.device().and_then(|device| {
             let device = device.lock();
-            await_reply(|report| Ok(device.read_timeout(report, ECHO_TIMEOUT_MS)?), opcode)
+            await_reply(
+                |report| interrupted_as_timeout(device.read_timeout(report, ECHO_TIMEOUT_MS)),
+                opcode,
+            )
         });
-        match reply {
-            Ok(Some(reply)) => echo_ack(&reply),
-            Ok(None) => SettingAck::NoReply,
-            Err(err) => {
-                tracing::debug!("reading the echo of {opcode:#04x} failed: {err}");
-                SettingAck::NoReply
-            }
-        }
+        echo_outcome(reply, frame)
     }
 
     /// Send a read-only query and return the reply that answers it ([`await_reply`]), or with `or_first` the first
@@ -1235,6 +1253,36 @@ mod tests {
 
         let unplugged = |_: &mut [u8]| -> Result<usize> { Err(Error::DeviceCommunication("unplugged".to_string())) };
         assert!(await_reply(unplugged, 0x90).is_err());
+    }
+
+    #[test]
+    fn a_failed_echo_read_is_an_error_and_no_echo_is_not() {
+        assert_eq!(
+            echo_outcome(Ok(Some(captured_echo(0x21))), "colour").unwrap(),
+            SettingAck::Echoed {
+                opcode: 0x21,
+                status: 0
+            }
+        );
+        assert_eq!(echo_outcome(Ok(None), "colour").unwrap(), SettingAck::NoReply);
+
+        let unplugged = echo_outcome(Err(Error::DeviceCommunication("unplugged".to_string())), "colour");
+        let message = unplugged.unwrap_err().to_string();
+        assert!(message.contains("colour was sent"), "{message}");
+        assert!(message.contains("unplugged"), "{message}");
+    }
+
+    #[test]
+    fn an_interrupted_echo_read_counts_as_a_timeout() {
+        let interrupted = hidapi::HidError::IoError {
+            error: std::io::Error::from(std::io::ErrorKind::Interrupted),
+        };
+        assert_eq!(interrupted_as_timeout(Err(interrupted)).unwrap(), 0);
+        assert_eq!(interrupted_as_timeout(Ok(64)).unwrap(), 64);
+        let disconnected = hidapi::HidError::HidApiError {
+            message: "unexpected poll error (device disconnected)".to_string(),
+        };
+        assert!(interrupted_as_timeout(Err(disconnected)).is_err());
     }
 
     #[test]

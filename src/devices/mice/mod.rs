@@ -26,7 +26,7 @@ pub(crate) fn unsupported(what: &str, model: &str) -> Error {
 pub enum SettingAck {
     /// A report starting with the frame's opcode came back; `status` is the byte after the opcode.
     Echoed { opcode: u8, status: u8 },
-    /// No such report came back in time, or reading failed. The frame was sent all the same.
+    /// No such report came back in time. The frame was sent all the same. A failed read is an error, not this.
     NoReply,
 }
 
@@ -85,8 +85,8 @@ pub trait Mouse: Device {
     }
 
     /// What the mouse answered to each frame of the last setting, in the order sent. Empty when the connection reads
-    /// no answer (a 2.4 GHz receiver) or nothing has been set yet. Confirmed on a wired Rival 3 Gen 2, [EXPERIMENTAL]
-    /// on other models.
+    /// no answer (a 2.4 GHz receiver) or nothing has been set yet. After a setting that failed, only the frames
+    /// answered before the failure. Confirmed on a wired Rival 3 Gen 2, [EXPERIMENTAL] on other models.
     fn last_acknowledgements(&self) -> &[SettingAck] {
         &[]
     }
