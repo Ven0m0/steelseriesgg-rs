@@ -77,13 +77,13 @@ What you get: `/usr/bin/ssgg`, systemd user unit, udev rules, docs.
 
 After install:
 ```bash
-sudo usermod -aG input $USER
 sudo udevadm control --reload-rules
 sudo udevadm trigger
 systemctl --user daemon-reload
 systemctl --user enable --now ssgg.service   # optional
 ```
-For boot without login: `sudo loginctl enable-linger $USER`.
+For boot without login: `sudo loginctl enable-linger $USER`. The daemon then runs outside a login session and
+needs the `input` group (see [Device permissions](#device-permissions-udev)).
 
 ### Build from source
 
@@ -134,10 +134,15 @@ sudo rm -f /etc/udev/rules.d/99-steelseries.rules   # old name, if you installed
 sudo cp assets/70-steelseries.rules /etc/udev/rules.d/
 sudo udevadm control --reload-rules
 sudo udevadm trigger
-sudo usermod -aG input $USER
 ```
-Logged-in desktop users get access through `uaccess` without the group. The `input` group is still
-needed for the daemon running outside a login session; log out/in to apply the group change.
+Logged-in desktop users get access through `uaccess`, so they do not need the `input` group. Add yourself to it
+only for the daemon running outside a login session (`enable-linger`) or for the key remapper:
+
+```bash
+sudo usermod -aG input $USER   # log out/in to apply
+```
+
+Members of `input` can read every keyboard and mouse on the system, not only SteelSeries devices.
 
 ### Key remapper (optional, EXPERIMENTAL)
 
@@ -146,8 +151,10 @@ Linux-only, needs `cargo build --features remap`, and has not been run against r
 remap one key to another key or to a chord (up to 4 keys); there are no macros, text typing or commands.
 
 ```bash
-sudo cp assets/70-steelseries.rules /etc/udev/rules.d/   # includes the /dev/uinput rule (group `input`)
-sudo cp assets/ssgg-uinput.conf /etc/modules-load.d/     # load uinput at boot
+sudo cp assets/70-steelseries.rules /etc/udev/rules.d/
+sudo cp assets/70-steelseries-uinput.rules /etc/udev/rules.d/   # /dev/uinput for group `input` (moved out of 70-steelseries.rules)
+sudo cp assets/ssgg-uinput.conf /etc/modules-load.d/            # load uinput at boot
+sudo usermod -aG input $USER                                     # the remapper needs the group; log out/in
 sudo modprobe uinput
 sudo udevadm control --reload-rules && sudo udevadm trigger
 ```

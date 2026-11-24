@@ -1,0 +1,7 @@
+# /etc/udev/rules.d/70-steelseries-uinput.rules
+# Only for the optional key remapper (`remap` feature, see assets/ssgg-uinput.conf). The Arch package does not
+# install this file.
+# Reading and grabbing the keyboard's evdev nodes is covered by 70-steelseries.rules. /dev/uinput lets a process
+# inject keystrokes, so it gets the `input` group and no uaccess tag; the remapper needs the `input` group even in
+# a desktop session.
+KERNEL=="uinput", SUBSYSTEM=="misc", GROUP="input", MODE="0660", OPTIONS+="static_node=uinput"
