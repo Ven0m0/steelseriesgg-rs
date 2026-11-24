@@ -60,7 +60,7 @@
     ]],
     ['Mouse', [
       cmd('Status', ['mouse', 'status']),
-      cmd('DPI', ['mouse', 'dpi'], [num('value', 800, { min: 100, max: 18000, step: 100 })]),
+      cmd('DPI', ['mouse', 'dpi'], [num('value', 800, { min: 100, max: 18000, step: 100 }), check('confirm the change (--yes)', '--yes')], { danger: true, note: 'A wired Rival 3 Gen 2 keeps the DPI after unplugging (other models untested), and the stages it replaces cannot be read back.' }),
       cmd('Poll rate', ['mouse', 'poll-rate'], [pick('Hz', ['1000', '500', '250', '125'])]),
       cmd('Colour', ['mouse', 'color'], [text('colour', 'red')]),
     ]],

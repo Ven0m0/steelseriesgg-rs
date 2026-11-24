@@ -516,7 +516,8 @@ pub mod product_ids {
     pub const ARCTIS_NOVA_PRO_V2: u16 = 0x12FA;
     pub const ARCTIS_NOVA_PRO_WIRELESS_XBOX: u16 = 0x12E5;
     pub const ARCTIS_NOVA_PRO_WIRELESS_XBOX_WHITE: u16 = 0x225D;
-    // Mice, Modern family. PIDs from a community rivalcfg-derived fork, untested; behaviour table in mice::modern.
+    // Mice, Modern family. PIDs from a community rivalcfg-derived fork, only RIVAL_3_GEN_2 tested on hardware;
+    // behaviour table in mice::modern.
     pub const AEROX_3: u16 = 0x1836;
     pub const AEROX_3_WIRELESS: u16 = 0x183A;
     pub const AEROX_3_WIRELESS_DONGLE: u16 = 0x1838;

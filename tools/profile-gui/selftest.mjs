@@ -1910,6 +1910,12 @@ ok('the commands that only return when stopped are in the panel, and each one sa
     && eq(control.buildArgs(controlCmd('remap', 'run'), []), ['remap', 'run'])
     && eq(control.buildArgs(controlCmd('server'), ['27302']), ['server', '--port', '27302']);
 });
+ok('the mouse DPI form arms first and passes --yes only when it is ticked', () => {
+  const dpi = controlCmd('mouse', 'dpi');
+  return dpi.danger === true
+    && eq(control.buildArgs(dpi, ['800', true]), ['mouse', 'dpi', '--yes', '800'])
+    && eq(control.buildArgs(dpi, ['800', false]), ['mouse', 'dpi', '800']);
+});
 ok('validate and verify-performance can export their report', () => {
   const validate = control.buildArgs(controlCmd('validate'), ['', '30', 'out.json', true]);
   const verify = control.buildArgs(controlCmd('verify-performance'), ['30', 'breathing', 'perf.json']);

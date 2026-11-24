@@ -1,7 +1,9 @@
 //! [EXPERIMENTAL] DPI to sensor-code tables of the Modern family, from community rivalcfg-derived data.
 //!
 //! Each table lists the code for every DPI value of its sensor, in steps of 100 starting at the sensor's
-//! minimum, so the code of a DPI value is `table[(dpi - min) / 100]`. None of it has been run on hardware.
+//! minimum, so the code of a DPI value is `table[(dpi - min) / 100]`. Only the TrueMove Core codes for 400, 800,
+//! 1600 and 3200 DPI have been sent to a mouse (wired Rival 3 Gen 2, contributor, Linux, 2026-11-17/18), checked by
+//! feel, not measured; the rest is untested.
 
 /// TrueMove Core sensor: Aerox 3 and Rival 3 Gen 2, 200 to 8500 DPI.
 pub const TRUEMOVE_CORE: [u8; 84] = [

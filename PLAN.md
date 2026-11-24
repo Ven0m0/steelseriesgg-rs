@@ -167,11 +167,19 @@ and OpenRGB (GPL-2.0): take facts, write our own code and test vectors.
 - Pollrate rebind and persistence: Sarhan `src/pollrate.rs` unbinds and rebinds the SteelSeries `usbhid`
   interfaces so a changed `mousepoll`/`kbpoll` applies at once, and `--persistent` writes
   `/etc/modprobe.d/ssgg-usbhid.conf`. Ours only writes the parameter and saves to `config.toml`.
-Taken on the branch (all `[EXPERIMENTAL]`, none run on hardware):
+Taken on the branch (all `[EXPERIMENTAL]` and untested when taken; later hardware results are noted per item, the
+status per command is in the rules file):
 - Input remapper: feature `remap` (`src/input/`, `ssgg remap run|list`). Only key-to-key and key-to-combo, no
   macros/text/launch; escape chord LCtrl+RCtrl+LShift+RShift held 2 s. Never run against a real keyboard.
 - Mice, rivalcfg "Modern" family only (24 PIDs: Aerox 3/5/9, Prime Mini/Wireless, Rival 3 Gen 2, Rival 5): DPI, poll
-  rate, colour, battery via `ssgg mouse`. No save command anywhere.
+  rate, colour, battery via `ssgg mouse`. No save command anywhere. Confirmed on the wired Rival 3 Gen 2 `0x1870`
+  (contributor, Linux, 2026-11-16 to 18, fw 1.1.6 read on 11-17): colour on all zones and per zone, DPI as one stage, as
+  2 stages with the first active and as 4 with the second active, poll rate 125 and 1000 Hz, the firmware and poll-rate
+  queries, the echo. That mouse keeps its DPI stages across a replug without a save; colour and poll rate revert. Every
+  other model untested.
+  Since 2026-11-24 `ssgg mouse dpi` sends nothing without `--yes`, on every model, and the editor's DPI form arms on
+  the first click and has the `--yes` box. With `--yes` the other models still get the single-stage `0x2D` frame,
+  though no DPI write is confirmed on them (the rules file asks for a hardware-confirmed family as well).
 - Headsets: Arctis Nova 7 protocol family (34 PIDs: Nova 7, Arctis 7+, Nova 4, Nova 5 / Nova 3 Wireless, Nova Pro)
   with sidetone, auto-off, mic volume, status via `ssgg headset`. No save `00 09` is ever sent, so settings do not
   stick on Gen 2 (`0x227E`, 2026-10-25: it falls back to the headset's saved level after a power cycle); instead
