@@ -85,7 +85,7 @@ serde_json = "1.0.154"
 sysinfo = "0.40.1"
 tabled = "0.22.0"
 # Native window and event loop for ssgg-gui (feature `desktop`); owns the GTK main loop on Linux
-tao = { version = "0.37.2", optional = true }
+tao = { version = "0.38.0", optional = true }
 
 # Error handling
 thiserror = "2.0.21"
@@ -99,7 +99,7 @@ tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 # Webview for ssgg-gui (feature `desktop`): WebView2 / WebKitGTK. Pulls the gtk-rs 0.18 stack on Linux
 # (RUSTSEC-2024-0370 proc-macro-error, RUSTSEC-2024-0429 glib: unfixable here, desktop builds only)
-wry = { version = "0.57.2", optional = true }
+wry = { version = "0.58.0", optional = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 hidapi = { version = "=2.6.7", default-features = false, features = ["linux-native-basic-udev"] }
