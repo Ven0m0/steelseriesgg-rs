@@ -190,10 +190,13 @@ Hardware results, Arctis Nova 7 Gen 2 `0x227E`, Linux, 2026-10-25 (owner test, G
 ### Mice: Modern family [EXPERIMENTAL]
 
 Source: a community fork derived from rivalcfg (data licensed WTFPL/GPL, reimplemented here from the facts, with
-our own test vectors). Nothing here has been run from `ssgg` on hardware, so every command is Experimental (see
-`.claude/rules/experimental-protocol.md`). Code: `src/devices/mice/` (`modern.rs` holds the per-PID table
-`MOUSE_MODELS`, `dpi_tables.rs` the sensor code tables) and the `Mouse*Command` types in
-`src/devices/hid_reports.rs`. CLI: `ssgg mouse status | dpi <value> | poll-rate <hz> | color <name|hex>`.
+our own test vectors). Only the wired Rival 3 Gen 2 `0x1870` has been run from `ssgg` on hardware (below): colour on
+all zones and on one zone, DPI as one stage, as 2 stages with the first active and as 4 with the second, polling rate
+125 and 1000 Hz, the `90 00` and `AB` queries and the echo work there. The rest, and every other model, is Experimental
+(see `.claude/rules/experimental-protocol.md`).
+Code: `src/devices/mice/` (`modern.rs` holds the per-PID table `MOUSE_MODELS`, `dpi_tables.rs` the sensor code
+tables) and the `Mouse*Command` types in `src/devices/hid_reports.rs`. CLI: `ssgg mouse status |
+dpi <value>... [--active <n>] --yes | poll-rate <hz> | color <name|hex> [--zone <n>] | info [--poll-rate]`.
 
 Supported (24 PIDs): Aerox 3 `0x1836`; Aerox 3 Wireless `0x1838` (2.4 GHz), `0x183A`, `0x1878`, `0x187A`;
 Aerox 5 `0x1850`; Aerox 5 Wireless `0x1852`, `0x1854`, `0x185C`, `0x185E`, `0x1860`, `0x1862`; Aerox 9 Wireless
@@ -201,28 +204,107 @@ Aerox 5 `0x1850`; Aerox 5 Wireless `0x1852`, `0x1854`, `0x185C`, `0x185E`, `0x18
 Wireless `0x1840`, `0x1842`; Rival 3 Gen 2 `0x1870`; Rival 5 `0x183C`, `0x183E`. Every PID in the requested
 scope belongs to this family in the fork; none was dropped.
 
-- Transport: output reports `00 <opcode> <args>`, variable length and not padded by `ssgg` (hidapi pads on
-  Windows). Commands go to one interface per model: 3 for everything but the Rival 5, which uses 0. A 2.4 GHz
-  receiver PID sets bit `0x40` on every opcode and answers each setting with a 64-byte report that is read and
-  dropped. Commands are spaced 50 ms apart.
+- Transport: output reports `00 <opcode> <args>`; settings are variable in length and not padded by `ssgg`
+  (hidapi pads on Windows), the read-only queries are zero padded to 64 bytes. Commands go to one interface per
+  model: 3 for everything but the Rival 5, which uses 0. A 2.4 GHz receiver PID sets bit `0x40` on every opcode
+  and answers each setting with a 64-byte report that is read and dropped. Commands are spaced 50 ms apart.
+- Echo (added 2026-11-16; confirmed on the Rival 3 Gen 2, below): on every PID but a receiver's, `ssgg` reads the answer
+  to each setting frame, a 64-byte input report `<opcode> <status>` (status `00` throughout GG's capture of a Rival 3
+  Gen 2 and in the contributor's 2026-11-17/18 run, below), with a 50 ms timeout, and prints how many frames were echoed
+  and their status (`Echo from the mouse (EXPERIMENTAL): ..`, `Mouse::last_acknowledgements`); a status other than `00`
+  has no known meaning. Queued reports are dropped right before each write, after the 50 ms spacing. A missing echo is
+  not an error; a failed read is (since 2026-11-24), and its message says the frame was sent. Whether models other than
+  the Rival 3 Gen 2 echo is unknown.
 - DPI: `00 2D 01 <preset> <code>`; the Rival 3 Gen 2 uses opcode `34` and sends the code once per axis. Preset
-  index is 1 on Aerox 3 and Rival 3 Gen 2, 0 elsewhere. Ranges: 200-8500 (Aerox 3, Rival 3 Gen 2, TrueMove Core
-  table), 100-18000 in steps of 100 (all others, TrueMove Air table), Prime Mini 50-18000 in steps of 50 with a
-  16-bit little-endian code `dpi / 50`. Off-step and out-of-range values are rejected.
+  index is 1 on Aerox 3, 0 elsewhere; the Rival 3 Gen 2 takes it 0-based per rivalcfg PR #292 (merged 2026-10-07;
+  its author's wired `0x1870` under macOS ignored `34 01 01 08 08` and applied `34 01 00 12 12`), where the fork
+  had 1. Ranges: 200-8500 (Aerox 3, Rival 3 Gen 2, TrueMove Core table), 100-18000 in steps of 100 (all others,
+  TrueMove Air table), Prime Mini 50-18000 in steps of 50 with a 16-bit little-endian code `dpi / 50`. Off-step
+  and out-of-range values are rejected. One value goes out as a single stage (count byte `01`), which in
+  rivalcfg's format replaces any stages set before; on the Rival 3 Gen 2 it did (below).
+- DPI stages (added 2026-11-16; 2 stages with the first active and 4 with the second confirmed, below), Rival 3 Gen 2
+  only: `00 34 <count> <active, 0-based> x1 y1 .. xn yn`, 1 to 5 stages for the DPI button, unpadded (`ssgg mouse dpi
+  800 1600 --active 2 --yes`; `--active` is 1-based, so this sends `01`), after rivalcfg master's
+  `multidpi_range_choice_xy` handler and its test vector `34 04 00 04 04 08 08 12 12 24 29`; one stage is the single-DPI
+  frame byte for byte. Every other model refuses it (no verified multi-stage frame).
 - Polling rate: `00 2B <code>`; 125/250/500/1000 Hz is `04 03 02 01` on wired-only models and Rival 5 / Prime
   Mini, `03 02 01 00` on the wireless models.
 - Colour: `00 21 <selector> ... <r g b>` once per LED zone. Aerox 3/5 and Rival 3 Gen 2 (3 zones): selector is a
   mask byte with the zone bit, then 3 zero bytes per earlier zone. Rival 5 (10 zones): 16-bit little-endian mask,
   same padding. Wireless Aerox and Prime Wireless: `01 <zone>`. Prime Mini: `00`. A receiver PID sends `61`.
+  `--zone <n>` (1-based, added 2026-11-16; confirmed on the Rival 3 Gen 2, below) sends only that zone's frame.
 - Battery: `00 92` (`D2` on a receiver PID) on wireless models; reply byte 1 is bit 7 charging, low bits charge
   in 5 percent steps plus one. Levels outside 0-100 decode as unknown.
-- Never implemented: the save command `11 00` (writes to the mouse's on-board memory). `ssgg` sends no
-  save, so whether a setting survives a power cycle is unknown.
+- Read-only queries (added 2026-11-16; both confirmed on the Rival 3 Gen 2, below), wired-only models (Aerox 3, Aerox 5,
+  Prime Mini, Rival 3 Gen 2, Rival 5): `90 00`, the firmware version (reply `90 <ASCII>`), and `AB`, the polling rate
+  read back (from Mousework's read-only probe, `mousework/probe.py`), both zero padded to 64 bytes; `ssgg mouse info
+  [--poll-rate]`. A reply is matched by its first byte, the opcode (hidapi hands these reports over without a report
+  number), other or stale reports are skipped within 8 reads, and a read that times out prints "no reply". `ssgg`
+  decodes the `AB` level 1/2/3/4 as 1000/500/250/125 Hz from the byte after the echoed opcode; Mousework reads it from
+  the first byte, as if the reply carried no echo, and marks the decoded values of every model of this family
+  unverified. The Rival 3 Gen 2 answered `ab 01` at 1000 Hz and `ab 04` at 125 Hz, so there the level follows the echoed
+  opcode; levels 2 and 3 and the other models are unverified. The `AB` reply is printed in every case: the first report
+  starting with `AB`, or, when none does, the first report read, undecoded. The wireless models are not queried (`ssgg
+  mouse info` says "not queried" and sends nothing): Mousework reads their `90` answer over the cable without the echoed
+  opcode. A read or write failure ends `ssgg mouse info` with an error.
+- Never implemented: the save command `11 00` (writes to the mouse's on-board memory). `ssgg` sends no save, yet the
+  Rival 3 Gen 2 keeps its DPI stages across a replug, not its colour or polling rate (below); other models untested.
+  There is no DPI read-back, so a DPI command overwrites stages that cannot be read first; `ssgg mouse dpi` therefore
+  sends nothing without `--yes` (since 2026-11-24).
 
-Skipped on purpose: reactive and rainbow effects, button mapping, multi-stage sensitivity presets, brightness,
-sleep and dim timers, firmware queries. Not covered, other command sets: Prime and Prime+ (`0x182E`, `0x182C`,
-`0x182A`, `0x1856`), Rival 3 / Rival 3 Wireless, the older Rival (95-710), Sensei (310, TEN, [RAW]), Kana v2 and
-Kinzu v2.
+Skipped on purpose: reactive and rainbow effects, button mapping, multi-stage sensitivity presets on models other
+than the Rival 3 Gen 2, brightness, sleep and dim timers. Not covered, other command sets: Prime and Prime+
+(`0x182E`, `0x182C`, `0x182A`, `0x1856`), Rival 3 / Rival 3 Wireless, the older Rival (95-710), Sensei (310, TEN,
+[RAW]), Kana v2 and Kinzu v2.
+
+#### Rival 3 Gen 2 (`0x1870`, wired): hardware results
+
+- First result (contributor, Linux, 2026-11-16, a downloaded release binary, firmware not recorded; every release from
+  v0.1.9, the first with mice, to v0.1.21 builds the colour frames identically): `ssgg mouse color <colour>` lit every
+  LED of the mouse in the requested colour. That code sends one `21 <mask> R G B` frame per zone (`21 01 ..`, `21 02 00
+  00 00 ..`, `21 04 00 00 00 00 00 00 ..`), all with the same colour, so this confirms one colour on all three zones
+  only. The contributor also saw a white wave run front to back on each click; its source is unknown (rivalcfg names
+  `26` the reactive colour, `26 00 00 00 00 00` turning it off, and `27` the default lighting at startup; unverified),
+  and `ssgg` has no command for either. Third-party, unverified: rivalcfg's docs say this mouse keeps no colour in its
+  on-board memory (only the startup lighting set with `27`), and a comment on rivalcfg issue #249 (2025-07-15, frame not
+  given) saw a zone-3 write turn zones 1 and 2 off; the contributor's all-zone result, whose last frame was the zone-3
+  one, did not show that for `ssgg`'s frame.
+- Second run (contributor, Ubuntu 24.04 on X11, firmware `1.1.6 +e57ff6a1`, 2026-11-17/18 in local time, UTC+3: the
+  queries, the polling rate and `dpi 400` on the 17th, the rest after midnight; a local build of these mouse changes
+  (unreleased, after v0.1.21; it reports 0.1.21) with the 0-based DPI preset, the queries and the echo, none of which is
+  in a release yet; no `sudo`, through a udev access rule). Every setting frame was echoed with status `00`.
+  - `ssgg mouse info` answered firmware `1.1.6 +e57ff6a1`, GG's string; `--poll-rate` answered `ab 01` (1000 Hz).
+  - Polling rate, counted reports: `poll-rate 125` took about 4990 per 5 s down to 625, and the read-back answered
+    `ab 04`; `poll-rate 1000` brought it back to 4920.
+  - DPI, by the contributor's feel (the DPI itself was not measured): `dpi 400` slower, `dpi 3200` faster.
+    `dpi 800 1600` started on the slower stage and the DPI button toggled two speeds; `dpi 400 800 1600 3200
+    --active 2` started on 800, and the button cycled four speeds and wrapped. The mouse lights a colour per stage
+    position when the stage changes (1 magenta, 2 probably blue, 3 green, 4 yellow); the frame carries no colour, so
+    it comes from the mouse.
+  - Colour: `color red`, `yellow` and `off` reached all three zones. `--zone 1` lit the front, `--zone 2` the
+    middle, `--zone 3` the rear, each leaving the zones set before as they were (after the zone 1 write the middle
+    looked magenta, which the contributor took for the red and blue light mixing; rivalcfg names the zones top, middle
+    and bottom). The white click wave stays, also with the lights off.
+  - Replug (5 s unplugged), right after `color red`, `dpi 400` and `poll-rate 125` (2026-11-18, 02:08 local, each
+    echoed `00`): the colour came back as the mouse's own rainbow effect, not red, and the polling rate as about
+    1000 Hz (4902 per 5 s), not 125, but the DPI stayed. The single stage at 400 sent just before survived, and the DPI
+    button no longer changed the speed, so it had replaced the four stages set earlier. After the four stages were
+    restored and the mouse replugged again, all four came back. The contributor reports that the mouse comes back on the
+    stage last picked with the button (2026-11-18; which stage that check used is not recorded). No save command was
+    sent; whether the firmware stores each DPI frame at once or later is unknown. The stages the mouse held before the
+    test are lost: there is no DPI read-back.
+  - Untested: 250 and 500 Hz, 3 or 5 stages, 2 stages with the second active, 4 stages with another active, sleep, a
+    power cycle other than a replug.
+- GG's capture of this mouse (the USBPcap text attached to rivalcfg issue #249, 2025-07-29: GG opening the mouse on
+  Windows; the PID comes from the issue, the capture does not decode the descriptors), in order: `90 00`, answered
+  `90 31 2e 31 2e 36 20 2b 65 35 37 66 66 36 61 31` (`1.1.6 +e57ff6a1`); `2a 01 00 00 00 00 02 ..` (rivalcfg: the
+  button mapping, unverified); `21 07 0b 00 21 0b 00 21 0b 00 21`, all three zones in one frame (mask `07`, then one
+  RGB triple per zone), a form `ssgg` does not send; `34 01 00 3e 3e`, one stage at 2700 DPI with preset byte 0, as
+  `ssgg` now builds it (unit test); `26` and zeros (rivalcfg: reactive colour off, unverified); `2b 01` (1000 Hz);
+  then `11 00`, the save to on-board memory, which `ssgg` never sends. Every frame went out as a 64-byte
+  zero-padded `SET_REPORT` on interface 3 (`ssgg` sends its settings unpadded) and was answered on endpoint 0x84:
+  each setting with `<opcode> 00` 1-2 ms later, the `11 00` save after 28 ms, the `90 00` query with the version.
+  After the DPI frame an unsolicited `ad 01 00 3e` arrived on endpoint 0x83, another interface.
 
 ---
 

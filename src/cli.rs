@@ -69,7 +69,8 @@ pub(crate) enum Commands {
         action: HeadsetAction,
     },
 
-    /// Control Modern-family mice: Aerox, Prime Mini/Wireless, Rival 3 Gen 2, Rival 5 (EXPERIMENTAL and untested on hardware)
+    /// Control Modern-family mice: Aerox, Prime Mini/Wireless, Rival 3 Gen 2, Rival 5 (EXPERIMENTAL; partly confirmed
+    /// on a wired Rival 3 Gen 2, the only model tested on hardware)
     Mouse {
         #[command(subcommand)]
         action: MouseAction,
@@ -789,22 +790,49 @@ pub(crate) enum MouseAction {
     /// Show the battery level of a wireless model
     Status,
 
-    /// Set the DPI (range and step depend on the model, e.g. 100 to 18000 in steps of 100)
+    /// Set the DPI, or up to 5 DPI stages for the mouse's DPI button (EXPERIMENTAL except on a wired Rival 3 Gen 2;
+    /// range and step depend on the model, e.g. 100 to 18000 in steps of 100; several stages: Rival 3 Gen 2 only,
+    /// tested with 2 stages, the first active, and 4, the second active). Needs --yes: a wired Rival 3 Gen 2 keeps
+    /// them after unplugging, in place of the stages it had, which cannot be read back first
     Dpi {
-        /// DPI value
-        value: u16,
+        /// DPI value, or one value per stage (at most 5). One value is sent as a single stage, which replaces any
+        /// stages set before (seen on a wired Rival 3 Gen 2)
+        #[arg(value_name = "DPI", required = true, num_args = 1..=5)]
+        values: Vec<u16>,
+
+        /// Stage the mouse starts on, 1-based
+        #[arg(long, value_name = "N", default_value_t = 1)]
+        active: u8,
+
+        /// Confirm the change: the mouse stores it (a wired Rival 3 Gen 2 keeps it after unplugging; other models
+        /// untested), and the stages it replaces cannot be read back first
+        #[arg(long)]
+        yes: bool,
     },
 
-    /// Set the USB polling rate of the mouse itself (not the OS-level `pollrate` command)
+    /// Set the USB polling rate of the mouse itself, not the OS-level `pollrate` command (EXPERIMENTAL except 125
+    /// and 1000 Hz on a wired Rival 3 Gen 2)
     PollRate {
         /// Rate in Hz: 125, 250, 500 or 1000
         hz: u16,
     },
 
-    /// Set every LED zone to one colour
+    /// Set every LED zone, or one with --zone, to one colour (EXPERIMENTAL except on a wired Rival 3 Gen 2)
     Color {
         /// Colour name or hex (e.g. red, FF8800)
         color: String,
+
+        /// Only this LED zone, 1-based up to the model's zone count (Rival 3 Gen 2: 1 front, 2 middle, 3 rear)
+        #[arg(long, value_name = "N")]
+        zone: Option<u8>,
+    },
+
+    /// Show the model, USB id and firmware version (read-only queries, wired models without a wireless mode only;
+    /// EXPERIMENTAL except on a Rival 3 Gen 2)
+    Info {
+        /// Also read the polling rate back from the mouse (EXPERIMENTAL except 1000 and 125 Hz on a Rival 3 Gen 2)
+        #[arg(long)]
+        poll_rate: bool,
     },
 }
 
@@ -1155,6 +1183,26 @@ pub(crate) enum PerformanceAction {
     },
 }
 
+/// The 0-based stage of `ssgg mouse dpi --active` (1-based) among `count` DPI stages.
+pub(crate) fn active_stage_index(active: u8, count: usize) -> Result<u8> {
+    if active == 0 || usize::from(active) > count {
+        return Err(Error::InvalidConfig(format!(
+            "--active {active} is out of range: {count} DPI stage(s) given, so 1 to {count}"
+        )));
+    }
+    Ok(active - 1)
+}
+
+/// The 0-based LED zone of `ssgg mouse color --zone` (1-based) on a mouse with `zone_count` zones.
+pub(crate) fn zone_index(zone: u8, zone_count: u8) -> Result<u8> {
+    if zone == 0 || zone > zone_count {
+        return Err(Error::InvalidConfig(format!(
+            "--zone {zone} is out of range: this mouse has {zone_count} LED zone(s), so 1 to {zone_count}"
+        )));
+    }
+    Ok(zone - 1)
+}
+
 pub(crate) fn parse_color(s: &str) -> Option<Color> {
     Color::parse(s)
 }
@@ -1420,11 +1468,91 @@ mod tests {
         assert!(matches!(
             parsed.command,
             Commands::Mouse {
-                action: MouseAction::Dpi { value: 800 }
-            }
+                action: MouseAction::Dpi { ref values, active: 1, yes: false }
+            } if values == &[800]
+        ));
+        let parsed = Cli::try_parse_from(["ssgg", "mouse", "dpi", "--yes", "800"]).unwrap();
+        assert!(matches!(
+            parsed.command,
+            Commands::Mouse {
+                action: MouseAction::Dpi { ref values, active: 1, yes: true }
+            } if values == &[800]
         ));
         assert!(Cli::try_parse_from(["ssgg", "mouse", "save"]).is_err());
         assert!(Cli::try_parse_from(["ssgg", "pollrate", "mouse", "1000"]).is_ok());
+    }
+
+    #[test]
+    fn mouse_dpi_takes_one_to_five_stages_and_a_1_based_active_stage() {
+        let parsed = Cli::try_parse_from(["ssgg", "mouse", "dpi", "200", "3200", "--active", "2"]).unwrap();
+        assert!(matches!(
+            parsed.command,
+            Commands::Mouse {
+                action: MouseAction::Dpi { ref values, active: 2, .. }
+            } if values == &[200, 3200]
+        ));
+        assert!(Cli::try_parse_from(["ssgg", "mouse", "dpi", "400", "800", "1600", "3200", "6400"]).is_ok());
+        assert!(Cli::try_parse_from(["ssgg", "mouse", "dpi", "400", "800", "1600", "3200", "6400", "8000"]).is_err());
+        assert!(Cli::try_parse_from(["ssgg", "mouse", "dpi"]).is_err());
+        assert!(Cli::try_parse_from(["ssgg", "mouse", "dpi", "800", "--active", "x"]).is_err());
+
+        assert_eq!(active_stage_index(1, 1).unwrap(), 0);
+        assert_eq!(active_stage_index(2, 2).unwrap(), 1);
+        assert_eq!(active_stage_index(5, 5).unwrap(), 4);
+        for (active, count) in [(0, 2), (3, 2), (2, 1)] {
+            assert!(
+                matches!(active_stage_index(active, count), Err(Error::InvalidConfig(_))),
+                "{active} of {count}"
+            );
+        }
+    }
+
+    #[test]
+    fn mouse_color_takes_an_optional_1_based_zone() {
+        let parsed = Cli::try_parse_from(["ssgg", "mouse", "color", "red"]).unwrap();
+        assert!(matches!(
+            parsed.command,
+            Commands::Mouse {
+                action: MouseAction::Color { zone: None, .. }
+            }
+        ));
+        let parsed = Cli::try_parse_from(["ssgg", "mouse", "color", "00ff00", "--zone", "3"]).unwrap();
+        assert!(matches!(
+            parsed.command,
+            Commands::Mouse {
+                action: MouseAction::Color { ref color, zone: Some(3) }
+            } if color == "00ff00"
+        ));
+        assert!(Cli::try_parse_from(["ssgg", "mouse", "color", "red", "--zone=-1"]).is_err());
+        assert!(Cli::try_parse_from(["ssgg", "mouse", "color", "red", "--zone", "256"]).is_err());
+
+        assert_eq!(zone_index(1, 3).unwrap(), 0);
+        assert_eq!(zone_index(3, 3).unwrap(), 2);
+        for (zone, count) in [(0, 3), (4, 3), (2, 1)] {
+            assert!(
+                matches!(zone_index(zone, count), Err(Error::InvalidConfig(_))),
+                "{zone} of {count}"
+            );
+        }
+    }
+
+    #[test]
+    fn mouse_info_reads_the_polling_rate_back_only_on_request() {
+        let parsed = Cli::try_parse_from(["ssgg", "mouse", "info"]).unwrap();
+        assert!(matches!(
+            parsed.command,
+            Commands::Mouse {
+                action: MouseAction::Info { poll_rate: false }
+            }
+        ));
+        let parsed = Cli::try_parse_from(["ssgg", "mouse", "info", "--poll-rate"]).unwrap();
+        assert!(matches!(
+            parsed.command,
+            Commands::Mouse {
+                action: MouseAction::Info { poll_rate: true }
+            }
+        ));
+        assert!(Cli::try_parse_from(["ssgg", "mouse", "info", "1000"]).is_err());
     }
 
     #[test]

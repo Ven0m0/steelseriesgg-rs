@@ -85,9 +85,10 @@ Three rules shape the panel:
   counts HID operations of its own process. For a long remap session or a GameSense server, run those from a terminal; the panel's window is
   a way to try them, not a way to keep them alive.
 - **Entries that change the device or system settings** (deleting a profile, writing an on-board
-  profile, running a config slot, setting a polling rate) arm on the first click and run on the
-  second. `--dry-run` is offered wherever the CLI has it, and `validate` and `verify-performance`
-  accept the same `--output` file the CLI does.
+  profile, running a config slot, setting a polling rate, setting the mouse DPI) arm on the first click
+  and run on the second. The mouse DPI form also has the `--yes` box the CLI needs for it. `--dry-run`
+  is offered wherever the CLI has it, and `validate` and `verify-performance` accept the same `--output`
+  file the CLI does.
 
 **`[EXPERIMENTAL]`**: as with every other panel, a board that ignores a command still answers success.
 

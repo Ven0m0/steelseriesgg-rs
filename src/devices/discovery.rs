@@ -45,8 +45,8 @@ fn control_score(usage_page: u16, interface_number: i32, product_id: u16, device
             1_000_000
         });
     }
-    // [EXPERIMENTAL] Modern-family mice take their commands on one interface per model (community fork,
-    // untested), so no other interface qualifies, vendor page or not.
+    // Modern-family mice take their commands on one interface per model (community fork; interface 3 confirmed on
+    // a wired Rival 3 Gen 2, [EXPERIMENTAL] on other models), so no other interface qualifies, vendor page or not.
     if device_type == DeviceType::Mouse {
         return mouse_model(product_id)
             .filter(|model| model.interface_number == interface_number)

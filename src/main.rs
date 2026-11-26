@@ -10,11 +10,11 @@ use clap::Parser;
 
 use crate::cli::{
     Cli, Commands, HeadsetAction, MouseAction, PerKeyAction, PollrateAction, ProfileAction, RemapAction, RgbAction,
-    parse_key_name, require_color,
+    active_stage_index, parse_key_name, require_color, zone_index,
 };
 use crate::commands::{
     cmd_actuation, cmd_bug_report, cmd_device, cmd_hid_logs, cmd_keymap, cmd_oled, cmd_onboard, cmd_performance,
-    cmd_status, cmd_test_device, cmd_validate, cmd_verify_performance,
+    cmd_status, cmd_test_device, cmd_validate, cmd_verify_performance, print_report,
 };
 use crate::daemon::{cmd_daemon, cmd_server};
 use tracing::{Level, info};
@@ -24,6 +24,8 @@ use steelseries_gg::config::Config;
 use steelseries_gg::device_state::{DeviceId, DeviceStateStore, KeyboardState};
 use steelseries_gg::devices::headsets::nova7::HARDWARE_CONFIRMED;
 use steelseries_gg::devices::keyboards::Keyboard;
+use steelseries_gg::devices::mice::modern::model_for as mouse_model;
+use steelseries_gg::devices::mice::{PollRateReadback, SettingAck};
 use steelseries_gg::devices::{
     DeviceInfo, DeviceManager, DeviceType, KeyAddress, KeyId,
     diagnostics::{init_global_diagnostics, with_global_diagnostics},
@@ -473,7 +475,22 @@ fn save_headset_setting(what: &str, update: impl FnOnce(&mut Config)) -> Result<
     Ok(())
 }
 
+/// A DPI change is stored on the mouse (a wired Rival 3 Gen 2 keeps it after unplugging, and the stages it replaces
+/// cannot be read back first), so it is sent only with `--yes`; checked before any mouse is looked up.
+fn require_dpi_yes(action: &MouseAction) -> Result<()> {
+    match action {
+        MouseAction::Dpi { yes: false, .. } => Err(Error::InvalidConfig(
+            "a DPI change is stored on the mouse: a wired Rival 3 Gen 2 keeps it after unplugging, in place of the \
+             stages it had, which cannot be read back first (other models untested). Nothing was sent; pass --yes to \
+             send it"
+                .to_string(),
+        )),
+        _ => Ok(()),
+    }
+}
+
 fn cmd_mouse(manager: &DeviceManager, action: MouseAction) -> Result<()> {
+    require_dpi_yes(&action)?;
     let mouse_info = manager
         .first_device_of_type(DeviceType::Mouse)
         .ok_or_else(|| Error::Other("No supported mouse found".to_string()))?;
@@ -481,7 +498,9 @@ fn cmd_mouse(manager: &DeviceManager, action: MouseAction) -> Result<()> {
     println!("Using mouse: {}", mouse_info.name);
     eprintln!(
         "{}",
-        "[EXPERIMENTAL] Mouse commands come from a community rivalcfg-derived fork and are untested on hardware. Settings apply to the running mouse and are not saved to its memory."
+        "[EXPERIMENTAL] Mouse commands come from a community rivalcfg-derived fork; only a wired Rival 3 Gen 2 \
+         (0x1870) has been tested on hardware. ssgg sends no save command, but that mouse keeps its DPI stages after \
+         unplugging (they cannot be read back first); colour and polling rate return to its own."
             .yellow()
     );
     warn_if_gg_engine_running();
@@ -494,21 +513,113 @@ fn cmd_mouse(manager: &DeviceManager, action: MouseAction) -> Result<()> {
             Some(percent) => println!("Battery: {}%", percent),
             None => println!("Battery: unknown or not a wireless model"),
         },
-        MouseAction::Dpi { value } => {
-            mouse.set_dpi(value)?;
-            println!("DPI request sent ({}).", value);
-        }
+        MouseAction::Dpi { values, active, .. } => match values.as_slice() {
+            [value] if active == 1 => {
+                mouse.set_dpi(*value)?;
+                println!("DPI request sent ({}).", value);
+            }
+            _ => {
+                let index = active_stage_index(active, values.len())?;
+                mouse.set_dpi_stages(&values, index)?;
+                let list = values.iter().map(u16::to_string).collect::<Vec<_>>().join(", ");
+                println!("DPI stages request sent ({list}; stage {active} active).");
+            }
+        },
         MouseAction::PollRate { hz } => {
             mouse.set_poll_rate(hz)?;
             println!("Polling rate request sent ({} Hz).", hz);
         }
-        MouseAction::Color { color } => {
+        MouseAction::Color { color, zone: None } => {
             mouse.set_color(require_color(&color)?)?;
             println!("Colour request sent ({}).", color);
         }
+        MouseAction::Color {
+            color,
+            zone: Some(zone),
+        } => {
+            let zones = mouse_model(mouse_info.product_id).map_or(0, |model| model.spec.zone_count);
+            mouse.set_zone_color(zone_index(zone, zones)?, require_color(&color)?)?;
+            println!("Colour request sent for zone {zone} of {zones} ({color}).");
+        }
+        MouseAction::Info { poll_rate } => {
+            println!("Model: {}", mouse_info.name);
+            println!("USB id: {:04x}:{:04x}", mouse_info.vendor_id, mouse_info.product_id);
+            // Support is checked here, before anything is sent, so a read or write failure below ends the command
+            // with an error instead of a printed line.
+            let model = mouse_model(mouse_info.product_id);
+            if model.and_then(|model| model.firmware_query()).is_some() {
+                match mouse.firmware_version()? {
+                    Some(version) => println!("Firmware: {version}"),
+                    None => println!(
+                        "Firmware: no version read (no reply, or a reply without one; `ssgg --debug` logs what came back)"
+                    ),
+                }
+            } else {
+                println!("Firmware: not queried (only the wired models without a wireless mode are)");
+            }
+            if poll_rate {
+                if model.and_then(|model| model.poll_rate_query()).is_some() {
+                    match mouse.poll_rate_readback()? {
+                        Some(PollRateReadback { reply, hz }) => {
+                            match hz {
+                                Some(hz) => {
+                                    println!("Polling rate (read back, EXPERIMENTAL): {hz} Hz, from this reply:")
+                                }
+                                None => println!("Polling rate (read back, EXPERIMENTAL): not decoded, the reply:"),
+                            }
+                            print_report(&reply);
+                        }
+                        None => println!("Polling rate (read back, EXPERIMENTAL): no reply"),
+                    }
+                } else {
+                    println!(
+                        "Polling rate (read back, EXPERIMENTAL): not queried (only the wired models without a wireless mode are)"
+                    );
+                }
+            }
+        }
+    }
+    if let Some(line) = acknowledgement_line(mouse.last_acknowledgements()) {
+        println!("{line}");
     }
 
     Ok(())
+}
+
+/// [EXPERIMENTAL] How many frames of the setting just sent a wired mouse echoed, and their status bytes; `None` when
+/// nothing was read (a 2.4 GHz receiver, or no setting). A missing echo is not an error: the frames were sent. Only
+/// status `00` has been seen (a wired Rival 3 Gen 2, in GG's capture and from `ssgg`), so the line reads no success
+/// or failure into it.
+fn acknowledgement_line(acks: &[SettingAck]) -> Option<String> {
+    if acks.is_empty() {
+        return None;
+    }
+    let statuses: Vec<u8> = acks
+        .iter()
+        .filter_map(|ack| match ack {
+            SettingAck::Echoed { status, .. } => Some(*status),
+            SettingAck::NoReply => None,
+        })
+        .collect();
+    let (frames, echoed) = (acks.len(), statuses.len());
+    let detail = if echoed == 0 {
+        " (the setting was sent all the same)".to_string()
+    } else {
+        let list = statuses
+            .iter()
+            .map(|status| format!("{status:02x}"))
+            .collect::<Vec<_>>()
+            .join(" ");
+        let unknown = if statuses.iter().any(|status| *status != 0) {
+            "; a status other than 00 has no known meaning"
+        } else {
+            ""
+        };
+        format!(", status {list}{unknown}")
+    };
+    Some(format!(
+        "Echo from the mouse (EXPERIMENTAL): {echoed} of {frames} frame(s) echoed{detail}."
+    ))
 }
 
 async fn cmd_remap(action: RemapAction) -> Result<()> {
@@ -1213,4 +1324,44 @@ async fn cmd_sonar(action: SonarAction) -> Result<()> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_mouse_dpi_change_is_refused_without_yes() {
+        let dpi = |yes| MouseAction::Dpi {
+            values: vec![400, 800],
+            active: 1,
+            yes,
+        };
+        let err = require_dpi_yes(&dpi(false)).unwrap_err().to_string();
+        assert!(err.contains("pass --yes") && err.contains("Nothing was sent"), "{err}");
+        assert!(require_dpi_yes(&dpi(true)).is_ok());
+        assert!(require_dpi_yes(&MouseAction::PollRate { hz: 125 }).is_ok());
+        assert!(require_dpi_yes(&MouseAction::Status).is_ok());
+    }
+
+    #[test]
+    fn mouse_acknowledgements_are_summarised_per_frame() {
+        let echoed = |status| SettingAck::Echoed { opcode: 0x21, status };
+        assert_eq!(acknowledgement_line(&[]), None);
+        assert_eq!(
+            acknowledgement_line(&[echoed(0), echoed(0), echoed(0)]).as_deref(),
+            Some("Echo from the mouse (EXPERIMENTAL): 3 of 3 frame(s) echoed, status 00 00 00.")
+        );
+        assert_eq!(
+            acknowledgement_line(&[echoed(0), SettingAck::NoReply, echoed(1)]).as_deref(),
+            Some(
+                "Echo from the mouse (EXPERIMENTAL): 2 of 3 frame(s) echoed, status 00 01; a status other than 00 has \
+                 no known meaning."
+            )
+        );
+        assert_eq!(
+            acknowledgement_line(&[SettingAck::NoReply]).as_deref(),
+            Some("Echo from the mouse (EXPERIMENTAL): 0 of 1 frame(s) echoed (the setting was sent all the same).")
+        );
+    }
 }
