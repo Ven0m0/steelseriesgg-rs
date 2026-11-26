@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Releases and this changelog are generated automatically from
 [Conventional Commits](https://www.conventionalcommits.org/) by release-please.
 
+## [0.1.24](https://github.com/Ven0m0/steelseriesgg-rs/compare/v0.1.23...v0.1.24) (2026-11-26)
+
+
+### Changed
+
+* update all dependencies ([4b56575](https://github.com/Ven0m0/steelseriesgg-rs/commit/4b5657580a73452ac59e52b66b4a4ec7d658f3d4))
+
 ## [0.1.23](https://github.com/Ven0m0/steelseriesgg-rs/compare/v0.1.22...v0.1.23) (2026-11-19)
 
 
