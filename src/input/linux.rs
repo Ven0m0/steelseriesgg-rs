@@ -58,7 +58,8 @@ fn to_input_events(effects: &[Effect]) -> Vec<InputEvent> {
 fn comm_error(context: &str, e: io::Error) -> Error {
     if e.kind() == io::ErrorKind::PermissionDenied {
         Error::PermissionDenied(format!(
-            "{context}: {e} (install assets/70-steelseries.rules and assets/ssgg-uinput.conf, and join the input group)"
+            "{context}: {e} (install assets/70-steelseries.rules, assets/70-steelseries-uinput.rules and \
+             assets/ssgg-uinput.conf, and join the input group)"
         ))
     } else {
         Error::DeviceCommunication(format!("{context}: {e}"))
