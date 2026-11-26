@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Releases and this changelog are generated automatically from
 [Conventional Commits](https://www.conventionalcommits.org/) by release-please.
 
+## [0.1.24](https://github.com/Ven0m0/steelseriesgg-rs/compare/v0.1.23...v0.1.24) (2026-11-26)
+
+
+### Added
+
+* **mouse:** Rival 3 Gen 2 DPI stages, per-zone colour and hardware results ([#345](https://github.com/Ven0m0/steelseriesgg-rs/issues/345)) ([9c5c61e](https://github.com/Ven0m0/steelseriesgg-rs/commit/9c5c61e13746f1f90da90eb0432988990fab13cb))
+
+
+### Fixed
+
+* **headsets:** no ChatMix on the Arctis Nova 5 (0x2232) ([#347](https://github.com/Ven0m0/steelseriesgg-rs/issues/347)) ([f2452fb](https://github.com/Ven0m0/steelseriesgg-rs/commit/f2452fb5480f78d6918fa623f12f57e0fcd7156d))
+* **nova-pro:** decode connection and charging from the b7 state byte ([4748655](https://github.com/Ven0m0/steelseriesgg-rs/commit/4748655bf549841896579f23b43f51bb3ee594e5))
+* **udev:** stop granting /dev/uinput and the input group by default ([#346](https://github.com/Ven0m0/steelseriesgg-rs/issues/346)) ([0271954](https://github.com/Ven0m0/steelseriesgg-rs/commit/0271954f465b715dc5197c08a611f20f370e4fb2))
+
+
+### Changed
+
+* bump the cargo-all group with 4 updates ([#349](https://github.com/Ven0m0/steelseriesgg-rs/issues/349)) ([b8e72cb](https://github.com/Ven0m0/steelseriesgg-rs/commit/b8e72cbc03d93d1eb2fbdc50d5472ef2480cb4a7))
+* update all dependencies ([4b56575](https://github.com/Ven0m0/steelseriesgg-rs/commit/4b5657580a73452ac59e52b66b4a4ec7d658f3d4))
+
 ## [0.1.23](https://github.com/Ven0m0/steelseriesgg-rs/compare/v0.1.22...v0.1.23) (2026-11-19)
 
 
