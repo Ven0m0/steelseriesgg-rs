@@ -307,6 +307,17 @@ mod tests {
         }
     }
 
+    /// The Apex 3 drivers size their colour frames with their own constants; they must match the table.
+    #[test]
+    fn the_apex_3_driver_zone_constants_match_the_table() {
+        use super::super::apex::{Apex3, Apex3Tkl};
+        assert_eq!(keyboard_model(APEX_3).map(|m| m.zone_count), Some(Apex3::ZONE_COUNT));
+        assert_eq!(
+            keyboard_model(APEX_3_TKL).map(|m| m.zone_count),
+            Some(Apex3Tkl::ZONE_COUNT)
+        );
+    }
+
     #[test]
     fn every_product_id_has_one_row() {
         let mut seen = std::collections::HashSet::new();

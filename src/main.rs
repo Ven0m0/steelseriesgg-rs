@@ -413,7 +413,10 @@ fn cmd_headset(manager: &DeviceManager, action: HeadsetAction) -> Result<()> {
     headset.initialize()?;
 
     if HARDWARE_CONFIRMED.contains(&headset_info.product_id) {
-        eprintln!("Status, sidetone, mic volume and auto-off are confirmed on this model (2026-10-25).");
+        eprintln!(
+            "Confirmed on this model (2026-10-25): status, sidetone off and highest, mic volume lowest and highest, \
+             auto-off on. Middle levels and turning auto-off off are [EXPERIMENTAL]."
+        );
     } else {
         eprintln!(
             "{}",

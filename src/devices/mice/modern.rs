@@ -63,8 +63,11 @@ pub enum DpiEncoding {
 #[derive(Clone, Copy, Debug)]
 pub struct DpiSpec {
     pub opcode: u8,
+    /// Lowest DPI that `ssgg mouse dpi` accepts.
     pub min: u16,
+    /// Highest DPI that `ssgg mouse dpi` accepts.
     pub max: u16,
+    /// DPI step: `ssgg mouse dpi` accepts only `min + n * step`.
     pub step: u16,
     pub encoding: DpiEncoding,
     /// Index of the stage the single DPI value is sent as; 0 on the Rival 3 Gen 2, confirmed on the `0x1870`
