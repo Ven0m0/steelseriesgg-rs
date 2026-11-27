@@ -52,6 +52,13 @@ if caps.can_write_profile {
 
 ## Existing code
 
-Code on `main` from before this rule still has product ID checks (for example the `0x1628`-only gates). Do not
-copy that pattern into new code. When a change touches such a check, move it to a behaviour property if the
-change stays small; otherwise leave it and note it in the review.
+The product ID checks that chose a behaviour were moved to `can_` flags and table properties when this rule was
+added (2026-11-28); tests in `model_caps.rs` and `models.rs` pin which models set each flag. These uses of a
+product ID are not behaviour checks and stay:
+
+- the model tables themselves, `product_ids`, the name and type maps, and identity comparisons (the same device,
+  a `--product-id` filter);
+- per-model file names for saved state (`direct-brightness-<pid>.bin`, `actuation-<pid>-...`);
+- the key-name lookups of `ssgg keymap`, which read the `0x1628` key table before a keyboard is opened.
+
+When a change touches one of these and the rule can apply without a large change, apply it.
