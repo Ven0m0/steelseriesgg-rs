@@ -38,8 +38,9 @@ pub struct ModelCaps {
     /// have no such table (their per-key sensitivity lives in the profile; the spec's num-analog-keys equals the
     /// mapping-key count).
     pub analog_keys: &'static [u8],
-    /// `has-second-actuation-layer`.
-    pub has_second_actuation: bool,
+    /// `ssgg actuation` can set a second actuation point per key (the spec's `has-second-actuation-layer`). From
+    /// GG's device specs; `[EXPERIMENTAL]` on every board (layer `02` untested).
+    pub can_use_second_actuation_layer: bool,
     pub oled: OledImage,
     /// `macro-data-size` in bytes.
     pub macro_data_size: usize,
@@ -47,20 +48,37 @@ pub struct ModelCaps {
     /// Not necessarily the frame `ssgg` sends: the 2024 TKLs and the Apex 9 TKL send the 112-key `TKL_KEYS` frame.
     /// US layout only on the Mini and `0x1628` tables.
     pub spec_lighting_keys: &'static [u8],
-    /// Whether the live `38 6x` frames of the wired `0x1628` are right for this board: its raw hall-threshold table
-    /// is the one `ACTUATION_POINTS` holds. The 2024 boards carry their own tables, so this is `false` for them.
-    pub live_analog: bool,
-    /// Whether the on-board profile blob is the `0x1628` one (same `device_profile` structs, 12,500 bytes). The
-    /// 2024 boards' device schema and firmware range differ from the `0x1628`'s (schema 8 from firmware 1.19.0), so
-    /// "same structs" only holds on matching firmware; the read is allowed and its result is not interpreted.
-    pub profile_read: bool,
-    /// Whether `clear_direct_write` (`00 41`) is confirmed on this board. The shared spec defines it for all
-    /// rows, but the output report shape has only been verified on `0x1628`.
-    pub clear_direct: bool,
-    /// Whether `36` key-mapping writes are allowed: only `0x1628`, the board the whole write path was built on.
-    /// The other rows may read mappings but their writes stay unwired, as the rules file requires of writes that
-    /// are not confirmed for the family.
-    pub mapping_write_confirmed: bool,
+    /// `ssgg actuation` can change the actuation point of the keys at once, without writing a profile. Needs the
+    /// `0x1628` hall-threshold table (`ACTUATION_POINTS`): confirmed on the Apex Pro TKL 2023 `0x1628` (layer 0,
+    /// Windows, 2026-10-25). `false` on the 2024 boards, which have their own tables.
+    pub can_set_actuation_live: bool,
+    /// `ssgg` can read the profiles stored in the keyboard (`83 01`, 12,500 bytes per slot). Confirmed on the Apex
+    /// Pro TKL 2023 `0x1628` (Windows, 2026-11-10); `[EXPERIMENTAL]` on the 2024 TKLs, whose profile layout matches
+    /// only on matching firmware, so their read is allowed and not interpreted.
+    pub can_read_profile: bool,
+    /// `ssgg` can hand the lighting back to the keyboard: after `ssgg rgb release`, or when the daemon stops, the
+    /// keyboard shows its own stored lighting again instead of the last colours ssgg sent (`00 41`). Confirmed on the
+    /// Apex Pro TKL 2023 `0x1628` (Windows, 2026-11-10); `false` where the command is not tested.
+    pub can_restore_onboard_lighting: bool,
+    /// `ssgg keymap set` can change what a key does (`36`). Confirmed on the Apex Pro TKL 2023 `0x1628` (Windows,
+    /// 2026-11-11); `false` elsewhere: the other boards may read their mappings, but an untested write stays off.
+    pub can_write_key_mappings: bool,
+    /// `ssgg` can write a whole profile to the keyboard's memory (`gen3-write`, `gen3-restore`). Built and gated for
+    /// the Apex Pro TKL 2023 `0x1628` only, from a GG capture (2026-11-10); `[EXPERIMENTAL]`, not yet sent from ssgg
+    /// on hardware.
+    pub can_write_profile: bool,
+    /// `ssgg` can switch the keyboard to another stored profile (`B2`, `34`). The Apex Pro TKL 2023 `0x1628` only,
+    /// from a GG capture (2026-11-10); `[EXPERIMENTAL]`, not yet sent from ssgg on hardware.
+    pub can_switch_profile: bool,
+    /// `ssgg device meta-key` can choose the key that opens the keyboard's second key layer (`35`). The Apex Pro TKL
+    /// 2023 `0x1628` only, from GG's device spec; `[EXPERIMENTAL]`, untested.
+    pub can_set_meta_key: bool,
+    /// `ssgg device region` can change the keyboard's region setting, which writes flash (`75`). The Apex Pro TKL
+    /// 2023 `0x1628` only, from GG's device spec; `[EXPERIMENTAL]`, untested.
+    pub can_write_region: bool,
+    /// The `ssgg onboard gen3-*` and `ssgg keymap` commands look for this keyboard. Only the Apex Pro TKL 2023
+    /// `0x1628`, where they were built and tested; the other boards' reads are in the library only.
+    pub can_run_onboard_commands: bool,
 }
 
 impl ModelCaps {
@@ -114,14 +132,19 @@ const fn pro_tkl_2024(product_id: u16) -> ModelCaps {
         feature_report_size: 645,
         mapping_keys: &MAPPING_KEYS,
         analog_keys: &TKL_ANALOG_KEYS,
-        has_second_actuation: true,
+        can_use_second_actuation_layer: true,
         oled: OledImage::ColumnPacked,
         macro_data_size: 9600,
         spec_lighting_keys: &TKL_2024_LIGHTING_KEYS,
-        live_analog: false,
-        profile_read: true,
-        clear_direct: false,
-        mapping_write_confirmed: false,
+        can_set_actuation_live: false,
+        can_read_profile: true,
+        can_restore_onboard_lighting: false,
+        can_write_key_mappings: false,
+        can_write_profile: false,
+        can_switch_profile: false,
+        can_set_meta_key: false,
+        can_write_region: false,
+        can_run_onboard_commands: false,
     }
 }
 
@@ -131,14 +154,19 @@ const fn pro_mini(product_id: u16) -> ModelCaps {
         feature_report_size: 513,
         mapping_keys: &MINI_KEYS,
         analog_keys: &MINI_KEYS,
-        has_second_actuation: true,
+        can_use_second_actuation_layer: true,
         oled: OledImage::None,
         macro_data_size: 9600,
         spec_lighting_keys: &MINI_LIGHTING_KEYS,
-        live_analog: false,
-        profile_read: false,
-        clear_direct: false,
-        mapping_write_confirmed: false,
+        can_set_actuation_live: false,
+        can_read_profile: false,
+        can_restore_onboard_lighting: false,
+        can_write_key_mappings: false,
+        can_write_profile: false,
+        can_switch_profile: false,
+        can_set_meta_key: false,
+        can_write_region: false,
+        can_run_onboard_commands: false,
     }
 }
 
@@ -152,14 +180,19 @@ pub const MODEL_CAPS: &[ModelCaps] = &[
         feature_report_size: 645,
         mapping_keys: &MAPPING_KEYS,
         analog_keys: &TKL_ANALOG_KEYS,
-        has_second_actuation: true,
+        can_use_second_actuation_layer: true,
         oled: OledImage::RowMajor,
         macro_data_size: 9600,
         spec_lighting_keys: WIRED_2023_KEYS,
-        live_analog: true,
-        profile_read: true,
-        clear_direct: true,
-        mapping_write_confirmed: true,
+        can_set_actuation_live: true,
+        can_read_profile: true,
+        can_restore_onboard_lighting: true,
+        can_write_key_mappings: true,
+        can_write_profile: true,
+        can_switch_profile: true,
+        can_set_meta_key: true,
+        can_write_region: true,
+        can_run_onboard_commands: true,
     },
     pro_tkl_2024(APEX_PRO_TKL_2024),
     pro_tkl_2024(APEX_PRO_TKL_2024_CYBER),
@@ -173,28 +206,38 @@ pub const MODEL_CAPS: &[ModelCaps] = &[
         feature_report_size: 513,
         mapping_keys: &MAPPING_KEYS,
         analog_keys: &[],
-        has_second_actuation: false,
+        can_use_second_actuation_layer: false,
         oled: OledImage::None,
         macro_data_size: 9600,
         spec_lighting_keys: WIRED_2023_KEYS,
-        live_analog: false,
-        profile_read: false,
-        clear_direct: false,
-        mapping_write_confirmed: false,
+        can_set_actuation_live: false,
+        can_read_profile: false,
+        can_restore_onboard_lighting: false,
+        can_write_key_mappings: false,
+        can_write_profile: false,
+        can_switch_profile: false,
+        can_set_meta_key: false,
+        can_write_region: false,
+        can_run_onboard_commands: false,
     },
     ModelCaps {
         product_id: APEX_9_MINI,
         feature_report_size: 513,
         mapping_keys: &MINI_KEYS,
         analog_keys: &[],
-        has_second_actuation: false,
+        can_use_second_actuation_layer: false,
         oled: OledImage::None,
         macro_data_size: 9600,
         spec_lighting_keys: &MINI_LIGHTING_KEYS,
-        live_analog: false,
-        profile_read: false,
-        clear_direct: false,
-        mapping_write_confirmed: false,
+        can_set_actuation_live: false,
+        can_read_profile: false,
+        can_restore_onboard_lighting: false,
+        can_write_key_mappings: false,
+        can_write_profile: false,
+        can_switch_profile: false,
+        can_set_meta_key: false,
+        can_write_region: false,
+        can_run_onboard_commands: false,
     },
 ];
 
@@ -208,6 +251,27 @@ pub fn model_caps(product_id: u16) -> Option<&'static ModelCaps> {
 mod tests {
     use super::*;
     use crate::devices::keyboards::apex_pro_tkl_2023::WIRED_2023_PROFILE_SLOTS;
+
+    /// The capabilities that only the wired Apex Pro TKL 2023 has today. When a test on another board confirms one,
+    /// set it in that board's row and update this list.
+    #[test]
+    fn the_hardware_confirmed_capabilities_are_set_on_the_0x1628_only() {
+        for caps in MODEL_CAPS {
+            let wired_2023 = caps.product_id == APEX_PRO_TKL_2023;
+            for (name, value) in [
+                ("can_set_actuation_live", caps.can_set_actuation_live),
+                ("can_restore_onboard_lighting", caps.can_restore_onboard_lighting),
+                ("can_write_key_mappings", caps.can_write_key_mappings),
+                ("can_write_profile", caps.can_write_profile),
+                ("can_switch_profile", caps.can_switch_profile),
+                ("can_set_meta_key", caps.can_set_meta_key),
+                ("can_write_region", caps.can_write_region),
+                ("can_run_onboard_commands", caps.can_run_onboard_commands),
+            ] {
+                assert_eq!(value, wired_2023, "{name} on {:#06x}", caps.product_id);
+            }
+        }
+    }
 
     fn caps(product_id: u16) -> &'static ModelCaps {
         model_caps(product_id).unwrap_or_else(|| panic!("no row for {product_id:#06x}"))
@@ -236,7 +300,7 @@ mod tests {
             assert_eq!(row.feature_report_size, size, "{pid:#06x}");
             assert_eq!(row.mapping_keys.len(), mapping, "{pid:#06x}");
             assert_eq!(row.analog_keys.len(), analog, "{pid:#06x}");
-            assert_eq!(row.has_second_actuation, second, "{pid:#06x}");
+            assert_eq!(row.can_use_second_actuation_layer, second, "{pid:#06x}");
             assert_eq!(row.oled, oled, "{pid:#06x}");
             assert_eq!(row.spec_lighting_keys.len(), lighting, "{pid:#06x}");
             assert_eq!(row.macro_data_size, 9600, "{pid:#06x}");
@@ -269,8 +333,8 @@ mod tests {
     fn the_apex_9_boards_have_no_live_analog_table_and_no_second_layer() {
         for pid in [APEX_9_TKL, APEX_9_MINI] {
             assert!(caps(pid).analog_keys.is_empty());
-            assert!(!caps(pid).has_second_actuation);
-            assert!(!caps(pid).live_analog);
+            assert!(!caps(pid).can_use_second_actuation_layer);
+            assert!(!caps(pid).can_set_actuation_live);
         }
     }
 
@@ -311,13 +375,13 @@ mod tests {
     fn only_the_0x1628_has_confirmed_mapping_writes_and_clear_direct() {
         for row in MODEL_CAPS {
             assert_eq!(
-                row.mapping_write_confirmed,
+                row.can_write_key_mappings,
                 row.product_id == APEX_PRO_TKL_2023,
                 "{:#06x}",
                 row.product_id
             );
             assert_eq!(
-                row.clear_direct,
+                row.can_restore_onboard_lighting,
                 row.product_id == APEX_PRO_TKL_2023,
                 "{:#06x}",
                 row.product_id
@@ -329,12 +393,12 @@ mod tests {
     fn only_the_0x1628_has_the_live_analog_table_and_only_the_645_boards_read_profiles() {
         for row in MODEL_CAPS {
             assert_eq!(
-                row.live_analog,
+                row.can_set_actuation_live,
                 row.product_id == APEX_PRO_TKL_2023,
                 "{:#06x}",
                 row.product_id
             );
-            assert_eq!(row.profile_read, row.wide_reports(), "{:#06x}", row.product_id);
+            assert_eq!(row.can_read_profile, row.wide_reports(), "{:#06x}", row.product_id);
         }
     }
 }

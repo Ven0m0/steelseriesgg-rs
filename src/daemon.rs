@@ -9,10 +9,10 @@ use steelseries_gg::device_state::{DeviceId, DeviceStateStore, KeyboardState};
 use steelseries_gg::devices::headsets::Headset;
 use steelseries_gg::devices::hid_reports::Apex2022DisplayCommand;
 use steelseries_gg::devices::keyboards::Keyboard;
+use steelseries_gg::devices::keyboards::model_caps::model_caps;
 use steelseries_gg::devices::{
     DeviceInfo, DeviceManager, DeviceType,
     discovery::{DeviceFingerprint, HotPlugEvent, print_device_summary},
-    product_ids,
 };
 use steelseries_gg::gamesense::GameSenseServer;
 use steelseries_gg::profiles::ProfileManager;
@@ -863,14 +863,12 @@ async fn wait_for_shutdown() -> Result<()> {
     Ok(())
 }
 
-/// [EXPERIMENTAL] Hand the wired Apex Pro TKL 2023 (`0x1628`) back to its on-board lighting, so it does not hold
-/// the last streamed frame after the daemon exits. The other wired Gen 3 rows define `00 41` too (`clear_direct`),
-/// but only `0x1628` has it confirmed, so the daemon sends it there alone; `ssgg rgb release` reaches the others.
-/// A failure is logged, not fatal.
+/// Hand every keyboard that `can_restore_onboard_lighting` back to its own stored lighting, so it does not hold the
+/// last streamed frame after the daemon exits. A failure is logged, not fatal.
 async fn release_direct_lighting(daemon_state: &RwLock<DaemonState>) {
     let mut state = daemon_state.write().await;
     for (keyboard, _, info) in state.keyboards.values_mut() {
-        if info.product_id != product_ids::APEX_PRO_TKL_2023 {
+        if !model_caps(info.product_id).is_some_and(|caps| caps.can_restore_onboard_lighting) {
             continue;
         }
         match keyboard.send_display_command(Apex2022DisplayCommand::ClearDirect) {

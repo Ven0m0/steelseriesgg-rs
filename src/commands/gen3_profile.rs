@@ -19,7 +19,8 @@ use steelseries_gg::devices::keyboards::apex_pro_tkl_2023_profile_codec::{
     Actuation, DEVICE_KEY_HID, Gen3Profile, NAME_LEN, check_lossless, offsets,
 };
 use steelseries_gg::devices::keyboards::key_action::KeyAction;
-use steelseries_gg::devices::{DeviceManager, DeviceType, HidDeviceType, product_ids};
+use steelseries_gg::devices::keyboards::model_caps::model_caps;
+use steelseries_gg::devices::{DeviceManager, DeviceType, HidDeviceType};
 use steelseries_gg::fs_utils::{secure_open, secure_write};
 use steelseries_gg::{Error, Result};
 
@@ -215,8 +216,10 @@ fn open_wired_2023(manager: Option<&mut DeviceManager>) -> Result<(Box<dyn Keybo
     let info = manager
         .devices_by_type(DeviceType::Keyboard)
         .into_iter()
-        .find(|info| info.product_id == product_ids::APEX_PRO_TKL_2023)
-        .ok_or_else(|| Error::DeviceNotFound("no wired Apex Pro TKL 2023 (0x1628) connected".to_string()))?;
+        .find(|info| model_caps(info.product_id).is_some_and(|caps| caps.can_run_onboard_commands))
+        .ok_or_else(|| {
+            Error::DeviceNotFound("no keyboard that these commands support is connected (tested: 0x1628)".to_string())
+        })?;
     let name = info.name.to_string();
     let keyboard = manager.open_keyboard(info)?;
     Ok((keyboard, name))
