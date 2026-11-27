@@ -207,7 +207,8 @@ const SPEC_PRIME_MINI: MouseSpec = MouseSpec {
     ..SPEC_AEROX_5
 };
 
-/// One USB product ID of a Modern-family mouse.
+/// One USB product ID of a Modern-family mouse. From the community rivalcfg-derived fork; `[EXPERIMENTAL]` except
+/// what a field says was confirmed on the wired Rival 3 Gen 2 `0x1870`.
 #[derive(Clone, Copy, Debug)]
 pub struct MouseModel {
     pub product_id: u16,
@@ -215,7 +216,8 @@ pub struct MouseModel {
     /// USB interface that takes the commands; interface 3 confirmed on the wired Rival 3 Gen 2 `0x1870`, the others
     /// from the community fork, `[EXPERIMENTAL]`.
     pub interface_number: i32,
-    /// 2.4 GHz receiver PID of a dual-mode mouse.
+    /// 2.4 GHz receiver PID of a dual-mode mouse: the frames use the receiver opcodes and no echo is read (a
+    /// transport fact, not a capability). No receiver PID has been tested.
     pub dongle: bool,
     pub spec: &'static MouseSpec,
 }

@@ -31,8 +31,11 @@ A reader must understand a capability at the call site, without the protocol not
    - where the value comes from: which device, test and date confirmed it, or that it is `[EXPERIMENTAL]`.
 
    A capability is a field or method that decides what `ssgg` sends to a device or allows the user to do.
-   Identity fields (`product_id`, `name`) are not capabilities. When every field of a table has the same source,
-   the struct's doc comment may give it once; a field then adds only what differs, such as a confirmed value.
+   Identity fields (`product_id`, `name`) are not capabilities. Neither are facts about the frame layout or the
+   connection (`DpiSpec::per_axis`, `DirectFrame::init`, `MouseModel::dongle`, `DirectLighting::probes_firmware`):
+   they keep a name that says what they are, and their doc gives the source. When every field of a table has the
+   same source, the struct's doc comment may give it once; a field then adds only what differs, such as a confirmed
+   value.
 4. A function or method that answers a capability follows the same names and has the same kind of doc comment.
 
 Example:

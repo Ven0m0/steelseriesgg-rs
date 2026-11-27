@@ -215,7 +215,7 @@
       fieldsets.push(node('fieldset', { className: 'hs-set' }, [
         node('legend', { textContent: 'Mic volume' }),
         node('div', { className: 'hs-line' }, [range, out]),
-        node('span', { className: 'hint', textContent: `${steps} steps (0 to ${steps - 1}). 0 is close to silent, not a mute.` }),
+        node('span', { className: 'hint', textContent: `${steps} steps (0 to ${steps - 1}). 0 is the lowest level; it may not mute.` }),
         s.row,
       ]));
     }

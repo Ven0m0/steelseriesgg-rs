@@ -126,8 +126,9 @@ pub(crate) const MINI_FRAME: DirectFrame = DirectFrame {
 /// - GG's decrypted device spec (`apex_pro_tkl_2022` `device-key-idx-to-hid`, first 70 entries minus its two
 ///   blanks) lists the same 68 usages in the same order, an independent check of every slot (2026-10-25).
 ///
-/// The checksum at offset 12320 is solved (`apex_pro_tkl_2023_profile`), but writing the blob stays blocked:
-/// the write chain (`02 01`, `03 01`, `B1`) is untested; the read-back (`read_gen3_profile`) is confirmed (2026-11-10).
+/// The checksum at offset 12320 is solved (`apex_pro_tkl_2023_profile`). Writing the blob is implemented and gated
+/// (`ssgg onboard gen3-write --yes`, `can_write_profile`), but the write chain (`02 01`, `03 01`, `B1`) has not been
+/// sent from `ssgg` on hardware (`[EXPERIMENTAL]`); the read-back (`read_gen3_profile`) is confirmed (2026-11-10).
 pub const WIRED_2023_PROFILE_SLOTS: [u8; 68] = [
     // ` 1 2 3 4 5 6 7 8 9 0 - = Yen
     0x35, 0x1E, 0x1F, 0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x2D, 0x2E, 0x89,

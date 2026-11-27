@@ -62,17 +62,20 @@ pub struct Nova7Model {
     /// and the wired Nova 3, where the spec's ChatMix is software-side and no frame is read; and on the Nova 5
     /// `0x2232`, which has no dial (owner report, Linux, 2026-11-24).
     pub can_report_chat_mix: bool,
-    /// Lowest microphone-volume wire value: 0, or 1 on the Arctis 7+ family. 0 and 7 confirmed on the `0x227E`.
+    /// Lowest microphone-volume wire value: 0, or 1 on the Arctis 7+ family, the Nova Pro family and the wired
+    /// Nova 3. 0 confirmed on the `0x227E` (Linux, 2026-10-25).
     pub mic_min: u8,
-    /// Highest sidetone wire value: 3, or 10 on the Nova 5 family.
+    /// Highest sidetone wire value: 3, or 10 on the Nova 5 family. 3 confirmed on the `0x227E` (Linux, 2026-10-25).
     pub sidetone_max: u8,
-    /// Highest microphone-volume wire value: 7, or 15 on the Nova 5 family.
+    /// Highest microphone-volume wire value: 7, 10 on the Nova Pro family, or 15 on the Nova 5 family. 7 confirmed
+    /// on the `0x227E` (Linux, 2026-10-25).
     pub mic_max: u8,
     /// Bytes between the power and battery bytes of a status reply: 0, or 1 on the Nova 5 family.
     pub status_gap: usize,
     /// Report number in byte 0 of every frame: 0, or 6 on the Nova Pro family.
     pub report_id: u8,
-    /// The status query the model answers.
+    /// The status query the model answers. `B0` confirmed on the `0x227E` (battery, charging and ChatMix, Linux,
+    /// 2026-10-25).
     pub status: StatusQuery,
     /// `ssgg headset auto-off` can set the idle time after which the headset turns off (the spec's
     /// `inactivity_timer`, `a3`). On the Arctis Nova 7 Gen 2 `0x227E` only `a3 01` was observed (off after about a

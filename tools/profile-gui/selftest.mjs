@@ -353,8 +353,9 @@ ok('without the import the page says the registry was not imported', () => {
   delete globalThis.SsggProducts;
   const bare = loadApp(JS_DIR);
   const line = bare.deviceFeatures(0x1612).join(' | ');
+  const outside = bare.canUseOnboardProfile(0x1620) === false && bare.deviceLabel({ product_id: 0x1620 }).legacy === false;
   globalThis.SsggProducts = saved;
-  return bare.PRODUCTS === null && /device registry: not imported/.test(line)
+  return bare.PRODUCTS === null && outside && /device registry: not imported/.test(line)
     && /read back on this family/.test(line) && bare.deviceLabel({ product_id: 0x1612, product: 'Apex 7' }).name === 'Apex 7';
 }, () => app.deviceFeatures(0x1612));
 
@@ -1953,6 +1954,18 @@ ok('every step of every step count reaches its own wire value and reads back as 
   }
   return headset.levelForStep(0, 4) === 0 && headset.levelForStep(3, 4) === 100 && headset.levelForStep(1, 4) === 33;
 });
+ok('the device panels and the server messages name no model and no product ID', () => {
+  // .claude/rules/device-capabilities.md: per-model text stays in the CLI. Reads the sources (comments stripped),
+  // and from src/gui.rs only the string literals outside its tests.
+  const strip = (text) => text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+  const family = /\b(Apex|Rival|Arctis|Aerox|Prime|Sensei|Nova)\b|0x[0-9a-f]{4}\b/i;
+  const js = ['headset.js', 'live.js', 'control.js'].map((f) => strip(read(`tools/profile-gui/${f}`)));
+  const gui = read('src/gui.rs').split('#[cfg(test)]')[0];
+  const literals = [...strip(gui).matchAll(/"((?:[^"\\]|\\.)*)"/g)].map((m) => m[1]);
+  const bad = [...js.flatMap((t) => [...t.matchAll(/(['"`])((?:(?!\1)[^\\]|\\.)*)\1/g)].map((m) => m[2])), ...literals]
+    .filter((t) => family.test(t));
+  return bad.length === 0;
+}, () => 'model names in device panel strings');
 ok('headset.js reads only the capability keys HeadsetCapabilities sends', () => {
   // The fields of `pub struct HeadsetCapabilities` in src/devices/headsets/mod.rs, which serialises them unrenamed.
   // Reads the source headset.js in both runs: the minifier renames the local `caps`, so the minified file has no
