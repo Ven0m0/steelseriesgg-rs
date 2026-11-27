@@ -29,6 +29,10 @@ A reader must understand a capability at the call site, without the protocol not
    - one plain sentence on what it means for the user or the caller, for example "ssgg may write a profile to the
      keyboard's memory";
    - where the value comes from: which device, test and date confirmed it, or that it is `[EXPERIMENTAL]`.
+
+   A capability is a field or method that decides what `ssgg` sends to a device or allows the user to do.
+   Identity fields (`product_id`, `name`) are not capabilities. When every field of a table has the same source,
+   the struct's doc comment may give it once; a field then adds only what differs, such as a confirmed value.
 4. A function or method that answers a capability follows the same names and has the same kind of doc comment.
 
 Example:

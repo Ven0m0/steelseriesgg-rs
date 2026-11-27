@@ -39,11 +39,15 @@ pub struct ModelCaps {
     /// mapping-key count).
     pub analog_keys: &'static [u8],
     /// The keyboard has a second key layer that a deeper press of a key triggers (the spec's
-    /// `has-second-actuation-layer`), so `ssgg keymap` may address that layer. A read also needs 645-byte reports
+    /// `has-second-actuation-layer`), so the library may address that layer. `ssgg keymap` also needs
+    /// `can_run_gen3_commands`; a read also needs 645-byte reports
     /// ([`Self::can_take_645_byte_commands`]); a write also needs `can_write_key_mappings`. Reading the layer (`B6`)
     /// is confirmed on the Apex Pro TKL 2023 `0x1628` (Windows, 2026-11-11); writing it, and every other board, is
     /// `[EXPERIMENTAL]`.
     pub can_use_second_actuation_layer: bool,
+    /// The layout `ssgg oled` sends the 640-byte image in, or no OLED. From GG's device specs (2026-11-11); the
+    /// row-major layout is confirmed on the Apex Pro TKL 2023 `0x1628` (2026-11-10), and `ssgg` refuses the
+    /// column-packed one.
     pub oled: OledImage,
     /// `macro-data-size` in bytes.
     pub macro_data_size: usize,
@@ -58,9 +62,10 @@ pub struct ModelCaps {
     /// `02`, `set-key`, the `38 62`-`67` frames and Linux are `[EXPERIMENTAL]`. `false` on the 2024 boards, which
     /// have their own tables.
     pub can_set_actuation_live: bool,
-    /// `ssgg` can read the profiles stored in the keyboard (`83 01`, 12,500 bytes per slot). Confirmed on the Apex
-    /// Pro TKL 2023 `0x1628` (Windows, 2026-11-10); `[EXPERIMENTAL]` on the 2024 TKLs, whose profile layout matches
-    /// only on matching firmware, so their read is allowed and not interpreted.
+    /// The library can read the profiles stored in the keyboard (`83 01`, 12,500 bytes per slot). Confirmed on the
+    /// Apex Pro TKL 2023 `0x1628` (Windows, fw 1.19.7, 2026-11-10). On the 2024 TKLs the read is allowed in the
+    /// library only (`ssgg onboard gen3-read` also needs `can_run_gen3_commands`); it is `[EXPERIMENTAL]`, and its
+    /// result is not interpreted, because the layout matches only on matching firmware.
     pub can_read_profile: bool,
     /// `ssgg` can hand the lighting back to the keyboard: after `ssgg rgb release`, or when the daemon stops, the
     /// keyboard shows its own stored lighting again instead of the last colours ssgg sent (`00 41`). Confirmed on the

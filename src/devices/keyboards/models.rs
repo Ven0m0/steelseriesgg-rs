@@ -99,7 +99,7 @@ pub struct KeyboardModel {
     /// comment from an earlier contributor). `[EXPERIMENTAL]` on every board: no hardware test of either form since
     /// the legacy output path was fixed (2026-10-25).
     pub can_set_all_zones_at_once: bool,
-    /// How many lighting zones the zone commands address (`ssgg rgb` on boards without a direct frame): 10 on the
+    /// How many lighting zones the zone commands and the daemon address: 10 on the
     /// Apex 3, 8 on the Apex 3 TKL (OpenRGB), 9 on the Apex Pro TKL 2023 wired and wireless, 1 elsewhere, where the
     /// count is not captured. `[EXPERIMENTAL]`, from the older per-model table.
     pub zone_count: usize,
@@ -293,6 +293,13 @@ mod tests {
             assert_eq!(m.fallback_control_interface, fallback, "{pid:#06x}");
             assert_eq!(m.can_set_all_zones_at_once, !wireless_2023.contains(&pid), "{pid:#06x}");
             assert_eq!(m.can_light_non_us_layouts, !minis.contains(&pid), "{pid:#06x}");
+            let zones = match pid {
+                APEX_3 => 10,
+                APEX_3_TKL => 8,
+                APEX_PRO_TKL_2023 | APEX_PRO_TKL_2023_WIRELESS | APEX_PRO_TKL_2023_WIRELESS_2 => 9,
+                _ => 1,
+            };
+            assert_eq!(m.zone_count, zones, "{pid:#06x}");
         }
     }
 

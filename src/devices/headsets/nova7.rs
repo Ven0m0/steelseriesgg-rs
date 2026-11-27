@@ -43,19 +43,26 @@ pub enum StatusQuery {
 }
 
 /// Per-PID behaviour of one Nova 7 variant.
+///
+/// The values come from GG's decrypted device specs, read 2026-10-25 (the family constructors below name each
+/// spec). They are `[EXPERIMENTAL]` except where a field says what was confirmed on the Arctis Nova 7 Gen 2 `0x227E`.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Nova7Model {
     pub product_id: u16,
+    /// How the status reply gives the battery charge: percent, or 4, 5 or 8 steps. Percent is confirmed on the
+    /// `0x227E` (it matched an independent reading, Linux, 2026-10-25).
     pub battery: BatteryScale,
-    /// `ssgg headset sidetone` can set how loud the headset plays the microphone back. From GG's device specs;
-    /// confirmed on the Arctis Nova 7 Gen 2 `0x227E` (Linux, 2026-10-25), `[EXPERIMENTAL]` elsewhere.
+    /// `ssgg headset sidetone` can set how loud the headset plays the microphone back. Confirmed on the Arctis
+    /// Nova 7 Gen 2 `0x227E` for levels 0 and 3 (Linux, 2026-10-25); levels 1-2 and the other models are
+    /// `[EXPERIMENTAL]`.
     pub can_set_sidetone: bool,
     /// The headset reports the position of its ChatMix dial in its status reply. Confirmed on the Arctis Nova 7
-    /// Gen 2 `0x227E` (Linux, 2026-10-25), `[EXPERIMENTAL]` on the other models that set it. `false` where GG's
-    /// spec has no ChatMix (Arctis 7P+, 7X+, Nova Pro family) and on the Nova 5 `0x2232`, which has no dial (owner
-    /// report, Linux, 2026-11-24).
+    /// Gen 2 `0x227E` (Linux, 2026-10-25), `[EXPERIMENTAL]` on the other models that set it. `false` on the Nova 7P
+    /// (`0x220A`, `0x2298`, `0x22A7`), Arctis 7P+ and 7X+, where GG's spec has no ChatMix; on the Nova Pro family
+    /// and the wired Nova 3, where the spec's ChatMix is software-side and no frame is read; and on the Nova 5
+    /// `0x2232`, which has no dial (owner report, Linux, 2026-11-24).
     pub can_report_chat_mix: bool,
-    /// Lowest microphone-volume wire value: 0, or 1 on the Arctis 7+ family.
+    /// Lowest microphone-volume wire value: 0, or 1 on the Arctis 7+ family. 0 and 7 confirmed on the `0x227E`.
     pub mic_min: u8,
     /// Highest sidetone wire value: 3, or 10 on the Nova 5 family.
     pub sidetone_max: u8,

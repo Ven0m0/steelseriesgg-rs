@@ -854,10 +854,13 @@ async fn cmd_per_key_rgb(keyboard: &mut Box<dyn Keyboard>, action: PerKeyAction)
             println!("Per-key RGB Status:");
             let perkey_supported = keyboard.can_set_per_key_colors();
             if perkey_supported {
-                println!("Provisional: true (key mapping exists, hardware protocol unverified)");
-                println!("Note: Per-key RGB protocol is experimental - actual hardware behavior may vary");
+                println!("Per-key colours: yes (a key mapping exists for this keyboard)");
+                println!(
+                    "Note: confirmed on the Apex Pro TKL 2023 (0x1628) and the Apex Pro (2024) (0x1640); \
+                     [EXPERIMENTAL] on other boards, which may ignore the frames and still answer success"
+                );
             } else {
-                println!("Provisional: false");
+                println!("Per-key colours: no");
             }
 
             if let Some(mapping) = keyboard.get_key_mapping() {

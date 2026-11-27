@@ -378,7 +378,8 @@ status in the rules file.
 
 ### Zones
 
-Zone counts come from `zone_count_for_product_id` (`src/devices/mod.rs`) and layouts from
+Zone counts come from the `zone_count` field of each `KeyboardModel` row (`src/devices/keyboards/models.rs`; read by
+`zone_count_for_product_id`) and layouts from
 `src/devices/zone_mapping.rs`. Models without a measured layout return 1 zone. The Apex 3 TKL (`0x1622`) has 8 zones, as
 SteelSeries advertises and OpenRGB's `SteelSeriesApex8ZoneController` models (changed from 9 on 2026-10-15;
 the zone names in `zone_mapping.rs` are not measured).

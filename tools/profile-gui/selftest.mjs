@@ -1906,7 +1906,7 @@ ok('the control panel labels and notes name no model and no product ID', () => {
   // .claude/rules/device-capabilities.md: a form runs on whatever board is connected, and ssgg refuses what it cannot do.
   const names = Object.values(app.PRODUCTS ? app.PRODUCTS.products : {}).map((p) => p.name).filter(Boolean);
   const texts = control.GROUPS.flatMap(([title, list]) => [title, ...list.flatMap((c) => [c.label, c.note ?? '',
-    ...(c.fields ?? []).map((f) => f.label ?? '')])]);
+    ...(c.fields ?? []).flatMap((f) => [f.name ?? '', f.hint ?? '', ...(f.options ?? []).map(String)])])]);
   // Product names, product IDs and the product family words (a name can be written another way, "Apex Pro TKL 2023").
   const family = /\b(Apex|Rival|Arctis|Aerox|Prime|Sensei|Nova)\b/;
   return names.length > 40 && texts.every((t) => !/0x[0-9a-f]{4}/i.test(t) && !family.test(t) && !names.some((n) => t.includes(n)));
@@ -1955,6 +1955,8 @@ ok('every step of every step count reaches its own wire value and reads back as 
 });
 ok('headset.js reads only the capability keys HeadsetCapabilities sends', () => {
   // The fields of `pub struct HeadsetCapabilities` in src/devices/headsets/mod.rs, which serialises them unrenamed.
+  // Reads the source headset.js in both runs: the minifier renames the local `caps`, so the minified file has no
+  // `caps.` to find; property names, which the check is about, survive minification unchanged.
   const struct = read('src/devices/headsets/mod.rs').match(/pub struct HeadsetCapabilities \{([\s\S]*?)\n\}/);
   const sent = struct ? [...struct[1].matchAll(/^\s*pub ([a-z_]+):/gm)].map((m) => m[1]).sort() : [];
   const used = [...new Set([...read('tools/profile-gui/headset.js').matchAll(/\bcaps\.([a-z_]+)/g)].map((m) => m[1]))].sort();

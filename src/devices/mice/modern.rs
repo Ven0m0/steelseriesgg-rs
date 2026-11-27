@@ -58,7 +58,8 @@ pub enum DpiEncoding {
     Linear { dpi_per_code: u16 },
 }
 
-/// DPI range, encoding and command layout of a model.
+/// DPI range, encoding and command layout of a model. From the community rivalcfg-derived fork and rivalcfg;
+/// `[EXPERIMENTAL]` except what a field says was confirmed on the wired Rival 3 Gen 2 `0x1870`.
 #[derive(Clone, Copy, Debug)]
 pub struct DpiSpec {
     pub opcode: u8,
@@ -66,9 +67,10 @@ pub struct DpiSpec {
     pub max: u16,
     pub step: u16,
     pub encoding: DpiEncoding,
-    /// Index of the stage the single DPI value is sent as.
+    /// Index of the stage the single DPI value is sent as; 0 on the Rival 3 Gen 2, confirmed on the `0x1870`
+    /// (2026-11-17).
     pub first_preset: u8,
-    /// The command carries the code twice, once per axis.
+    /// The command carries the code twice, once per axis (a frame layout, not a capability; from rivalcfg).
     pub per_axis: bool,
     /// `ssgg mouse dpi` can set several DPI stages for the mouse's DPI button in one command
     /// ([`MouseDpiStagesCommand`]). Set only where that frame is evidenced: the Rival 3 Gen 2, by rivalcfg's test
@@ -100,13 +102,17 @@ impl DpiSpec {
     }
 }
 
-/// What the mice of one rivalcfg profile share.
+/// What the mice of one rivalcfg profile share. From the community rivalcfg-derived fork; `[EXPERIMENTAL]` except
+/// what a field says was confirmed on the wired Rival 3 Gen 2 `0x1870`.
 #[derive(Clone, Copy, Debug)]
 pub struct MouseSpec {
     pub dpi: DpiSpec,
-    /// Codes for 125, 250, 500 and 1000 Hz.
+    /// Codes for 125, 250, 500 and 1000 Hz; 125 and 1000 Hz confirmed on the `0x1870` (2026-11-17).
     pub poll_codes: [u8; 4],
+    /// How the colour frame addresses the LED zones; the mask layout is confirmed on the `0x1870` (2026-11-16/18).
     pub color_layout: MouseColorLayout,
+    /// How many LED zones `ssgg mouse color --zone` can address; the three zones of the `0x1870` are confirmed
+    /// (2026-11-18).
     pub zone_count: u8,
     /// The mouse runs on a battery and `ssgg mouse info` can ask for its charge (`92`, `D2` through a receiver).
     /// From the community rivalcfg-derived fork; `[EXPERIMENTAL]`, untested on hardware.
@@ -206,7 +212,8 @@ const SPEC_PRIME_MINI: MouseSpec = MouseSpec {
 pub struct MouseModel {
     pub product_id: u16,
     pub name: &'static str,
-    /// USB interface that takes the commands.
+    /// USB interface that takes the commands; interface 3 confirmed on the wired Rival 3 Gen 2 `0x1870`, the others
+    /// from the community fork, `[EXPERIMENTAL]`.
     pub interface_number: i32,
     /// 2.4 GHz receiver PID of a dual-mode mouse.
     pub dongle: bool,
@@ -1184,7 +1191,7 @@ mod tests {
     /// Capture frame 15 is `90 00` zero padded to 64 bytes (`SET_REPORT wValue 0x0200 wIndex 3`); hidapi takes it
     /// with report number 0 in front.
     #[test]
-    fn queries_are_ggs_firmware_frame_and_ab_on_the_wired_only_models() {
+    fn queries_are_ggs_firmware_frame_and_ab_where_the_model_can_read_them() {
         let mut gg = vec![0x00, 0x90];
         gg.resize(MOUSE_REPORT_BUFFER_SIZE, 0);
         assert_eq!(bytes(&pid(RIVAL_3_GEN_2).firmware_query().unwrap()), gg);
@@ -1192,15 +1199,15 @@ mod tests {
         ab.resize(MOUSE_REPORT_BUFFER_SIZE, 0);
         assert_eq!(bytes(&pid(RIVAL_3_GEN_2).poll_rate_query().unwrap()), ab);
 
-        let mut wired_only = 0;
+        let mut readable = 0;
         for m in MOUSE_MODELS {
             let expected = !m.dongle && !m.name.contains("Wireless");
-            wired_only += usize::from(expected);
+            readable += usize::from(expected);
             assert_eq!(m.firmware_query().is_some(), expected, "{}", m.name);
             assert_eq!(m.poll_rate_query().is_some(), expected, "{}", m.name);
         }
         assert_eq!(
-            wired_only, 6,
+            readable, 6,
             "Aerox 3, Aerox 5, Prime Mini, Rival 3 Gen 2, Rival 5 and its Destiny Edition"
         );
     }
