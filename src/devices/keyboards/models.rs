@@ -66,6 +66,8 @@ impl DirectLighting {
         }
     }
 
+    /// `ssgg` sends the `90 00` firmware poll before the first direct frame, to choose between the two frames (a
+    /// connection fact, not a capability). From OpenRGB `SendInitialization` (2026-10-25); `[EXPERIMENTAL]`, untested.
     #[must_use]
     pub fn probes_firmware(self) -> bool {
         matches!(self, Self::ByFirmware { .. })

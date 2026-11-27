@@ -41,8 +41,8 @@ Wayland is a known WebKitGTK renderer problem: start with `WEBKIT_DISABLE_DMABUF
 `ssgg-gui` serves these files and a small lighting API on 127.0.0.1 only, and opens the first keyboard
 (as `ssgg rgb` does). The page shows a **Live lighting** panel (colour, brightness, off) when that keyboard
 opened; opened from a file or any other server there is no panel. **`[EXPERIMENTAL]`**: the calls are the ones
-`ssgg rgb color|brightness|off` sends, and only a solid colour on the wired Apex Pro TKL 2023 (`0x1628`) is
-confirmed on hardware - a board that ignores a call still answers success. Close GG first, it overwrites other
+`ssgg rgb color|brightness|off` sends; which of them are confirmed on which board is listed in
+`.claude/rules/experimental-protocol.md`, and elsewhere a board that ignores a call still answers success. Close GG first, it overwrites other
 programs. Stop `ssgg daemon` first too: two programs should not hold one keyboard.
 
 The API is not CORS-enabled (the page is same-origin). Each run has a random token the page receives only by

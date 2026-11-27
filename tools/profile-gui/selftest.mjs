@@ -1954,18 +1954,22 @@ ok('every step of every step count reaches its own wire value and reads back as 
   }
   return headset.levelForStep(0, 4) === 0 && headset.levelForStep(3, 4) === 100 && headset.levelForStep(1, 4) === 33;
 });
+let panelModelText = [];
 ok('the device panels and the server messages name no model and no product ID', () => {
-  // .claude/rules/device-capabilities.md: per-model text stays in the CLI. Reads the sources (comments stripped),
-  // and from src/gui.rs only the string literals outside its tests.
-  const strip = (text) => text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+  // .claude/rules/device-capabilities.md: per-model text stays in the CLI. One pass per file matches strings and
+  // comments together and keeps only the strings, so a `//` or `/*` inside a string is not taken for a comment.
+  // Limit: a JS regex literal that contains a quote would break the pairing; the checked files have none.
   const family = /\b(Apex|Rival|Arctis|Aerox|Prime|Sensei|Nova)\b|0x[0-9a-f]{4}\b/i;
-  const js = ['headset.js', 'live.js', 'control.js'].map((f) => strip(read(`tools/profile-gui/${f}`)));
-  const gui = read('src/gui.rs').split('#[cfg(test)]')[0];
-  const literals = [...strip(gui).matchAll(/"((?:[^"\\]|\\.)*)"/g)].map((m) => m[1]);
-  const bad = [...js.flatMap((t) => [...t.matchAll(/(['"`])((?:(?!\1)[^\\]|\\.)*)\1/g)].map((m) => m[2])), ...literals]
-    .filter((t) => family.test(t));
-  return bad.length === 0;
-}, () => 'model names in device panel strings');
+  const jsToken = /(['"`])((?:(?!\1)[^\\]|\\.)*)\1|\/\*[\s\S]*?\*\/|\/\/[^\n]*/g;
+  const rustToken = /"((?:[^"\\]|\\.)*)"|\/\*[\s\S]*?\*\/|\/\/[^\n]*/g;
+  const js = ['headset.js', 'live.js', 'control.js']
+    .flatMap((f) => [...read(`tools/profile-gui/${f}`).matchAll(jsToken)].filter((m) => m[1]).map((m) => m[2]));
+  const parts = read('src/gui.rs').split(/#\[cfg\(test\)\]\s*mod tests\b/);
+  if (parts.length !== 2) { panelModelText = ['src/gui.rs: expected one `#[cfg(test)] mod tests`']; return false; }
+  const rust = [...parts[0].matchAll(rustToken)].filter((m) => m[1] !== undefined).map((m) => m[1]);
+  panelModelText = [...js, ...rust].filter((t) => family.test(t));
+  return js.length > 300 && rust.length > 50 && panelModelText.length === 0;
+}, () => panelModelText.join(' | '));
 ok('headset.js reads only the capability keys HeadsetCapabilities sends', () => {
   // The fields of `pub struct HeadsetCapabilities` in src/devices/headsets/mod.rs, which serialises them unrenamed.
   // Reads the source headset.js in both runs: the minifier renames the local `caps`, so the minified file has no

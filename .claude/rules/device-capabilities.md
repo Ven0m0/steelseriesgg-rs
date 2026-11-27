@@ -59,7 +59,8 @@ if caps.can_write_key_mappings {
 2. Text that the device panels show (the Headset tab, the Device control panel and any later device tab) names no
    model: hints, notes, labels, and messages from `src/gui.rs`. The profile editor may name the file format it edits and the board it was tested
    on, because it edits that board's profile file.
-3. Test-status notices for one model stay in the CLI (`ssgg mouse`, `ssgg headset`).
+3. Test-status notices for one model stay in the CLI (`ssgg mouse`, `ssgg headset`). The Device control panel
+   shows the CLI's output unchanged, so that output may name a model; the panel's own labels and notes may not.
 4. The page does not check product IDs. It may show the product ID and the model name as identification.
 
 ## Existing code
