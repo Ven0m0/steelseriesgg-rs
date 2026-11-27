@@ -1958,10 +1958,11 @@ let panelModelText = [];
 ok('the device panels and the server messages name no model and no product ID', () => {
   // .claude/rules/device-capabilities.md: per-model text stays in the CLI. One pass per file matches strings and
   // comments together and keeps only the strings, so a `//` or `/*` inside a string is not taken for a comment.
-  // Limit: a JS regex literal that contains a quote would break the pairing; the checked files have none.
+  // Limits: a JS regex literal or a Rust raw string (`r#".."#`) that contains a quote would break the pairing; the
+  // checked files have none. Rust char literals such as '"' are matched and skipped.
   const family = /\b(Apex|Rival|Arctis|Aerox|Prime|Sensei|Nova)\b|0x[0-9a-f]{4}\b/i;
   const jsToken = /(['"`])((?:(?!\1)[^\\]|\\.)*)\1|\/\*[\s\S]*?\*\/|\/\/[^\n]*/g;
-  const rustToken = /"((?:[^"\\]|\\.)*)"|\/\*[\s\S]*?\*\/|\/\/[^\n]*/g;
+  const rustToken = /"((?:[^"\\]|\\.)*)"|'(?:[^'\\]|\\.)'|\/\*[\s\S]*?\*\/|\/\/[^\n]*/g;
   const js = ['headset.js', 'live.js', 'control.js']
     .flatMap((f) => [...read(`tools/profile-gui/${f}`).matchAll(jsToken)].filter((m) => m[1]).map((m) => m[2]));
   const parts = read('src/gui.rs').split(/#\[cfg\(test\)\]\s*mod tests\b/);
