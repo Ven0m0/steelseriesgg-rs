@@ -20,7 +20,7 @@ row in a model table, not a new code branch.
 A reader must understand a capability at the call site, without the protocol notes and without guessing.
 
 1. A yes/no capability starts with `can_` and says what `ssgg` or the device can do, in positive form:
-   `can_write_profile`, `can_set_actuation_live`, `can_read_firmware`. Do not use `is_<model>`, `supports_x`,
+   `can_write_key_mappings`, `can_set_actuation_live`, `can_read_firmware`. Do not use `is_<model>`, `supports_x`,
    `live_analog` or other names that only someone who knows the protocol can read.
 2. A capability that holds a value is named for that value: `zone_count`, `dpi_preset`, `control_interface`.
 3. Each capability has a doc comment with:
@@ -32,13 +32,13 @@ A reader must understand a capability at the call site, without the protocol not
 Example:
 
 ```rust
-/// `ssgg` may write an on-board profile to the keyboard's memory. Confirmed on the Apex Pro TKL 2023 `0x1628`
-/// (Windows, 2026-11-10); `false` on every board where nobody has tested the write.
-pub can_write_profile: bool,
+/// `ssgg keymap set` can change what a key does. Confirmed on the Apex Pro TKL 2023 `0x1628` (Windows,
+/// 2026-11-11); `false` on every board where nobody has tested the write.
+pub can_write_key_mappings: bool,
 ```
 
 ```rust
-if caps.can_write_profile {
+if caps.can_write_key_mappings {
     // ...
 }
 ```
@@ -46,7 +46,9 @@ if caps.can_write_profile {
 ## In the profile editor (`ssgg-gui`)
 
 1. The page gets behaviour properties from the server (`capabilities`), never per-model text.
-2. Text that the page itself shows names no model: hints, notes, labels, and messages from `src/gui.rs`.
+2. Text that the device panels show (Headset, Mouse, Device control) names no model: hints, notes, labels, and
+   messages from `src/gui.rs`. The profile editor may name the file format it edits and the board it was tested
+   on, because it edits that board's profile file.
 3. Test-status notices for one model stay in the CLI (`ssgg mouse`, `ssgg headset`).
 4. The page does not check product IDs. It may show the product ID and the model name as identification.
 
@@ -59,6 +61,8 @@ product ID are not behaviour checks and stay:
 - the model tables themselves, `product_ids`, the name and type maps, and identity comparisons (the same device,
   a `--product-id` filter);
 - per-model file names for saved state (`direct-brightness-<pid>.bin`, `actuation-<pid>-...`);
-- the key-name lookups of `ssgg keymap`, which read the `0x1628` key table before a keyboard is opened.
+- the key-name lookups of `ssgg keymap`, which read the `0x1628` key table before a keyboard is opened;
+- `devices::is_detect_only`, the list of devices that `ssgg` never writes to;
+- `headsets::nova7::HARDWARE_CONFIRMED`, the list that picks the CLI's test-status notice for a headset.
 
 When a change touches one of these and the rule can apply without a large change, apply it.

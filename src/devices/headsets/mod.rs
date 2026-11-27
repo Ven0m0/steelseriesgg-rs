@@ -197,3 +197,32 @@ impl Headset for GenericHeadset {
         Err(self.no_protocol("Auto-off"))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The editor's Headset tab reads these keys (`tools/profile-gui/headset.js`; the self-test checks the same
+    /// list), so a renamed field must be renamed there too.
+    #[test]
+    fn the_capability_keys_are_the_ones_the_headset_tab_reads() {
+        let json = serde_json::to_value(HeadsetCapabilities::default()).expect("serialises");
+        let mut keys: Vec<&str> = json
+            .as_object()
+            .expect("an object")
+            .keys()
+            .map(String::as_str)
+            .collect();
+        keys.sort_unstable();
+        assert_eq!(
+            keys,
+            [
+                "can_report_chat_mix",
+                "can_report_status",
+                "can_set_auto_off",
+                "mic_volume_steps",
+                "sidetone_steps"
+            ]
+        );
+    }
+}

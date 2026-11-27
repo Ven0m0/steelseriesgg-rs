@@ -1944,6 +1944,12 @@ ok('every step of every step count reaches its own wire value and reads back as 
   }
   return headset.levelForStep(0, 4) === 0 && headset.levelForStep(3, 4) === 100 && headset.levelForStep(1, 4) === 33;
 });
+ok('headset.js reads only the capability keys HeadsetCapabilities sends', () => {
+  // The same list as the Rust test the_capability_keys_are_the_ones_the_headset_tab_reads (src/devices/headsets/mod.rs).
+  const sent = ['can_report_chat_mix', 'can_report_status', 'can_set_auto_off', 'mic_volume_steps', 'sidetone_steps'];
+  const used = [...new Set([...read('tools/profile-gui/headset.js').matchAll(/\bcaps\.([a-z_]+)/g)].map((m) => m[1]))];
+  return used.length >= 5 && used.every((key) => sent.includes(key));
+}, () => 'caps.* keys in headset.js');
 ok('four sidetone steps are named, other counts are numbered', () => eq(headset.stepLabels(4), ['Off', 'Low', 'Med', 'High'])
   && eq(headset.stepLabels(3), ['0', '1', '2']));
 ok('ChatMix maps -1..+1 onto 0..100 percent and prints its sign', () => headset.chatMixPercent(-1) === 0

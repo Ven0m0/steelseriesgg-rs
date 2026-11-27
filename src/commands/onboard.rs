@@ -318,7 +318,7 @@ async fn cmd_gen3_read(manager: Option<&mut DeviceManager>, args: crate::cli::On
         .into_iter()
         .find(|info| model_caps(info.product_id).is_some_and(|caps| caps.can_run_onboard_commands))
         .ok_or_else(|| {
-            Error::DeviceNotFound("no keyboard that these commands support is connected (tested: 0x1628)".to_string())
+            Error::DeviceNotFound("no keyboard that these commands support is connected (built for 0x1628)".to_string())
         })?;
     let mut keyboard = manager.open_keyboard(info)?;
     crate::warn_if_gg_engine_running();

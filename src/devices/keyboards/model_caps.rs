@@ -38,8 +38,9 @@ pub struct ModelCaps {
     /// have no such table (their per-key sensitivity lives in the profile; the spec's num-analog-keys equals the
     /// mapping-key count).
     pub analog_keys: &'static [u8],
-    /// `ssgg actuation` can set a second actuation point per key (the spec's `has-second-actuation-layer`). From
-    /// GG's device specs; `[EXPERIMENTAL]` on every board (layer `02` untested).
+    /// The keyboard has a second key layer that a deeper press of a key triggers (the spec's
+    /// `has-second-actuation-layer`), and `ssgg keymap` may read and write that layer. From GG's device specs;
+    /// `[EXPERIMENTAL]` on every board (the layer is untested). `ssgg actuation` is gated by `can_set_actuation_live`.
     pub can_use_second_actuation_layer: bool,
     pub oled: OledImage,
     /// `macro-data-size` in bytes.
@@ -70,14 +71,16 @@ pub struct ModelCaps {
     /// `ssgg` can switch the keyboard to another stored profile (`B2`, `34`). The Apex Pro TKL 2023 `0x1628` only,
     /// from a GG capture (2026-11-10); `[EXPERIMENTAL]`, not yet sent from ssgg on hardware.
     pub can_switch_profile: bool,
-    /// `ssgg device meta-key` can choose the key that opens the keyboard's second key layer (`35`). The Apex Pro TKL
-    /// 2023 `0x1628` only, from GG's device spec; `[EXPERIMENTAL]`, untested.
+    /// `ssgg device meta-key` can choose the key that opens the keyboard's meta key layer (`35`). The Apex Pro TKL
+    /// 2023 `0x1628` only, from GG's device spec `base_apex_2022_wired` (2026-11-10); `[EXPERIMENTAL]`, untested.
     pub can_set_meta_key: bool,
     /// `ssgg device region` can change the keyboard's region setting, which writes flash (`75`). The Apex Pro TKL
-    /// 2023 `0x1628` only, from GG's device spec; `[EXPERIMENTAL]`, untested.
+    /// 2023 `0x1628` only, from GG's device spec `base_apex_2022_wired` (2026-11-10); `[EXPERIMENTAL]`, untested.
     pub can_write_region: bool,
-    /// The `ssgg onboard gen3-*` and `ssgg keymap` commands look for this keyboard. Only the Apex Pro TKL 2023
-    /// `0x1628`, where they were built and tested; the other boards' reads are in the library only.
+    /// The `ssgg onboard gen3-*`, `ssgg keymap` and `ssgg device` commands look for this keyboard. Only the Apex Pro
+    /// TKL 2023 `0x1628`, which they were built for: its reads and key-mapping write are confirmed (2026-11-10/11),
+    /// the profile write, activation, meta key and region are `[EXPERIMENTAL]`. The other boards' reads are in the
+    /// library only.
     pub can_run_onboard_commands: bool,
 }
 
