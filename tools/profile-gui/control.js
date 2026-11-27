@@ -20,7 +20,7 @@
   const KEY_HINT = 'KEY=MM pairs separated by spaces, e.g. W=1.0 A=2.0';
 
   const GROUPS = [
-    ['Actuation (Apex Pro TKL 2023, experimental)', [
+    ['Actuation (experimental)', [
       cmd('Set all keys (mm)', ['actuation', 'set'], [num('mm', 1.0, { step: 0.1, min: 0.1, max: 4 }), second(), dry()]),
       cmd('Set all keys (0.1 mm units)', ['actuation', 'set-value'], [num('value', 10, { min: 1, max: 40 }), second(), dry()]),
       cmd('Set single keys', ['actuation', 'set-key'], [text('keys', 'W=1.0', { list: true, hint: KEY_HINT }), second(), dry()]),
@@ -35,7 +35,7 @@
       cmd('Brightness', ['rgb', 'brightness'], [num('level 0-100', 100, { min: 0, max: 100 })]),
       cmd('Effect', ['rgb', 'effect'], [pick('name', ['static', 'breathing', 'spectrum', 'wave', 'off']), num('speed', 1.0, { flag: '--speed', step: 0.1, min: 0.1, max: 5 })]),
       cmd('Off', ['rgb', 'off']),
-      cmd('Release direct mode (0x1628)', ['rgb', 'release']),
+      cmd('Release direct mode', ['rgb', 'release']),
       cmd('Per-key: one key', ['rgb', 'perkey', 'set-key'], [text('key', 'A'), text('colour', 'red')]),
       cmd('Per-key: several keys', ['rgb', 'perkey', 'set-keys'], [text('key:colour,key:colour', 'A:red,S:green')]),
       cmd('Per-key: HID range', ['rgb', 'perkey', 'set-region'], [num('start HID', 4), num('count', 4), text('colour', 'blue')]),
@@ -60,11 +60,11 @@
     ]],
     ['Mouse', [
       cmd('Status', ['mouse', 'status']),
-      cmd('DPI', ['mouse', 'dpi'], [num('value', 800, { min: 100, max: 18000, step: 100 }), check('confirm the change (--yes)', '--yes')], { danger: true, note: 'A wired Rival 3 Gen 2 keeps the DPI after unplugging (other models untested), and the stages it replaces cannot be read back.' }),
+      cmd('DPI', ['mouse', 'dpi'], [num('value', 800, { min: 100, max: 18000, step: 100 }), check('confirm the change (--yes)', '--yes')], { danger: true, note: 'The mouse may keep the DPI after unplugging, and the DPI settings it replaces cannot be read back.' }),
       cmd('Poll rate', ['mouse', 'poll-rate'], [pick('Hz', ['1000', '500', '250', '125'])]),
       cmd('Colour', ['mouse', 'color'], [text('colour', 'red')]),
     ]],
-    ['OLED (Apex Pro TKL 2023, experimental)', [
+    ['OLED (experimental)', [
       cmd('Show frame file', ['oled', 'show'], [text('640-byte file', ''), dry()]),
       cmd('Reset', ['oled', 'reset'], [dry()]),
     ]],
@@ -80,7 +80,7 @@
       cmd('Encode JSON file', ['onboard', 'encode'], [text('JSON file', ''), text('out file', '', { flag: '--out', optional: true }), text('compare with image', '', { flag: '--check', optional: true })]),
       cmd('Write to keyboard', ['onboard', 'write'], [text('JSON file', ''), num('config number', 1, { flag: '--profile' }), pid(), dry(), check('confirm the write (--yes)', '--yes')], { danger: true }),
       cmd('Run a config slot', ['onboard', 'load'], [num('config number', 1, { flag: '--profile' }), pid()], { danger: true }),
-      cmd('Gen3 read (0x1628, experimental)', ['onboard', 'gen3-read'], [num('slot 0-4', 0, { flag: '--slot' }), text('blob out file', '', { flag: '--bin', optional: true }), dry()]),
+      cmd('Gen3 read (experimental)', ['onboard', 'gen3-read'], [num('slot 0-4', 0, { flag: '--slot' }), text('blob out file', '', { flag: '--bin', optional: true }), dry()]),
     ]],
     ['Polling rate (needs elevated rights)', [
       cmd('Status', ['pollrate', 'status']),

@@ -90,6 +90,10 @@ Three rules shape the panel:
   is offered wherever the CLI has it, and `validate` and `verify-performance` accept the same `--output`
   file the CLI does.
 
+The panel's own labels and notes name no model: a form runs on whatever board is connected, and `ssgg` refuses a
+command the board cannot do. The output it shows is the CLI's own text, which may name a model or its test status,
+as it does in a terminal.
+
 **`[EXPERIMENTAL]`**: as with every other panel, a board that ignores a command still answers success.
 
 `app.js` and `main.js` are **plain scripts**, not ES modules: a page opened from
