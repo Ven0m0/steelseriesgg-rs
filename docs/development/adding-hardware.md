@@ -65,8 +65,11 @@ and attach the zip. Attach `device.pcap` too if it is under 25 MB (zip it first)
 2. Write your findings as `docs/development/<device>-gg-capture.md` in the same style: transport (interface,
    report type and length), each command with its layout, and open questions.
 3. Add the product ID to `product_ids` in `src/devices/mod.rs`. A keyboard then gets one row in
-   `KEYBOARD_MODELS` (`src/devices/keyboards/models.rs`): name, class, raw-hidraw fallback and direct frame,
-   which is everything discovery and the direct-lighting class read per model. A headset or mouse needs an
+   `KEYBOARD_MODELS` (`src/devices/keyboards/models.rs`): name, class, direct frame and the behaviour
+   properties of `KeyboardModel` (interfaces, zone count, `can_*` flags), which is everything discovery and the
+   keyboard classes read per model; a wired Gen 3 board also gets a `MODEL_CAPS` row
+   (`src/devices/keyboards/model_caps.rs`). Follow `.claude/rules/device-capabilities.md`: a difference between
+   models is a table property, not a product ID check in code. A headset or mouse needs an
    arm in `device_name_from_product_id` and `device_type_from_product_id` (`src/devices/mod.rs`), wiring in
    `src/devices/discovery.rs`, and its own family table under `src/devices/headsets/` or `src/devices/mice/`.
    Run `node tools/profile-gui/sync-products.mjs` afterwards. The `/new-device`

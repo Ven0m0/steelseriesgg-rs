@@ -84,8 +84,9 @@ pub struct KeyboardModel {
     /// The driver class discovery builds for this keyboard; it decides which protocol answers (see
     /// [`KeyboardClass`]).
     pub class: KeyboardClass,
-    /// Discovery can open this keyboard through raw hidraw feature reports when hidapi fails to open it. Set on
-    /// the wireless models, where hidapi may fail; `[EXPERIMENTAL]`.
+    /// Discovery can open this keyboard through raw hidraw feature reports when hidapi fails to open it. Set on the
+    /// Apex Pro TKL (2023) Wireless (`0x1630`, `0x1632`) and Apex Pro TKL Wireless (2024) rows, where hidapi may
+    /// fail; `[EXPERIMENTAL]`.
     pub can_open_through_raw_hidraw: bool,
     /// The direct-mode lighting frame that `ssgg rgb` streams to this keyboard, or `None` where it uses the older
     /// zone commands. `[EXPERIMENTAL]` except where `.claude/rules/experimental-protocol.md` records a hardware test.

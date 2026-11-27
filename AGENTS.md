@@ -125,8 +125,8 @@ Debian/Ubuntu. `audio` builds on Windows but applies nothing (the PulseAudio bac
 
 ## Project tooling (`.claude/`)
 
-- Skills: `ci-matrix` (full local CI), `hid-protocol` (auto-loads for `src/devices/`), `hw-capture`, `promote-protocol`, `dep-audit`, `fuzz-runner`, `benchmark-compare`.
-- Review agents: `protocol-reviewer` (device diffs), `security-reviewer` (GameSense server), `dependency-auditor`, `docs-drift-auditor`, `re-verifier`, `release-reviewer`.
+- Skills: `ci-matrix` (full local CI), `hid-protocol` (auto-loads for `src/devices/`), `hw-capture`, `promote-protocol`, `dep-audit`, `fuzz-runner`, `benchmark-compare`, `gui-selftest`.
+- Review agents: `protocol-reviewer` (device diffs), `security-reviewer` (GameSense server), `dependency-auditor`, `docs-drift-auditor`, `re-verifier`, `release-reviewer`, `gui-reviewer` (profile editor).
 
 ---
 

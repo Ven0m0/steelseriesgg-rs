@@ -1,7 +1,8 @@
 //! Headsets using one-byte `<id> <opcode> <value>` frames: Arctis Nova 4/5/7, Nova 3, Nova Pro and Arctis 7+.
 //!
-//! [EXPERIMENTAL] The protocol comes from community forks and GG's decrypted device specs. Status, sidetone, mic
-//! volume and auto-off are confirmed on the PIDs in [`HARDWARE_CONFIRMED`] only; every other model is untested.
+//! [EXPERIMENTAL] The protocol comes from community forks and GG's decrypted device specs. On the PIDs in
+//! [`HARDWARE_CONFIRMED`] only these are confirmed: sidetone off and highest, mic volume lowest and highest, auto-off
+//! after 1 minute, and status (battery, charging, ChatMix); every other value and model is untested.
 //! Frames are 64-byte output reports on the vendor control collection (usage page `0xFFC0`),
 //! report number 0 (6 on the Nova Pro family). The save frame `<id> 09` is never sent: it would persist
 //! settings on the headset.
@@ -44,8 +45,9 @@ pub enum StatusQuery {
 
 /// Per-PID behaviour of one Nova 7 variant.
 ///
-/// The values come from GG's decrypted device specs, read 2026-10-25 (the family constructors below name each
-/// spec). They are `[EXPERIMENTAL]` except where a field says what was confirmed on the Arctis Nova 7 Gen 2 `0x227E`.
+/// The values come from two community forks and GG's decrypted device specs (read 2026-10-25); the family
+/// constructors and table comments name a spec where one was used. They are `[EXPERIMENTAL]` except where a field
+/// says what was confirmed on the Arctis Nova 7 Gen 2 `0x227E`.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Nova7Model {
     pub product_id: u16,
@@ -203,8 +205,9 @@ pub const NOVA7_MODELS: &[Nova7Model] = &[
     nova_pro_model(ARCTIS_NOVA_3, false),
 ];
 
-/// PIDs on which status, sidetone, mic volume and auto-off were sent from `ssgg` on hardware and worked: Arctis
-/// Nova 7 Gen 2, Linux, 2026-10-25 (`.claude/rules/experimental-protocol.md`).
+/// PIDs on which `ssgg` frames were tested on hardware: Arctis Nova 7 Gen 2, Linux, 2026-10-25. Confirmed there:
+/// sidetone off and highest, mic volume lowest and highest, auto-off after 1 minute, and status (battery, charging,
+/// ChatMix); the details are in `.claude/rules/experimental-protocol.md`.
 pub const HARDWARE_CONFIRMED: &[u16] = &[ARCTIS_NOVA_7_WIRELESS_GEN2];
 
 /// Look up the Nova 7 behaviour for a product ID; `None` for every other headset.

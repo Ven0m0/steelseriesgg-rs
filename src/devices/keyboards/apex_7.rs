@@ -35,7 +35,6 @@ use crate::devices::hid_reports::{
     OnboardPayloadPullCommand, OnboardPayloadPushCommand, OnboardProfileDeployCommand,
 };
 use crate::devices::key_mapping::{KeyId, KeyMapping};
-use crate::devices::product_ids;
 use crate::devices::zone_mapping::{ZoneEffect, ZoneMapping};
 use crate::devices::{Device, DeviceType, device_name_from_product_id};
 use crate::error::{Error, Result};
@@ -103,8 +102,9 @@ const _: () = assert!(MAX_READ_LEN + READ_REPLY_FRAMING_LEN < READ_REPLY_BUFFER_
 
 /// Apex 7 keyboard device, with the on-board profile read on its own handle.
 ///
-/// Discovery builds this class for product ID `0x1612` and for nothing else (`discovery::open_keyboard`),
-/// so the on-board scope is the class itself: [`Keyboard::onboard_codec`] answers it, and
+/// Discovery builds this class for product ID `0x1612` and for nothing else (`DeviceManager::open_keyboard`,
+/// class from `discovery::keyboard_class`), so the on-board scope is the class itself: [`Keyboard::onboard_codec`]
+/// answers it, and
 /// [`Keyboard::can_use_onboard_profile`](crate::devices::keyboards::Keyboard::can_use_onboard_profile)
 /// reports that answer for the keyboard the manager opened. No product-ID table is consulted.
 pub struct Apex7 {
@@ -112,9 +112,6 @@ pub struct Apex7 {
 }
 
 impl Apex7 {
-    /// Product ID of the Apex 7 the reference capture was taken on.
-    pub const PRODUCT_ID: u16 = product_ids::APEX_7;
-
     /// Create from a generic keyboard.
     pub fn new(keyboard: GenericKeyboard) -> Self {
         Self { inner: keyboard }
@@ -792,7 +789,7 @@ mod tests {
 
     mod onboard {
         use super::super::*;
-        use crate::devices::{DeviceInfo, DeviceType};
+        use crate::devices::{DeviceInfo, DeviceType, product_ids};
 
         fn device_without_handle(product_id: u16) -> Apex7 {
             let info = DeviceInfo {
