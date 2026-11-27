@@ -20,9 +20,6 @@ impl Apex3Tkl {
     /// Zone count for Apex 3 TKL (8 zones, as advertised and as modelled by OpenRGB).
     pub const ZONE_COUNT: usize = 8;
 
-    /// Product ID for Apex 3 TKL.
-    pub const PRODUCT_ID: u16 = 0x1622;
-
     /// Create from a generic keyboard.
     pub fn new(keyboard: GenericKeyboard) -> Self {
         Self { inner: keyboard }

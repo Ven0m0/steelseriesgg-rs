@@ -216,7 +216,7 @@ fn open_wired_2023(manager: Option<&mut DeviceManager>) -> Result<(Box<dyn Keybo
     let info = manager
         .devices_by_type(DeviceType::Keyboard)
         .into_iter()
-        .find(|info| model_caps(info.product_id).is_some_and(|caps| caps.can_run_onboard_commands))
+        .find(|info| model_caps(info.product_id).is_some_and(|caps| caps.can_run_gen3_commands))
         .ok_or_else(|| {
             Error::DeviceNotFound("no keyboard that these commands support is connected (built for 0x1628)".to_string())
         })?;

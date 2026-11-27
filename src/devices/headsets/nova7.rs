@@ -51,7 +51,9 @@ pub struct Nova7Model {
     /// confirmed on the Arctis Nova 7 Gen 2 `0x227E` (Linux, 2026-10-25), `[EXPERIMENTAL]` elsewhere.
     pub can_set_sidetone: bool,
     /// The headset reports the position of its ChatMix dial in its status reply. Confirmed on the Arctis Nova 7
-    /// Gen 2 `0x227E` (Linux, 2026-10-25); `false` on models without the dial, such as the Nova 5 `0x2232`.
+    /// Gen 2 `0x227E` (Linux, 2026-10-25), `[EXPERIMENTAL]` on the other models that set it. `false` where GG's
+    /// spec has no ChatMix (Arctis 7P+, 7X+, Nova Pro family) and on the Nova 5 `0x2232`, which has no dial (owner
+    /// report, Linux, 2026-11-24).
     pub can_report_chat_mix: bool,
     /// Lowest microphone-volume wire value: 0, or 1 on the Arctis 7+ family.
     pub mic_min: u8,
@@ -66,8 +68,8 @@ pub struct Nova7Model {
     /// The status query the model answers.
     pub status: StatusQuery,
     /// `ssgg headset auto-off` can set the idle time after which the headset turns off (the spec's
-    /// `inactivity_timer`, `a3`). Confirmed on the Arctis Nova 7 Gen 2 `0x227E` (Linux, 2026-10-25),
-    /// `[EXPERIMENTAL]` elsewhere.
+    /// `inactivity_timer`, `a3`). On the Arctis Nova 7 Gen 2 `0x227E` only `a3 01` was observed (off after about a
+    /// minute, Linux, 2026-10-25); disabling (`a3 00`), other times and the other models are `[EXPERIMENTAL]`.
     pub can_set_auto_off: bool,
 }
 

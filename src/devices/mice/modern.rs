@@ -70,10 +70,11 @@ pub struct DpiSpec {
     pub first_preset: u8,
     /// The command carries the code twice, once per axis.
     pub per_axis: bool,
-    /// `ssgg mouse dpi` can set up to five DPI stages for the mouse's DPI button in one command
+    /// `ssgg mouse dpi` can set several DPI stages for the mouse's DPI button in one command
     /// ([`MouseDpiStagesCommand`]). Set only where that frame is evidenced: the Rival 3 Gen 2, by rivalcfg's test
-    /// vectors and the third-party hardware test (macOS) of the two-stage frame in its PR #292, and from `ssgg` with
-    /// 2 and 4 stages (contributor, Linux, 2026-11-17/18).
+    /// vectors, the third-party hardware test (macOS) of the two-stage frame in its PR #292, and from `ssgg` with 2
+    /// stages (first active) and 4 (second active; contributor, Linux, 2026-11-17/18). 3 and 5 stages and the other
+    /// active stages are `[EXPERIMENTAL]`.
     pub can_set_dpi_stages: bool,
 }
 
@@ -110,6 +111,12 @@ pub struct MouseSpec {
     /// The mouse runs on a battery and `ssgg mouse info` can ask for its charge (`92`, `D2` through a receiver).
     /// From the community rivalcfg-derived fork; `[EXPERIMENTAL]`, untested on hardware.
     pub can_report_battery: bool,
+    /// `ssgg mouse info` can ask the mouse for its firmware version (`90 00`) and polling rate (`AB`) over the
+    /// cable. Set on the models with no wireless mode (Mousework's family F2: Aerox 3, Aerox 5, Prime Mini, Rival 3
+    /// Gen 2, Rival 5), whose reply starts with the echoed opcode. Confirmed on a wired Rival 3 Gen 2 `0x1870`
+    /// (Linux, 2026-11-17), `[EXPERIMENTAL]` on the others; `false` on models with a wireless mode, whose cabled
+    /// answer has no echoed opcode in Mousework's probe.
+    pub can_read_firmware_and_poll_rate: bool,
 }
 
 const SPEC_AEROX_3: MouseSpec = MouseSpec {
@@ -127,6 +134,7 @@ const SPEC_AEROX_3: MouseSpec = MouseSpec {
     color_layout: MouseColorLayout::Mask8,
     zone_count: 3,
     can_report_battery: false,
+    can_read_firmware_and_poll_rate: true,
 };
 
 /// The preset index is 0-based on this model, unlike the Aerox 3 it shares the sensor table with: rivalcfg PR #292
@@ -158,6 +166,7 @@ const SPEC_AEROX_5: MouseSpec = MouseSpec {
     color_layout: MouseColorLayout::Mask8,
     zone_count: 3,
     can_report_battery: false,
+    can_read_firmware_and_poll_rate: true,
 };
 
 const SPEC_RIVAL_5: MouseSpec = MouseSpec {
@@ -170,6 +179,7 @@ const SPEC_AEROX_WIRELESS: MouseSpec = MouseSpec {
     poll_codes: [3, 2, 1, 0],
     color_layout: MouseColorLayout::Indexed,
     can_report_battery: true,
+    can_read_firmware_and_poll_rate: false,
     ..SPEC_AEROX_5
 };
 
@@ -437,12 +447,10 @@ impl MouseModel {
             .then_some(MouseBatteryQueryCommand { dongle: self.dongle })
     }
 
-    /// A model with no wireless mode (no receiver PID, no battery): Aerox 3, Aerox 5, Prime Mini, Rival 3 Gen 2 and
-    /// Rival 5, Mousework's family F2. Its `90` reply starts with the echoed opcode in GG's capture of a Rival 3
-    /// Gen 2 and in Mousework's read-only probe (`mousework/probe.py`), which sends `90` and `AB` to the whole
-    /// family.
-    fn wired_only(&self) -> bool {
-        !self.dongle && !self.spec.can_report_battery
+    /// The cabled PID of a model that answers the `90` and `AB` queries
+    /// ([`MouseSpec::can_read_firmware_and_poll_rate`]).
+    fn can_read_firmware_and_poll_rate(&self) -> bool {
+        !self.dongle && self.spec.can_read_firmware_and_poll_rate
     }
 
     /// The read-only firmware query, `90 00` zero padded to 64 bytes: GG's own frame to a wired Rival 3 Gen 2, which
@@ -451,13 +459,15 @@ impl MouseModel {
     /// Mousework's probe reads its answer over the cable without the echoed opcode, which [`await_reply`] would not
     /// take for the reply.
     pub fn firmware_query(&self) -> Option<OnboardFirmwareVersionCommand> {
-        self.wired_only().then_some(OnboardFirmwareVersionCommand::KEYBOARD)
+        self.can_read_firmware_and_poll_rate()
+            .then_some(OnboardFirmwareVersionCommand::KEYBOARD)
     }
 
     /// The read-only polling-rate query `AB`, from Mousework's probe; confirmed on a wired `0x1870` (Linux,
     /// 2026-11-17), [EXPERIMENTAL] on the other wired-only models. `None` on a model with a wireless mode.
     pub fn poll_rate_query(&self) -> Option<MousePollRateQueryCommand> {
-        self.wired_only().then_some(MousePollRateQueryCommand)
+        self.can_read_firmware_and_poll_rate()
+            .then_some(MousePollRateQueryCommand)
     }
 
     /// Polling rate in an `AB` reply, taken as `ab <level>` like every other reply of the Rival 3 Gen 2 in GG's

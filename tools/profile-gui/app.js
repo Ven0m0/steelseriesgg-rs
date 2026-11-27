@@ -733,7 +733,7 @@ function deviceFeatures(pid) {
   const hex = productHex(pid);
   if (hex === null) return ['not a product ID'];
   const info = PRODUCTS === null ? null : PRODUCTS.products[hex] ?? null;
-  const onboard = info ? info.onboard === true : LEGACY_ONBOARD_PIDS.includes(pid);
+  const onboard = info ? info.can_use_onboard_profile === true : LEGACY_ONBOARD_PIDS.includes(pid);
   const kind = productKind(pid);
   const features = [
     // No import means no kind facts at all: say that rather than implying the registry is silent.

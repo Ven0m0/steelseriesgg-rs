@@ -561,9 +561,6 @@ pub struct ApexProTkl2023 {
 }
 
 impl ApexProTkl2023 {
-    /// Product ID for Apex Pro TKL 2023.
-    pub const PRODUCT_ID: u16 = 0x1628;
-
     /// Create from a generic keyboard; the software brightness is the level last saved for this model.
     pub fn new(keyboard: GenericKeyboard) -> Self {
         if keyboard_model(keyboard.info().product_id).is_some_and(|model| !model.can_light_non_us_layouts) {
@@ -814,7 +811,7 @@ impl ApexProTkl2023 {
     fn require_wide_reports(&self, what: &str) -> Result<&'static ModelCaps> {
         self.require_caps(
             what,
-            ModelCaps::wide_reports,
+            ModelCaps::can_take_645_byte_commands,
             "its feature report is not the 645 bytes this command is sized for",
         )
     }
@@ -824,7 +821,7 @@ impl ApexProTkl2023 {
         self.require_caps(
             what,
             |caps| {
-                caps.wide_reports()
+                caps.can_take_645_byte_commands()
                     && caps.mapping_keys == MAPPING_KEYS
                     && (layer != MappingLayer::Second
                         || (caps.can_use_second_actuation_layer && caps.analog_keys == layer.keys()))
@@ -1102,7 +1099,7 @@ impl ApexProTkl2023 {
     pub fn read_macro_data(&mut self) -> Result<Vec<u8>> {
         self.require_caps(
             "the macro data read",
-            |caps| caps.wide_reports() && caps.macro_data_size == MacroReadCommand::DATA_LEN,
+            |caps| caps.can_take_645_byte_commands() && caps.macro_data_size == MacroReadCommand::DATA_LEN,
             "its feature report or macro data size is not the 0x1628's",
         )?;
         let mut replies = Vec::new();

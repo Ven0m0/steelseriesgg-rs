@@ -52,8 +52,14 @@ pub trait Headset: Device {
 /// Settings a headset model takes. A step count is the number of distinct levels the headset has, so
 /// `ssgg`'s 0-100 scale maps onto `0..steps`; 0 means the model has no such setting.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize)]
+///
+/// Every value comes from the model's `nova7::Nova7Model` row, where each field gives its source; `0` or `false` on
+/// [`GenericHeadset`]. Confirmed on the Arctis Nova 7 Gen 2 `0x227E` (Linux, 2026-10-25), `[EXPERIMENTAL]` on the
+/// other models.
 pub struct HeadsetCapabilities {
+    /// How many sidetone levels `ssgg headset sidetone` and the Headset tab offer; 0 hides the control.
     pub sidetone_steps: u8,
+    /// How many microphone-volume levels `ssgg headset mic-volume` and the Headset tab offer.
     pub mic_volume_steps: u8,
     /// The headset can turn itself off after an idle time that `ssgg` sets.
     pub can_set_auto_off: bool,

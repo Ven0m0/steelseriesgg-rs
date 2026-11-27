@@ -66,12 +66,10 @@ pub trait Keyboard: Device {
 
     // === Per-Key RGB Control ===
 
-    /// Check if per-key RGB key-mapping is available for this keyboard.
-    ///
-    /// ⚠️ **Experimental**: returning `true` means a HID key mapping exists, but the
-    /// per-key protocol (`CommandCode::PerKeyRgb`, `0x23`) has not been confirmed on
-    /// hardware. Calls to `set_key_color` / `set_key_colors` may be silently ignored by
-    /// the device until the packet format is verified via USB capture.
+    /// `ssgg rgb perkey` can give each key its own colour. `true` where the key-mapping database has this
+    /// keyboard. Confirmed on the Apex Pro TKL 2023 `0x1628` (direct frame `0x40`, Windows, 2026-10-21) and the Apex
+    /// Pro (2024) `0x1640` (`0x3A`, Linux, 2026-11-02); the older `0x23` per-key command is `[PLACEHOLDER]`, and the
+    /// other boards are `[EXPERIMENTAL]`: a board may ignore the frames and still answer success.
     fn can_set_per_key_colors(&self) -> bool {
         false
     }
@@ -160,8 +158,9 @@ pub trait Keyboard: Device {
 
     // === Per-Key RGB Effect Support ===
 
-    /// The keyboard can run animated effects that colour each key on its own (waves, ripples). `false` unless a
-    /// keyboard class says otherwise.
+    /// `ssgg rgb effect` can run animated effects that colour each key on its own (waves, breathing, spectrum).
+    /// `true` where the keyboard has a key mapping, `false` unless a keyboard class says otherwise. Effect streaming
+    /// is confirmed on the Apex Pro TKL 2023 `0x1628` (25 fps, Windows, 2026-11-10), `[EXPERIMENTAL]` elsewhere.
     fn can_run_per_key_effects(&self) -> bool {
         false
     }
@@ -353,7 +352,9 @@ pub trait Keyboard: Device {
         None
     }
 
-    /// Whether this keyboard answers the on-board profile protocol: whether [`Self::onboard_codec`] answers.
+    /// `ssgg onboard read`, `write` and `load` can use this keyboard's stored profiles (the legacy on-board
+    /// protocol): true where [`Self::onboard_codec`] answers, the Apex 7 `0x1612` only. Read, write and deploy are
+    /// confirmed there (Linux, 2026-10-20).
     fn can_use_onboard_profile(&self) -> bool {
         self.onboard_codec().is_some()
     }

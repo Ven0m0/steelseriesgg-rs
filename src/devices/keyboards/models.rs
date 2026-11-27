@@ -77,25 +77,36 @@ impl DirectLighting {
 pub struct KeyboardModel {
     pub product_id: u16,
     pub name: &'static str,
+    /// The driver class discovery builds for this keyboard; it decides which protocol answers (see
+    /// [`KeyboardClass`]).
     pub class: KeyboardClass,
     /// Discovery can open this keyboard through raw hidraw feature reports when hidapi fails to open it. Set on
     /// the wireless models, where hidapi may fail; `[EXPERIMENTAL]`.
     pub can_open_through_raw_hidraw: bool,
+    /// The direct-mode lighting frame that `ssgg rgb` streams to this keyboard, or `None` where it uses the older
+    /// zone commands. `[EXPERIMENTAL]` except where `.claude/rules/experimental-protocol.md` records a hardware test.
     pub direct: Option<DirectLighting>,
     /// The only USB interface that takes this keyboard's lighting commands; discovery ignores every other
     /// interface. `None` on most boards, which discovery ranks by usage page. Apex M750: 2 (community fork,
     /// `[EXPERIMENTAL]`).
     pub only_control_interface: Option<i32>,
     /// The interface discovery picks when the keyboard shows no vendor-defined usage page: 1 on most boards, 3 on
-    /// the Apex Pro TKL 2023 Wireless (from the older per-model table, unverified).
+    /// the Apex Pro TKL 2023 Wireless (`0x1630`, `0x1632`). Both values come from the older per-model table;
+    /// `[EXPERIMENTAL]`.
     pub fallback_control_interface: i32,
     /// The keyboard takes one colour for all its zones in one command (zone selector `0xFF`). `false` on the Apex
-    /// Pro TKL 2023 Wireless, which needs one command per zone, zones counted from 1 (code comment from an earlier
-    /// contributor; no test record in this repo).
+    /// Pro TKL 2023 Wireless (`0x1630`, `0x1632`), which needs one command per zone, zones counted from 1 (code
+    /// comment from an earlier contributor). `[EXPERIMENTAL]` on every board: no hardware test of either form since
+    /// the legacy output path was fixed (2026-10-25).
     pub can_set_all_zones_at_once: bool,
-    /// Per-key lighting reaches every key on ISO, UK and JP layouts too. `false` on the Mini boards: their key
-    /// table holds only the US keys and the layout cannot be detected, so some keys may stay dark
-    /// (`[EXPERIMENTAL]`, from GG's specs).
+    /// How many lighting zones the zone commands address (`ssgg rgb` on boards without a direct frame): 10 on the
+    /// Apex 3, 8 on the Apex 3 TKL (OpenRGB), 9 on the Apex Pro TKL 2023 wired and wireless, 1 elsewhere, where the
+    /// count is not captured. `[EXPERIMENTAL]`, from the older per-model table.
+    pub zone_count: usize,
+    /// `false` where the per-key key table holds only US keys and the layout cannot be queried, so `ssgg` warns
+    /// that ISO, UK and JP keys may stay dark: the Mini boards (GG's specs, `[EXPERIMENTAL]`). `true` does not mean
+    /// a non-US layout was tested: that is confirmed only on the Apex Pro (2024) `0x1640` ISO-DE (Linux,
+    /// 2026-11-02), and the `0x1628` table is US-only too.
     pub can_light_non_us_layouts: bool,
 }
 
@@ -116,6 +127,7 @@ const fn model(
         fallback_control_interface: 1,
         can_set_all_zones_at_once: true,
         can_light_non_us_layouts: true,
+        zone_count: 1,
     }
 }
 
@@ -132,6 +144,11 @@ impl KeyboardModel {
 
     const fn zones_one_by_one(mut self) -> Self {
         self.can_set_all_zones_at_once = false;
+        self
+    }
+
+    const fn zones(mut self, count: usize) -> Self {
+        self.zone_count = count;
         self
     }
 
@@ -164,11 +181,11 @@ pub const KEYBOARD_MODELS: &[KeyboardModel] = &[
     model(APEX_PRO_TKL, "Apex Pro TKL", C::ApexProTkl2023, false, GEN1_OR_GEN3),
     model(APEX_150, "Apex 150", C::Generic, false, None),
     model(APEX_7_TKL, "Apex 7 TKL", C::ApexProTkl2023, false, GEN1),
-    model(APEX_3, "Apex 3", C::Apex3, false, None),
+    model(APEX_3, "Apex 3", C::Apex3, false, None).zones(10),
     model(APEX_5, "Apex 5", C::ApexProTkl2023, false, GEN1),
     model(APEX_PRO_MINI, "Apex Pro Mini", C::ApexProTkl2023, false, MINI).us_layout_lighting_only(),
     model(APEX_9_MINI, "Apex 9 Mini", C::ApexProTkl2023, false, MINI).us_layout_lighting_only(),
-    model(APEX_3_TKL, "Apex 3 TKL", C::Apex3Tkl, false, None),
+    model(APEX_3_TKL, "Apex 3 TKL", C::Apex3Tkl, false, None).zones(8),
     model(
         APEX_PRO_MINI_WIRELESS_DONGLE,
         "Apex Pro Mini Wireless (Dongle)",
@@ -189,7 +206,8 @@ pub const KEYBOARD_MODELS: &[KeyboardModel] = &[
         C::ApexProTkl2023,
         false,
         WIRED_2023,
-    ),
+    )
+    .zones(9),
     model(
         APEX_PRO_TKL_2023_WIRELESS_2,
         "Apex Pro TKL (2023) Wireless",
@@ -198,7 +216,8 @@ pub const KEYBOARD_MODELS: &[KeyboardModel] = &[
         WIRELESS,
     )
     .fallback_control_interface(3)
-    .zones_one_by_one(),
+    .zones_one_by_one()
+    .zones(9),
     model(
         APEX_PRO_TKL_2023_WIRELESS,
         "Apex Pro TKL (2023) Wireless",
@@ -207,7 +226,8 @@ pub const KEYBOARD_MODELS: &[KeyboardModel] = &[
         WIRELESS,
     )
     .fallback_control_interface(3)
-    .zones_one_by_one(),
+    .zones_one_by_one()
+    .zones(9),
     model(APEX_9_TKL, "Apex 9 TKL", C::ApexProTkl2023, false, APEX_9),
     model(APEX_PRO_2024, "Apex Pro (2024)", C::ApexProTkl2023, false, GEN1),
     model(APEX_PRO_TKL_2024, "Apex Pro TKL (2024)", C::ApexProTkl2023, false, GEN3),

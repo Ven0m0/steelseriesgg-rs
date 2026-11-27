@@ -178,7 +178,7 @@ export function collect(repo = REPO) {
     products[entry.hex] = {
       name: names[entry.hex] ?? null,
       kind: kinds[entry.hex] ?? kindFallback,
-      onboard: onboardPids.includes(entry.hex),
+      can_use_onboard_profile: onboardPids.includes(entry.hex),
     };
   }
 

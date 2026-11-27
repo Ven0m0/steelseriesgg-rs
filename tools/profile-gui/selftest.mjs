@@ -342,7 +342,7 @@ ok('the page sees the imported table', () => app.PRODUCTS === globalThis.SsggPro
 ok('every model Rust names is imported with that name', () => {
   for (const [hex, info] of Object.entries(rustProducts.products)) {
     const page = app.PRODUCTS.products[hex];
-    if (!page || page.name !== info.name || page.onboard !== info.onboard) return false;
+    if (!page || page.name !== info.name || page.can_use_onboard_profile !== info.can_use_onboard_profile) return false;
   }
   return Object.keys(rustProducts.products).length === Object.keys(app.PRODUCTS.products).length
     && rustProducts.namedCount >= 40;
@@ -1902,6 +1902,15 @@ ok('every ssgg action the CLI has for actuation is in the panel', () => {
   const have = control.GROUPS.flatMap(([, list]) => list).filter((c) => c.args[0] === 'actuation').map((c) => c.args[1]).sort();
   return eq(have, ['clear-second', 'rapid-tap', 'rapid-tap-pairs', 'rapid-trigger', 'release-mode', 'set', 'set-key', 'set-value']);
 });
+ok('the control panel labels and notes name no model and no product ID', () => {
+  // .claude/rules/device-capabilities.md: a form runs on whatever board is connected, and ssgg refuses what it cannot do.
+  const names = Object.values(app.PRODUCTS ? app.PRODUCTS.products : {}).map((p) => p.name).filter(Boolean);
+  const texts = control.GROUPS.flatMap(([title, list]) => [title, ...list.flatMap((c) => [c.label, c.note ?? '',
+    ...(c.fields ?? []).map((f) => f.label ?? '')])]);
+  // Product names, product IDs and the product family words (a name can be written another way, "Apex Pro TKL 2023").
+  const family = /\b(Apex|Rival|Arctis|Aerox|Prime|Sensei|Nova)\b/;
+  return names.length > 40 && texts.every((t) => !/0x[0-9a-f]{4}/i.test(t) && !family.test(t) && !names.some((n) => t.includes(n)));
+}, () => 'model names or product IDs in control.js labels');
 ok('the commands that only return when stopped are in the panel, and each one says what stops it', () => {
   const long = control.GROUPS.find(([title]) => /Long-running/.test(title));
   const have = long[1].map((c) => c.args.join(' ')).sort();
@@ -1945,10 +1954,11 @@ ok('every step of every step count reaches its own wire value and reads back as 
   return headset.levelForStep(0, 4) === 0 && headset.levelForStep(3, 4) === 100 && headset.levelForStep(1, 4) === 33;
 });
 ok('headset.js reads only the capability keys HeadsetCapabilities sends', () => {
-  // The same list as the Rust test the_capability_keys_are_the_ones_the_headset_tab_reads (src/devices/headsets/mod.rs).
-  const sent = ['can_report_chat_mix', 'can_report_status', 'can_set_auto_off', 'mic_volume_steps', 'sidetone_steps'];
-  const used = [...new Set([...read('tools/profile-gui/headset.js').matchAll(/\bcaps\.([a-z_]+)/g)].map((m) => m[1]))];
-  return used.length >= 5 && used.every((key) => sent.includes(key));
+  // The fields of `pub struct HeadsetCapabilities` in src/devices/headsets/mod.rs, which serialises them unrenamed.
+  const struct = read('src/devices/headsets/mod.rs').match(/pub struct HeadsetCapabilities \{([\s\S]*?)\n\}/);
+  const sent = struct ? [...struct[1].matchAll(/^\s*pub ([a-z_]+):/gm)].map((m) => m[1]).sort() : [];
+  const used = [...new Set([...read('tools/profile-gui/headset.js').matchAll(/\bcaps\.([a-z_]+)/g)].map((m) => m[1]))].sort();
+  return sent.length === 5 && eq(used, sent);
 }, () => 'caps.* keys in headset.js');
 ok('four sidetone steps are named, other counts are numbered', () => eq(headset.stepLabels(4), ['Off', 'Low', 'Med', 'High'])
   && eq(headset.stepLabels(3), ['0', '1', '2']));
