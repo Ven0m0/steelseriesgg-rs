@@ -13,6 +13,7 @@ You are a reviewer for the profile editor in steelseriesgg-rs: the front end in 
 - **Protocol claims**: the editor builds profile data; it must not send the on-board profile blob to hardware, and UI text must not present `[EXPERIMENTAL]` paths as confirmed (see `.claude/rules/experimental-protocol.md`).
 - **Lighting API server**: `src/gui.rs` must bind localhost only, keep CORS no looser than before, and propagate errors with `?` (no `unwrap`/`expect` in production paths).
 - **Build deps**: oxc, lightningcss and minify-html are pinned together and bumped by hand; flag a change to one without the others.
+- **Device capabilities**: the page gets behaviour properties from the server and checks no product IDs; text the page shows (hints, notes, labels, messages from `src/gui.rs`) names no model and carries no per-model test status; a yes/no capability the server sends starts with `can_` and has a plain doc comment (see `.claude/rules/device-capabilities.md`).
 - **fake-dom**: `tools/profile-gui/fake-dom.mjs` mirrors only the DOM APIs the editor uses; flag new DOM API use that the fake does not provide.
 
 ## Report
