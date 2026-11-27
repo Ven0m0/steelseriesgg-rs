@@ -47,8 +47,12 @@ pub enum StatusQuery {
 pub struct Nova7Model {
     pub product_id: u16,
     pub battery: BatteryScale,
-    pub sidetone: bool,
-    pub chat_mix: bool,
+    /// `ssgg headset sidetone` can set how loud the headset plays the microphone back. From GG's device specs;
+    /// confirmed on the Arctis Nova 7 Gen 2 `0x227E` (Linux, 2026-10-25), `[EXPERIMENTAL]` elsewhere.
+    pub can_set_sidetone: bool,
+    /// The headset reports the position of its ChatMix dial in its status reply. Confirmed on the Arctis Nova 7
+    /// Gen 2 `0x227E` (Linux, 2026-10-25); `false` on models without the dial, such as the Nova 5 `0x2232`.
+    pub can_report_chat_mix: bool,
     /// Lowest microphone-volume wire value: 0, or 1 on the Arctis 7+ family.
     pub mic_min: u8,
     /// Highest sidetone wire value: 3, or 10 on the Nova 5 family.
@@ -61,23 +65,25 @@ pub struct Nova7Model {
     pub report_id: u8,
     /// The status query the model answers.
     pub status: StatusQuery,
-    /// Whether the spec has an `inactivity_timer` (`a3`) for the model.
-    pub auto_off: bool,
+    /// `ssgg headset auto-off` can set the idle time after which the headset turns off (the spec's
+    /// `inactivity_timer`, `a3`). Confirmed on the Arctis Nova 7 Gen 2 `0x227E` (Linux, 2026-10-25),
+    /// `[EXPERIMENTAL]` elsewhere.
+    pub can_set_auto_off: bool,
 }
 
 const fn model(product_id: u16, battery: BatteryScale, sidetone_and_chat_mix: bool) -> Nova7Model {
     Nova7Model {
         product_id,
         battery,
-        sidetone: sidetone_and_chat_mix,
-        chat_mix: sidetone_and_chat_mix,
+        can_set_sidetone: sidetone_and_chat_mix,
+        can_report_chat_mix: sidetone_and_chat_mix,
         mic_min: 0,
         sidetone_max: 3,
         mic_max: 7,
         status_gap: 0,
         report_id: 0,
         status: StatusQuery::B0,
-        auto_off: true,
+        can_set_auto_off: true,
     }
 }
 
@@ -89,8 +95,8 @@ const fn nova_pro_model(product_id: u16, wireless: bool) -> Nova7Model {
     Nova7Model {
         product_id,
         battery: BatteryScale::Steps8,
-        sidetone: true,
-        chat_mix: false,
+        can_set_sidetone: true,
+        can_report_chat_mix: false,
         mic_min: 1,
         sidetone_max: 3,
         mic_max: 10,
@@ -101,7 +107,7 @@ const fn nova_pro_model(product_id: u16, wireless: bool) -> Nova7Model {
         } else {
             StatusQuery::None
         },
-        auto_off: false,
+        can_set_auto_off: false,
     }
 }
 
@@ -112,15 +118,15 @@ const fn nova5_model(product_id: u16, chat_mix: bool) -> Nova7Model {
     Nova7Model {
         product_id,
         battery: BatteryScale::Percent,
-        sidetone: true,
-        chat_mix,
+        can_set_sidetone: true,
+        can_report_chat_mix: chat_mix,
         mic_min: 0,
         sidetone_max: 10,
         mic_max: 15,
         status_gap: 1,
         report_id: 0,
         status: StatusQuery::B0,
-        auto_off: true,
+        can_set_auto_off: true,
     }
 }
 
@@ -130,15 +136,15 @@ const fn plus_model(product_id: u16, sidetone: bool, chat_mix: bool) -> Nova7Mod
     Nova7Model {
         product_id,
         battery: BatteryScale::Steps5,
-        sidetone,
-        chat_mix,
+        can_set_sidetone: sidetone,
+        can_report_chat_mix: chat_mix,
         mic_min: 1,
         sidetone_max: 3,
         mic_max: 7,
         status_gap: 0,
         report_id: 0,
         status: StatusQuery::B0,
-        auto_off: true,
+        can_set_auto_off: true,
     }
 }
 
@@ -237,7 +243,7 @@ pub fn decode_status(model: &Nova7Model, reply: &[u8]) -> Result<HeadsetStatus> 
         BatteryScale::Steps8 => steps8_percent(battery),
     });
     let chat_mix = model
-        .chat_mix
+        .can_report_chat_mix
         .then(|| ((f32::from(chat.min(100)) - f32::from(game.min(100))) / 100.0).clamp(-1.0, 1.0));
     Ok(HeadsetStatus {
         connected: Some(connected),
@@ -406,7 +412,7 @@ impl Headset for Nova7Headset {
     }
 
     fn set_sidetone(&mut self, level: u8) -> Result<()> {
-        if !self.model.sidetone {
+        if !self.model.can_set_sidetone {
             return Err(unsupported("Sidetone", &self.info));
         }
         let wire = scale_to_wire(level, self.model.sidetone_max, "Sidetone level")?;
@@ -428,14 +434,14 @@ impl Headset for Nova7Headset {
     }
 
     fn chat_mix(&mut self) -> Result<f32> {
-        if !self.model.chat_mix {
+        if !self.model.can_report_chat_mix {
             return Err(unsupported("ChatMix", &self.info));
         }
         Ok(self.query_status()?.chat_mix.unwrap_or(0.0))
     }
 
     fn set_auto_off(&mut self, minutes: u8) -> Result<()> {
-        if !self.model.auto_off {
+        if !self.model.can_set_auto_off {
             return Err(unsupported("Auto-off", &self.info));
         }
         self.set_wire_value(CommandCode::HeadsetAutoOff, minutes)
@@ -452,11 +458,15 @@ impl Headset for Nova7Headset {
 
 fn capabilities_of(model: &Nova7Model) -> HeadsetCapabilities {
     HeadsetCapabilities {
-        sidetone_steps: if model.sidetone { model.sidetone_max + 1 } else { 0 },
+        sidetone_steps: if model.can_set_sidetone {
+            model.sidetone_max + 1
+        } else {
+            0
+        },
         mic_volume_steps: model.mic_max - model.mic_min + 1,
-        auto_off: model.auto_off,
-        chat_mix: model.chat_mix,
-        status: model.status != StatusQuery::None,
+        can_set_auto_off: model.can_set_auto_off,
+        can_report_chat_mix: model.can_report_chat_mix,
+        can_report_status: model.status != StatusQuery::None,
     }
 }
 
@@ -487,7 +497,12 @@ mod tests {
         };
         for model in NOVA7_MODELS {
             let caps = capabilities_of(model);
-            assert_eq!(caps.sidetone_steps > 0, model.sidetone, "{:#06x}", model.product_id);
+            assert_eq!(
+                caps.sidetone_steps > 0,
+                model.can_set_sidetone,
+                "{:#06x}",
+                model.product_id
+            );
             for step in 0..caps.sidetone_steps {
                 let wire = scale_to_wire(level(step, caps.sidetone_steps), model.sidetone_max, "sidetone");
                 assert_eq!(wire.ok(), Some(step), "{:#06x} sidetone", model.product_id);
@@ -519,7 +534,7 @@ mod tests {
                 (6, 1, 10, 3),
                 "{pid:#06x}"
             );
-            assert!(!m.auto_off && !m.chat_mix, "{pid:#06x}");
+            assert!(!m.can_set_auto_off && !m.can_report_chat_mix, "{pid:#06x}");
             let expected = if battery_query {
                 StatusQuery::ProBattery
             } else {
@@ -563,11 +578,11 @@ mod tests {
     #[test]
     fn nova_5_has_no_chat_mix_dial() {
         let m = nova7_model(0x2232).unwrap();
-        assert!(m.sidetone && !m.chat_mix);
+        assert!(m.can_set_sidetone && !m.can_report_chat_mix);
         let s = decode_status(m, &[0xb0, 3, 0, 17, 3, 50, 50]).unwrap();
         assert_eq!((s.battery_percent, s.chat_mix), (Some(17), None));
         for pid in [0x2253, 0x2264, 0x2269, 0x226D] {
-            assert!(nova7_model(pid).unwrap().chat_mix, "{pid:#06x}");
+            assert!(nova7_model(pid).unwrap().can_report_chat_mix, "{pid:#06x}");
         }
     }
 
@@ -620,7 +635,7 @@ mod tests {
         ] {
             let m = nova7_model(pid).unwrap();
             assert_eq!(
-                (m.sidetone, m.chat_mix, m.mic_min),
+                (m.can_set_sidetone, m.can_report_chat_mix, m.mic_min),
                 (sidetone, chat_mix, 1),
                 "{pid:#06x}"
             );
@@ -651,10 +666,15 @@ mod tests {
                 "{:#06x}",
                 m.product_id
             );
-            assert_eq!(m.sidetone, !no_extras.contains(&m.product_id), "{:#06x}", m.product_id);
             assert_eq!(
-                m.chat_mix,
-                m.sidetone && !sidetone_without_chat_mix.contains(&m.product_id),
+                m.can_set_sidetone,
+                !no_extras.contains(&m.product_id),
+                "{:#06x}",
+                m.product_id
+            );
+            assert_eq!(
+                m.can_report_chat_mix,
+                m.can_set_sidetone && !sidetone_without_chat_mix.contains(&m.product_id),
                 "{:#06x}",
                 m.product_id
             );

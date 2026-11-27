@@ -55,10 +55,12 @@ pub trait Headset: Device {
 pub struct HeadsetCapabilities {
     pub sidetone_steps: u8,
     pub mic_volume_steps: u8,
-    pub auto_off: bool,
-    pub chat_mix: bool,
-    /// Whether the model answers a status query (battery, connection, charging).
-    pub status: bool,
+    /// The headset can turn itself off after an idle time that `ssgg` sets.
+    pub can_set_auto_off: bool,
+    /// The headset reports the position of its ChatMix dial.
+    pub can_report_chat_mix: bool,
+    /// The headset answers a status query: battery, connection and charging.
+    pub can_report_status: bool,
 }
 
 /// Headset state as far as the protocol reports it; `None` marks a field the headset cannot report.
