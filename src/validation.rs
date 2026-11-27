@@ -213,20 +213,24 @@ impl ValidationReport {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeviceCapabilities {
     /// The keyboard can set the colour of each key on its own (from `Keyboard::can_set_per_key_colors`).
-    #[serde(rename = "per_key_rgb")]
+    /// Reports written before 2026-11-28 used the key `per_key_rgb`; it is still read.
+    #[serde(alias = "per_key_rgb")]
     pub can_set_per_key_colors: bool,
     /// The keyboard can set the colour of its lighting zones; assumed for every keyboard.
-    #[serde(rename = "zone_rgb")]
+    /// Reports written before 2026-11-28 used the key `zone_rgb`; it is still read.
+    #[serde(alias = "zone_rgb")]
     pub can_set_zone_colors: bool,
     /// Number of controllable zones
     pub zone_count: usize,
     /// Number of individually controllable keys
     pub key_count: usize,
     /// The keyboard can change its brightness; assumed for every keyboard.
-    #[serde(rename = "brightness_control")]
+    /// Reports written before 2026-11-28 used the key `brightness_control`; it is still read.
+    #[serde(alias = "brightness_control")]
     pub can_set_brightness: bool,
     /// The keyboard can run per-key effects (from `Keyboard::can_run_per_key_effects`).
-    #[serde(rename = "reactive_effects")]
+    /// Reports written before 2026-11-28 used the key `reactive_effects`; it is still read.
+    #[serde(alias = "reactive_effects")]
     pub can_run_per_key_effects: bool,
     /// Maximum supported refresh rate (Hz)
     pub max_refresh_rate: f64,
@@ -925,6 +929,24 @@ pub mod test_helpers {
 mod tests {
     use super::test_helpers::*;
     use super::*;
+
+    #[test]
+    fn capabilities_are_written_as_can_keys_and_old_reports_still_read() {
+        let json = serde_json::to_value(DeviceCapabilities::default()).expect("serialises");
+        for key in [
+            "can_set_per_key_colors",
+            "can_set_zone_colors",
+            "can_set_brightness",
+            "can_run_per_key_effects",
+        ] {
+            assert!(json.get(key).is_some(), "{key} in {json}");
+        }
+        let old = r#"{"per_key_rgb":true,"zone_rgb":true,"zone_count":9,"key_count":87,"brightness_control":true,
+            "reactive_effects":true,"max_refresh_rate":60.0,"communication_reliability":95.0}"#;
+        let caps: DeviceCapabilities = serde_json::from_str(old).expect("an old report still reads");
+        assert!(caps.can_set_per_key_colors && caps.can_set_zone_colors && caps.can_set_brightness);
+        assert!(caps.can_run_per_key_effects);
+    }
 
     #[test]
     fn test_validation_result_creation() {
