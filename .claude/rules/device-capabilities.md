@@ -66,8 +66,8 @@ if caps.can_write_key_mappings {
 ## Existing code
 
 The product ID checks that chose a behaviour were moved to `can_` flags and table properties when this rule was
-added (2026-11-28); tests in `keyboards/model_caps.rs`, `keyboards/models.rs`, `headsets/nova7.rs`,
-`headsets/mod.rs` and `mice/modern.rs` pin which models set each flag. These uses of a
+added (2026-11-28); tests in `keyboards/model_caps.rs`, `keyboards/models.rs`, `headsets/nova7.rs` and
+`mice/modern.rs` pin which models set each flag, and `headsets/mod.rs` pins the `/api/headset` JSON keys. These uses of a
 product ID are not behaviour checks and stay:
 
 - the model tables themselves, `product_ids`, the name and type maps, and identity comparisons (the same device,

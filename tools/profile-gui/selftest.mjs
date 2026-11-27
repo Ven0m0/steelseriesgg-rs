@@ -14,7 +14,7 @@
 //
 // Every check is a thunk: a check the suite gets wrong fails and the run reaches the summary.
 // Exits non-zero when any check fails.
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { spawnSync } from 'node:child_process';
 import { installFakeDom, loadApp } from './fake-dom.mjs';
@@ -1963,7 +1963,11 @@ ok('the device panels and the server messages name no model and no product ID', 
   const family = /\b(Apex|Rival|Arctis|Aerox|Prime|Sensei|Nova)\b|0x[0-9a-f]{4}\b/i;
   const jsToken = /(['"`])((?:(?!\1)[^\\]|\\.)*)\1|\/\*[\s\S]*?\*\/|\/\/[^\n]*/g;
   const rustToken = /"((?:[^"\\]|\\.)*)"|'(?:[^'\\]|\\.)'|\/\*[\s\S]*?\*\/|\/\/[^\n]*/g;
-  const js = ['headset.js', 'live.js', 'control.js']
+  // Every page script except the profile editor (app.js, which may name the board its file format comes from) and
+  // the generated product table; a new device tab file is checked without a list change.
+  const editorOnly = new Set(['app.js', 'products.generated.js']);
+  const panelFiles = readdirSync(`${REPO}/tools/profile-gui`).filter((f) => f.endsWith('.js') && !editorOnly.has(f));
+  const js = panelFiles
     .flatMap((f) => [...read(`tools/profile-gui/${f}`).matchAll(jsToken)].filter((m) => m[1]).map((m) => m[2]));
   const parts = read('src/gui.rs').split(/#\[cfg\(test\)\]\s*mod tests\b/);
   if (parts.length !== 2) { panelModelText = ['src/gui.rs: expected one `#[cfg(test)] mod tests`']; return false; }

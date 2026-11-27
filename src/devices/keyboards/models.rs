@@ -30,7 +30,9 @@ pub enum KeyboardClass {
 }
 
 /// [EXPERIMENTAL] A direct-mode lighting frame: packet id, report length including the report-ID byte,
-/// key table, and whether the `0x4B` init report precedes the first frame.
+/// key table, and whether the `0x4B` init report precedes the first frame (a frame fact, not a capability; the
+/// init comes from OpenRGB's Gen 3 `SendInitialization`, 2026-10-25). The frames confirmed on hardware are listed in
+/// `.claude/rules/experimental-protocol.md`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DirectFrame {
     pub packet_id: CommandCode,

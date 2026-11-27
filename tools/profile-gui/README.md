@@ -91,7 +91,7 @@ Three rules shape the panel:
   file the CLI does.
 
 The panel's own labels and notes name no model: a form runs on whatever board is connected, and `ssgg` refuses a
-command the board cannot do. The output it shows is the CLI's own text, which may name a model or its test status,
+command that its model tables mark as unsupported for that board. The output it shows is the CLI's own text, which may name a model or its test status,
 as it does in a terminal.
 
 **`[EXPERIMENTAL]`**: as with every other panel, a board that ignores a command still answers success.
