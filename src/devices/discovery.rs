@@ -514,7 +514,7 @@ impl DeviceManager {
                     continue;
                 }
             };
-            if !keyboard.supports_onboard_profile() {
+            if !keyboard.can_use_onboard_profile() {
                 continue;
             }
             candidates.push((info.product_id, info.name.to_string(), keyboard));

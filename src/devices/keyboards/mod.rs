@@ -72,7 +72,7 @@ pub trait Keyboard: Device {
     /// per-key protocol (`CommandCode::PerKeyRgb`, `0x23`) has not been confirmed on
     /// hardware. Calls to `set_key_color` / `set_key_colors` may be silently ignored by
     /// the device until the packet format is verified via USB capture.
-    fn supports_per_key_rgb(&self) -> bool {
+    fn can_set_per_key_colors(&self) -> bool {
         false
     }
 
@@ -160,8 +160,9 @@ pub trait Keyboard: Device {
 
     // === Per-Key RGB Effect Support ===
 
-    /// Check if per-key RGB effects are supported.
-    fn supports_per_key_effects(&self) -> bool {
+    /// The keyboard can run animated effects that colour each key on its own (waves, ripples). `false` unless a
+    /// keyboard class says otherwise.
+    fn can_run_per_key_effects(&self) -> bool {
         false
     }
 
@@ -353,7 +354,7 @@ pub trait Keyboard: Device {
     }
 
     /// Whether this keyboard answers the on-board profile protocol: whether [`Self::onboard_codec`] answers.
-    fn supports_onboard_profile(&self) -> bool {
+    fn can_use_onboard_profile(&self) -> bool {
         self.onboard_codec().is_some()
     }
 
@@ -779,7 +780,7 @@ impl Keyboard for GenericKeyboard {
 
     // === Per-Key RGB Control Implementation ===
 
-    fn supports_per_key_rgb(&self) -> bool {
+    fn can_set_per_key_colors(&self) -> bool {
         self.key_mapping.is_some()
     }
 
@@ -974,7 +975,7 @@ impl Keyboard for GenericKeyboard {
 
     // === Per-Key RGB Effect Implementation ===
 
-    fn supports_per_key_effects(&self) -> bool {
+    fn can_run_per_key_effects(&self) -> bool {
         self.per_key_controller.is_some()
     }
 
@@ -1154,7 +1155,7 @@ macro_rules! impl_keyboard_with_delegation {
         impl Keyboard for $type {
             $($custom)*
             fn zone_count(&self) -> usize { self.inner.zone_count() }
-            fn supports_per_key_rgb(&self) -> bool { self.inner.supports_per_key_rgb() }
+            fn can_set_per_key_colors(&self) -> bool { self.inner.can_set_per_key_colors() }
             fn get_key_mapping(&self) -> Option<&KeyMapping> { self.inner.get_key_mapping() }
             async fn clear_per_key_rgb(&mut self) -> Result<()> { self.set_color(Color::BLACK).await }
             fn get_zone_mapping(&self) -> Option<&ZoneMapping> { self.inner.get_zone_mapping() }
@@ -1162,7 +1163,7 @@ macro_rules! impl_keyboard_with_delegation {
             async fn simulate_per_key_with_zones(&mut self, key_colors: &[(KeyId, Color)]) -> Result<()> { self.inner.simulate_per_key_with_zones(key_colors).await }
             async fn set_zone_colors_with_retry(&mut self, colors: &[Color], max_retries: usize) -> Result<()> { self.inner.set_zone_colors_with_retry(colors, max_retries).await }
             async fn test_zone_reliability(&mut self) -> Result<Vec<bool>> { self.inner.test_zone_reliability().await }
-            fn supports_per_key_effects(&self) -> bool { self.inner.supports_per_key_effects() }
+            fn can_run_per_key_effects(&self) -> bool { self.inner.can_run_per_key_effects() }
             async fn set_per_key_effect(&mut self, effect: PerKeyEffect) -> Result<()> { self.inner.set_per_key_effect(effect).await }
             fn get_per_key_effect(&self) -> Option<&PerKeyEffect> { self.inner.get_per_key_effect() }
             async fn trigger_key_reactive(&mut self, keys: &[KeyId], duration: f32) -> Result<()> { self.inner.trigger_key_reactive(keys, duration).await }

@@ -105,7 +105,7 @@ export function productNames(body, ids) {
 /**
  * `model(APEX_7, "Apex 7", C::Apex7, ...)` rows of `KEYBOARD_MODELS` in `src/devices/keyboards/models.rs`,
  * resolved through the constant names to `{ hex, name, class }`. The `Apex7` class is the on-board family:
- * it is the only class whose keyboard answers `Keyboard::supports_onboard_profile`, and that is what lets
+ * it is the only class whose keyboard answers `Keyboard::can_use_onboard_profile`, and that is what lets
  * `ssgg onboard read` reach a board. Comments are stripped first, so a note naming a constant is not read
  * as a row.
  */

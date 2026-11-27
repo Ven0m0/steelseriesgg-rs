@@ -105,7 +105,7 @@ const _: () = assert!(MAX_READ_LEN + READ_REPLY_FRAMING_LEN < READ_REPLY_BUFFER_
 ///
 /// Discovery builds this class for product ID `0x1612` and for nothing else (`discovery::open_keyboard`),
 /// so the on-board scope is the class itself: [`Keyboard::onboard_codec`] answers it, and
-/// [`Keyboard::supports_onboard_profile`](crate::devices::keyboards::Keyboard::supports_onboard_profile)
+/// [`Keyboard::can_use_onboard_profile`](crate::devices::keyboards::Keyboard::can_use_onboard_profile)
 /// reports that answer for the keyboard the manager opened. No product-ID table is consulted.
 pub struct Apex7 {
     inner: GenericKeyboard,
@@ -813,10 +813,10 @@ mod tests {
         #[test]
         fn only_the_apex_7_gets_the_read() {
             let apex_7 = device_without_handle(product_ids::APEX_7);
-            assert!(Apex7::supports_onboard_profile(&apex_7));
+            assert!(Apex7::can_use_onboard_profile(&apex_7));
             // The Apex 7 class answers the codec; every other keyboard class answers none, which is the
             // scope statement in code: discovery builds this class for the captured board's collection alone.
-            assert!(Apex7::supports_onboard_profile(&apex_7));
+            assert!(Apex7::can_use_onboard_profile(&apex_7));
             assert!(matches!(
                 apex_7.onboard_codec().map(|codec| codec.family_name()),
                 Some(name) if name == "Apex 7"
