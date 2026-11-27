@@ -70,10 +70,11 @@ pub struct DpiSpec {
     pub first_preset: u8,
     /// The command carries the code twice, once per axis.
     pub per_axis: bool,
-    /// The model takes several stages in one command ([`MouseDpiStagesCommand`]). Set only where that frame is
-    /// evidenced: the Rival 3 Gen 2, by rivalcfg's test vectors and the third-party hardware test (macOS) of the
-    /// two-stage frame in its PR #292, and from `ssgg` with 2 and 4 stages (contributor, Linux, 2026-11-17/18).
-    pub multi_stage: bool,
+    /// `ssgg mouse dpi` can set up to five DPI stages for the mouse's DPI button in one command
+    /// ([`MouseDpiStagesCommand`]). Set only where that frame is evidenced: the Rival 3 Gen 2, by rivalcfg's test
+    /// vectors and the third-party hardware test (macOS) of the two-stage frame in its PR #292, and from `ssgg` with
+    /// 2 and 4 stages (contributor, Linux, 2026-11-17/18).
+    pub can_set_dpi_stages: bool,
 }
 
 impl DpiSpec {
@@ -106,7 +107,9 @@ pub struct MouseSpec {
     pub poll_codes: [u8; 4],
     pub color_layout: MouseColorLayout,
     pub zone_count: u8,
-    pub battery: bool,
+    /// The mouse runs on a battery and `ssgg mouse info` can ask for its charge (`92`, `D2` through a receiver).
+    /// From the community rivalcfg-derived fork; `[EXPERIMENTAL]`, untested on hardware.
+    pub can_report_battery: bool,
 }
 
 const SPEC_AEROX_3: MouseSpec = MouseSpec {
@@ -118,12 +121,12 @@ const SPEC_AEROX_3: MouseSpec = MouseSpec {
         encoding: DpiEncoding::Table(&TRUEMOVE_CORE),
         first_preset: 1,
         per_axis: false,
-        multi_stage: false,
+        can_set_dpi_stages: false,
     },
     poll_codes: [4, 3, 2, 1],
     color_layout: MouseColorLayout::Mask8,
     zone_count: 3,
-    battery: false,
+    can_report_battery: false,
 };
 
 /// The preset index is 0-based on this model, unlike the Aerox 3 it shares the sensor table with: rivalcfg PR #292
@@ -134,7 +137,7 @@ const SPEC_RIVAL_3_GEN_2: MouseSpec = MouseSpec {
         opcode: MouseDpiCommand::OPCODE_RIVAL_3_GEN_2,
         first_preset: 0,
         per_axis: true,
-        multi_stage: true,
+        can_set_dpi_stages: true,
         ..SPEC_AEROX_3.dpi
     },
     ..SPEC_AEROX_3
@@ -149,12 +152,12 @@ const SPEC_AEROX_5: MouseSpec = MouseSpec {
         encoding: DpiEncoding::Table(&TRUEMOVE_AIR),
         first_preset: 0,
         per_axis: false,
-        multi_stage: false,
+        can_set_dpi_stages: false,
     },
     poll_codes: [4, 3, 2, 1],
     color_layout: MouseColorLayout::Mask8,
     zone_count: 3,
-    battery: false,
+    can_report_battery: false,
 };
 
 const SPEC_RIVAL_5: MouseSpec = MouseSpec {
@@ -166,7 +169,7 @@ const SPEC_RIVAL_5: MouseSpec = MouseSpec {
 const SPEC_AEROX_WIRELESS: MouseSpec = MouseSpec {
     poll_codes: [3, 2, 1, 0],
     color_layout: MouseColorLayout::Indexed,
-    battery: true,
+    can_report_battery: true,
     ..SPEC_AEROX_5
 };
 
@@ -366,10 +369,10 @@ impl MouseModel {
 
     /// One command for 1 to [`MouseDpiStagesCommand::MAX_STAGES`] DPI stages with stage `active` (0-based) running
     /// (confirmed on a wired Rival 3 Gen 2 for 2 stages with `active` 0 and 4 with `active` 1, the rest
-    /// [EXPERIMENTAL]). Refused on a model without [`DpiSpec::multi_stage`].
+    /// [EXPERIMENTAL]). Refused on a model without [`DpiSpec::can_set_dpi_stages`].
     pub fn dpi_stages_command(&self, stages: &[u16], active: u8) -> Result<MouseDpiStagesCommand> {
         let dpi_spec = &self.spec.dpi;
-        if !dpi_spec.multi_stage {
+        if !dpi_spec.can_set_dpi_stages {
             return Err(unsupported("setting DPI stages", self.name));
         }
         let command = MouseDpiStagesCommand {
@@ -430,7 +433,7 @@ impl MouseModel {
     /// `None` for a model without a battery.
     pub fn battery_query(&self) -> Option<MouseBatteryQueryCommand> {
         self.spec
-            .battery
+            .can_report_battery
             .then_some(MouseBatteryQueryCommand { dongle: self.dongle })
     }
 
@@ -439,7 +442,7 @@ impl MouseModel {
     /// Gen 2 and in Mousework's read-only probe (`mousework/probe.py`), which sends `90` and `AB` to the whole
     /// family.
     fn wired_only(&self) -> bool {
-        !self.dongle && !self.spec.battery
+        !self.dongle && !self.spec.can_report_battery
     }
 
     /// The read-only firmware query, `90 00` zero padded to 64 bytes: GG's own frame to a wired Rival 3 Gen 2, which
