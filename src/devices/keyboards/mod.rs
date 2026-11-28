@@ -158,9 +158,9 @@ pub trait Keyboard: Device {
 
     // === Per-Key RGB Effect Support ===
 
-    /// `ssgg rgb effect` can run animated effects that colour each key on its own (waves, breathing, spectrum).
-    /// `true` where the keyboard has a key mapping, `false` unless a keyboard class says otherwise. Effect streaming
-    /// is confirmed on the Apex Pro TKL 2023 `0x1628` (25 fps, Windows, 2026-11-10), `[EXPERIMENTAL]` elsewhere.
+    /// `ssgg validate` can run its per-key effect and reactive tests (the `PerKeyRgbController` path): `true` where
+    /// the keyboard has a key mapping, `false` unless a keyboard class says otherwise. `[EXPERIMENTAL]`: no hardware
+    /// record exists for this path. `ssgg rgb effect` does not read it; it streams the direct frame instead.
     fn can_run_per_key_effects(&self) -> bool {
         false
     }

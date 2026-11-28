@@ -415,8 +415,8 @@ fn cmd_headset(manager: &DeviceManager, action: HeadsetAction) -> Result<()> {
     if HARDWARE_CONFIRMED.contains(&headset_info.product_id) {
         eprintln!(
             "Confirmed on this model (2026-10-25): status (battery, charging, ChatMix), sidetone off and highest, mic \
-             volume lowest and highest, auto-off after 1 minute. Middle levels, other auto-off times and turning \
-             auto-off off are [EXPERIMENTAL]."
+             volume lowest and highest, auto-off set to 1 minute (off after about a minute idle). Middle levels, \
+             other auto-off times and turning auto-off off are [EXPERIMENTAL]."
         );
     } else {
         eprintln!(

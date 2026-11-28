@@ -2,7 +2,8 @@
 //!
 //! [EXPERIMENTAL] The protocol comes from community forks and GG's decrypted device specs. On the PIDs in
 //! [`HARDWARE_CONFIRMED`] only these are confirmed: sidetone off and highest, mic volume lowest and highest, auto-off
-//! after 1 minute, and status (battery, charging, ChatMix); every other value and model is untested.
+//! set to 1 minute (`a3 01`; off after about a minute idle), and status (battery, charging, ChatMix); every other
+//! value and model is untested.
 //! Frames are 64-byte output reports on the vendor control collection (usage page `0xFFC0`),
 //! report number 0 (6 on the Nova Pro family). The save frame `<id> 09` is never sent: it would persist
 //! settings on the headset.
@@ -206,8 +207,9 @@ pub const NOVA7_MODELS: &[Nova7Model] = &[
 ];
 
 /// PIDs on which `ssgg` frames were tested on hardware: Arctis Nova 7 Gen 2, Linux, 2026-10-25. Confirmed there:
-/// sidetone off and highest, mic volume lowest and highest, auto-off after 1 minute, and status (battery, charging,
-/// ChatMix); the details are in `.claude/rules/experimental-protocol.md`.
+/// sidetone off and highest, mic volume lowest and highest, auto-off set to 1 minute (`a3 01`; off after about a
+/// minute idle), and status (battery, charging, ChatMix); the details are in
+/// `.claude/rules/experimental-protocol.md`.
 pub const HARDWARE_CONFIRMED: &[u16] = &[ARCTIS_NOVA_7_WIRELESS_GEN2];
 
 /// Look up the Nova 7 behaviour for a product ID; `None` for every other headset.

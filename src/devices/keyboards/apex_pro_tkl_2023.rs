@@ -564,7 +564,7 @@ pub struct ApexProTkl2023 {
 impl ApexProTkl2023 {
     /// Create from a generic keyboard; the software brightness is the level last saved for this model.
     pub fn new(keyboard: GenericKeyboard) -> Self {
-        if keyboard_model(keyboard.info().product_id).is_some_and(|model| !model.can_light_non_us_layouts) {
+        if keyboard_model(keyboard.info().product_id).is_some_and(|model| model.us_key_table_without_layout_query) {
             tracing::warn!(
                 "{} direct lighting supports US layouts only; layout detection is unavailable. \
                  ISO/UK/JP layouts may leave keys unlit or address nonexistent keys",

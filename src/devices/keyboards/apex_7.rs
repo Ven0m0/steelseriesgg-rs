@@ -106,7 +106,8 @@ const _: () = assert!(MAX_READ_LEN + READ_REPLY_FRAMING_LEN < READ_REPLY_BUFFER_
 /// class from `discovery::keyboard_class`), so the on-board scope is the class itself: [`Keyboard::onboard_codec`]
 /// answers it, and
 /// [`Keyboard::can_use_onboard_profile`](crate::devices::keyboards::Keyboard::can_use_onboard_profile)
-/// reports that answer for the keyboard the manager opened. No product-ID table is consulted.
+/// reports that answer for the keyboard the manager opened. `can_use_onboard_profile` itself consults no product-ID
+/// table; only the class choice comes from the `KEYBOARD_MODELS` row.
 pub struct Apex7 {
     inner: GenericKeyboard,
 }

@@ -1,5 +1,6 @@
 //! Keyboard models: one row per keyboard product ID. A row decides the class discovery builds, the
-//! registry name, the raw-hidraw fallback, and the `[EXPERIMENTAL]` direct lighting frame. Headsets and
+//! registry name, the `[EXPERIMENTAL]` direct lighting frame, and the behaviour properties
+//! (`can_open_through_raw_hidraw`, control interfaces, zone count, zone and layout flags). Headsets and
 //! mice keep their own tables (`headsets::nova7`, `mice::modern`).
 
 use super::apex_m750::CONTROL_INTERFACE as APEX_M750_CONTROL_INTERFACE;
@@ -108,11 +109,11 @@ pub struct KeyboardModel {
     /// Apex 3, 8 on the Apex 3 TKL (OpenRGB), 9 on the Apex Pro TKL 2023 wired and wireless, 1 elsewhere, where the
     /// count is not captured. `[EXPERIMENTAL]`, from the older per-model table.
     pub zone_count: usize,
-    /// `false` where the per-key key table holds only US keys and the layout cannot be queried, so `ssgg` warns
-    /// that ISO, UK and JP keys may stay dark: the Mini boards (GG's specs, `[EXPERIMENTAL]`). `true` does not mean
-    /// a non-US layout was tested: that is confirmed only on the Apex Pro (2024) `0x1640` ISO-DE (Linux,
-    /// 2026-11-02), and the `0x1628` table is US-only too.
-    pub can_light_non_us_layouts: bool,
+    /// The per-key key table holds only US keys and the keyboard cannot report its layout, so `ssgg` warns when it
+    /// opens the keyboard that ISO, UK and JP keys may stay dark (a key-table fact, not a capability). Set on the
+    /// Mini boards, from GG's specs, `[EXPERIMENTAL]`. Where it is `false`, the layout can be queried or is not
+    /// checked; a non-US layout is confirmed only on the Apex Pro (2024) `0x1640` ISO-DE (Linux, 2026-11-02).
+    pub us_key_table_without_layout_query: bool,
 }
 
 const fn model(
@@ -131,7 +132,7 @@ const fn model(
         only_control_interface: None,
         fallback_control_interface: 1,
         can_set_all_zones_at_once: true,
-        can_light_non_us_layouts: true,
+        us_key_table_without_layout_query: false,
         zone_count: 1,
     }
 }
@@ -158,7 +159,7 @@ impl KeyboardModel {
     }
 
     const fn us_layout_lighting_only(mut self) -> Self {
-        self.can_light_non_us_layouts = false;
+        self.us_key_table_without_layout_query = true;
         self
     }
 }
@@ -297,7 +298,7 @@ mod tests {
             let fallback = if wireless_2023.contains(&pid) { 3 } else { 1 };
             assert_eq!(m.fallback_control_interface, fallback, "{pid:#06x}");
             assert_eq!(m.can_set_all_zones_at_once, !wireless_2023.contains(&pid), "{pid:#06x}");
-            assert_eq!(m.can_light_non_us_layouts, !minis.contains(&pid), "{pid:#06x}");
+            assert_eq!(m.us_key_table_without_layout_query, minis.contains(&pid), "{pid:#06x}");
             let zones = match pid {
                 APEX_3 => 10,
                 APEX_3_TKL => 8,

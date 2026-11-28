@@ -25,12 +25,15 @@ In every case, add the product ID to `product_ids` in `src/devices/mod.rs`.
 
 **For a headset:**
 - If it speaks the Nova 7 frames: a row in `NOVA7_MODELS` (`src/devices/headsets/nova7.rs`).
-- Otherwise `src/devices/headsets/<snake_case_name>.rs` implementing the `Headset` trait, with its own model table.
+- Otherwise `src/devices/headsets/<snake_case_name>.rs` implementing the `Headset` trait, with its own model table
+  and a lookup of that table in `DeviceManager::open_headset` (`src/devices/discovery.rs`); without it the headset
+  falls back to `GenericHeadset`.
 - Add the name and type arms in `src/devices/mod.rs`.
 
 **For a mouse:**
 - A row in `MOUSE_MODELS` (`src/devices/mice/modern.rs`) with its `MouseSpec`, plus the name and type arms in
-  `src/devices/mod.rs`.
+  `src/devices/mod.rs`. A mouse outside the Modern family needs its own driver, its own table and a lookup in
+  `DeviceManager::open_mouse`.
 
 Then run `node tools/profile-gui/sync-products.mjs` to refresh the editor's product table.
 
