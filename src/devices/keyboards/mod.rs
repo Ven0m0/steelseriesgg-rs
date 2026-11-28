@@ -69,8 +69,9 @@ pub trait Keyboard: Device {
 
     /// `ssgg rgb perkey` can give each key its own colour. `true` where the key-mapping database has this
     /// keyboard. Confirmed on the Apex Pro TKL 2023 `0x1628` (direct frame `0x40`, Windows, 2026-10-21) and the Apex
-    /// Pro (2024) `0x1640` (`0x3A`, ISO-DE, Linux, 2026-11-02; ANSI untested); the older `0x23` per-key command is `[PLACEHOLDER]`, and the
-    /// other boards are `[EXPERIMENTAL]`: a board may ignore the frames and still answer success.
+    /// Pro (2024) `0x1640` (`0x3A`, ISO-DE, Linux, 2026-11-02; ANSI untested); the older `0x23` per-key command is
+    /// `[PLACEHOLDER]`, and the other boards are `[EXPERIMENTAL]`: a board may ignore the frames and still answer
+    /// success.
     fn can_set_per_key_colors(&self) -> bool {
         false
     }
