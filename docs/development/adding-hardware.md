@@ -67,7 +67,9 @@ and attach the zip. Attach `device.pcap` too if it is under 25 MB (zip it first)
 3. Add the product ID to `product_ids` in `src/devices/mod.rs`. A keyboard then gets one row in
    `KEYBOARD_MODELS` (`src/devices/keyboards/models.rs`): name, class, direct frame and the behaviour
    properties of `KeyboardModel` (interfaces, zone count, `can_*` flags), which is everything discovery and the
-   keyboard classes read per model; a wired Gen 3 board also gets a `MODEL_CAPS` row
+   keyboard classes read per model from the tables; per-key colours also need a `KeyMappingDatabase` entry
+   (`src/devices/key_mapping.rs`), and a measured zone layout goes in `src/devices/zone_mapping.rs`. A wired Gen 3
+   board also gets a `MODEL_CAPS` row
    (`src/devices/keyboards/model_caps.rs`). Follow `.claude/rules/device-capabilities.md`: a difference between
    models is a table property, not a product ID check in code. A headset or mouse of an existing family is a
    row in `NOVA7_MODELS` (`src/devices/headsets/nova7.rs`) or `MOUSE_MODELS` (`src/devices/mice/modern.rs`), plus

@@ -21,7 +21,7 @@ If the test only covered part of the command's behaviour, promote only that part
 1. Find every place the status appears: `rg -n "<symbol>|<0xNN>" src docs .claude AGENTS.md PLAN.md`.
 2. Update the row in `.claude/rules/experimental-protocol.md`: status `Confirmed`, plus `- <device> <PID>, <OS>, <YYYY-MM-DD>: <what was observed>`.
 3. Remove `[EXPERIMENTAL]` from the doc comments and docs you found in step 1 for exactly this command. Leave labels on anything the test did not cover.
-   Also update the doc comment of every `can_*` flag that gates the command (`keyboards/models.rs`, `keyboards/model_caps.rs`, `headsets/nova7.rs`, `mice/modern.rs`): these name the test status but not always the command code. Set the flag on the tested row only, and update the test that pins the flag's rows (see `.claude/rules/device-capabilities.md`).
+   Also update the doc comment of every `can_*` flag that gates the command (`keyboards/models.rs`, `keyboards/model_caps.rs`, `keyboards/mod.rs` for the `Keyboard` trait's `can_*` methods, `headsets/nova7.rs`, `mice/modern.rs`): these name the test status but not always the command code. Set the flag on the tested row only, and update the test that pins the flag's rows (see `.claude/rules/device-capabilities.md`).
 4. Update the matching claim in `docs/development/` and, if listed there, `PLAN.md`. Do not duplicate status into `AGENTS.md`.
 5. Run `cargo fmt --all -- --check` and `cargo test --locked`.
 6. Propose the commit message and wait for approval before committing: `feat(devices): confirm <command> on <device> (<date>)` with device model and date in the body.

@@ -49,7 +49,8 @@ pub trait Keyboard: Device {
         Ok(())
     }
 
-    /// Get the number of RGB zones.
+    /// How many lighting zones the zone commands address; from the `KeyboardModel` row's `zone_count`
+    /// (`[EXPERIMENTAL]`, older per-model table). 0 unless a keyboard class says otherwise.
     fn zone_count(&self) -> usize {
         0
     }

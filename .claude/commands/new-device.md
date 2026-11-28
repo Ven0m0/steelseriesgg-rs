@@ -18,6 +18,8 @@ In every case, add the product ID to `product_ids` in `src/devices/mod.rs`.
 - Add a row to `KEYBOARD_MODELS` (`src/devices/keyboards/models.rs`): name, class, direct frame and the
   behaviour properties it needs (interfaces, zone count, `can_*` flags). A wired Gen 3 board also gets a
   `MODEL_CAPS` row (`src/devices/keyboards/model_caps.rs`).
+- For per-key colours, add a mapping to `KeyMappingDatabase` (`src/devices/key_mapping.rs`); for a measured zone
+  layout, add it to `src/devices/zone_mapping.rs`.
 - Only if no existing class speaks its protocol: `src/devices/keyboards/<snake_case_name>.rs` implementing the
   `Keyboard` trait (and its `Device` supertrait), with a new `KeyboardClass` variant.
   - Stub all methods, mark protocol work `[EXPERIMENTAL]` or `[PLACEHOLDER]`

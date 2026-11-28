@@ -100,7 +100,7 @@ pub struct KeyboardModel {
     /// the Apex Pro TKL 2023 Wireless (`0x1630`, `0x1632`). Both values come from the older per-model table;
     /// `[EXPERIMENTAL]`.
     pub fallback_control_interface: i32,
-    /// The keyboard takes one colour for all its zones in one command (zone selector `0xFF`). `false` on the Apex
+    /// The keyboard takes the colours of all its zones in one command (zone selector `0xFF`). `false` on the Apex
     /// Pro TKL 2023 Wireless (`0x1630`, `0x1632`), which needs one command per zone, zones counted from 1 (code
     /// comment from an earlier contributor). `[EXPERIMENTAL]` on every board: no hardware test of either form since
     /// the legacy output path was fixed (2026-10-25).
@@ -109,8 +109,9 @@ pub struct KeyboardModel {
     /// Apex 3, 8 on the Apex 3 TKL (OpenRGB), 9 on the Apex Pro TKL 2023 wired and wireless, 1 elsewhere, where the
     /// count is not captured. `[EXPERIMENTAL]`, from the older per-model table.
     pub zone_count: usize,
-    /// The per-key key table holds only US keys and the keyboard cannot report its layout, so `ssgg` warns when it
-    /// opens the keyboard that ISO, UK and JP keys may stay dark (a key-table fact, not a capability). Set on the
+    /// The per-key key table holds only US keys and `ssgg` does not send the layout query (`F2`, a 645-byte
+    /// command) to these 513-byte boards, so `ssgg` warns when it opens the keyboard that ISO, UK and JP keys may
+    /// stay dark (a key-table fact, not a capability). Set on the
     /// Mini boards, from GG's specs, `[EXPERIMENTAL]`. Where it is `false`, the layout can be queried or is not
     /// checked; a non-US layout is confirmed only on the Apex Pro (2024) `0x1640` ISO-DE (Linux, 2026-11-02).
     pub us_key_table_without_layout_query: bool,
@@ -158,7 +159,7 @@ impl KeyboardModel {
         self
     }
 
-    const fn us_layout_lighting_only(mut self) -> Self {
+    const fn us_key_table_without_layout_query(mut self) -> Self {
         self.us_key_table_without_layout_query = true;
         self
     }
@@ -189,8 +190,8 @@ pub const KEYBOARD_MODELS: &[KeyboardModel] = &[
     model(APEX_7_TKL, "Apex 7 TKL", C::ApexProTkl2023, false, GEN1),
     model(APEX_3, "Apex 3", C::Apex3, false, None).zones(10),
     model(APEX_5, "Apex 5", C::ApexProTkl2023, false, GEN1),
-    model(APEX_PRO_MINI, "Apex Pro Mini", C::ApexProTkl2023, false, MINI).us_layout_lighting_only(),
-    model(APEX_9_MINI, "Apex 9 Mini", C::ApexProTkl2023, false, MINI).us_layout_lighting_only(),
+    model(APEX_PRO_MINI, "Apex Pro Mini", C::ApexProTkl2023, false, MINI).us_key_table_without_layout_query(),
+    model(APEX_9_MINI, "Apex 9 Mini", C::ApexProTkl2023, false, MINI).us_key_table_without_layout_query(),
     model(APEX_3_TKL, "Apex 3 TKL", C::Apex3Tkl, false, None).zones(8),
     model(
         APEX_PRO_MINI_WIRELESS_DONGLE,
@@ -258,7 +259,7 @@ pub const KEYBOARD_MODELS: &[KeyboardModel] = &[
         false,
         MINI,
     )
-    .us_layout_lighting_only(),
+    .us_key_table_without_layout_query(),
     model(
         APEX_PRO_TKL_2024_CYBER,
         "Apex Pro TKL (2024) Cyber",

@@ -809,7 +809,7 @@ impl ApexProTkl2023 {
     }
 
     /// The boards whose typed commands (mapping, macro, query) are sized for the 645-byte feature report.
-    fn require_wide_reports(&self, what: &str) -> Result<&'static ModelCaps> {
+    fn require_645_byte_commands(&self, what: &str) -> Result<&'static ModelCaps> {
         self.require_caps(
             what,
             ModelCaps::can_take_645_byte_commands,
@@ -1118,7 +1118,7 @@ impl ApexProTkl2023 {
 
     /// Send a layout or region query (output report) and take the first input report that carries its answer.
     fn query_device(&mut self, query: DeviceQueryCommand) -> Result<u8> {
-        self.require_wide_reports("the layout/region query")?;
+        self.require_645_byte_commands("the layout/region query")?;
         self.send_report(&command_report(query, KEYBOARD_REPORT_SIZE)?, false)?;
         for _ in 0..5 {
             let Some(reply) = self.inner.read_profile_input_packet(KEYBOARD_REPORT_SIZE, 500)? else {
@@ -1315,7 +1315,7 @@ crate::impl_keyboard_with_delegation!(ApexProTkl2023, {
     }
 
     fn firmware_version(&mut self) -> Result<Option<String>> {
-        self.require_wide_reports("the firmware poll")?;
+        self.require_645_byte_commands("the firmware poll")?;
         Ok(self.poll_firmware_version())
     }
 
@@ -1805,7 +1805,7 @@ mod tests {
             for layer in [MappingLayer::Base, MappingLayer::Meta, MappingLayer::Second] {
                 keyboard.require_mapping("mapping", layer).unwrap();
             }
-            keyboard.require_wide_reports("query").unwrap();
+            keyboard.require_645_byte_commands("query").unwrap();
             let live = refusal(keyboard.require_caps("analog", |c| c.can_set_actuation_live, "table"));
             assert!(live.contains("not supported on"), "{pid:#06x}: {live}");
             let oled = refusal(keyboard.require_caps("oled", |c| c.oled == OledImage::RowMajor, "layout"));

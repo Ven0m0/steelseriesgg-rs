@@ -228,7 +228,8 @@ pub struct DeviceCapabilities {
     /// Reports written before 2026-11-28 used the key `brightness_control`; it is still read.
     #[serde(alias = "brightness_control")]
     pub can_set_brightness: bool,
-    /// The keyboard can run per-key effects (from `Keyboard::can_run_per_key_effects`).
+    /// `ssgg validate` ran its per-key effect and reactive tests (from `Keyboard::can_run_per_key_effects`,
+    /// `[EXPERIMENTAL]`).
     /// Reports written before 2026-11-28 used the key `reactive_effects`; it is still read.
     #[serde(alias = "reactive_effects")]
     pub can_run_per_key_effects: bool,
