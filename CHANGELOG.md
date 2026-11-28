@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Releases and this changelog are generated automatically from
 [Conventional Commits](https://www.conventionalcommits.org/) by release-please.
 
+## [0.1.25](https://github.com/Ven0m0/steelseriesgg-rs/compare/v0.1.24...v0.1.25) (2026-11-28)
+
+
+### Changed
+
+* update dependency rust to v1.100.1 ([2aae1e5](https://github.com/Ven0m0/steelseriesgg-rs/commit/2aae1e5add293bfec91d8332f7f09f05d6899f06))
+* update pre-commit hook python-jsonschema/check-jsonschema to v0.40.0 ([ebefa8a](https://github.com/Ven0m0/steelseriesgg-rs/commit/ebefa8a7d3271df523e7c3f7a3c46e662baf003e))
+
 ## [0.1.24](https://github.com/Ven0m0/steelseriesgg-rs/compare/v0.1.23...v0.1.24) (2026-11-26)
 
 
