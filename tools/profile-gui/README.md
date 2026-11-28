@@ -93,9 +93,9 @@ Three rules shape the panel:
 
 The panel's own labels and notes name no model: a form runs on whatever board is connected, and `ssgg` refuses a
 command that its model tables mark as unsupported for that board. Not every command is refused: on the boards
-that `ssgg` drives with direct lighting frames, except the wired Apex Pro TKL 2023 (`0x1628`), `actuation set` and
-`actuation set-value` send the unverified `0x2D` command `[EXPERIMENTAL]`, and the CLI output says so; other
-boards answer "not supported". The output the panel shows is the CLI's own text, which may name a model or its
+that `ssgg` drives with the `0x3A`, `0x40` or `0x61` direct lighting frame, except the wired Apex Pro TKL 2023
+(`0x1628`), `actuation set` and `actuation set-value` send the unverified `0x2D` command `[EXPERIMENTAL]`,
+and the CLI output says so; other boards answer "not supported". The output the panel shows is the CLI's own text, which may name a model or its
 test status, as it does in a terminal.
 
 **`[EXPERIMENTAL]`**: as with every other panel, a board that ignores a command still answers success.
