@@ -43,7 +43,8 @@ Wayland is a known WebKitGTK renderer problem: start with `WEBKIT_DISABLE_DMABUF
 opened; opened from a file or any other server there is no panel. **`[EXPERIMENTAL]`**: the calls are the ones
 `ssgg rgb color|brightness|off` sends; which of them are confirmed on which board is listed in
 [docs/development/devices.md](../../docs/development/devices.md), and elsewhere a board that ignores a call still
-answers success. Close GG first, it overwrites other programs. Stop `ssgg daemon` first too: two programs should not hold one keyboard.
+answers success. Close GG first, it overwrites other programs. Stop `ssgg daemon` first too: two programs should
+not hold one keyboard.
 
 The API is not CORS-enabled (the page is same-origin). Each run has a random token the page receives only by
 being served here; a request needs that token, a `Host` of `127.0.0.1:<port>` or `localhost:<port>`, and no
@@ -91,9 +92,11 @@ Three rules shape the panel:
   file the CLI does.
 
 The panel's own labels and notes name no model: a form runs on whatever board is connected, and `ssgg` refuses a
-command that its model tables mark as unsupported for that board. Not every command is refused: on boards other
-than the Apex Pro TKL 2023, `actuation set` sends the unverified `0x2D` command, and the CLI output says so. The
-output the panel shows is the CLI's own text, which may name a model or its test status, as it does in a terminal.
+command that its model tables mark as unsupported for that board. Not every command is refused: on the boards
+that `ssgg` drives with direct lighting frames, except the wired Apex Pro TKL 2023 (`0x1628`), `actuation set` and
+`actuation set-value` send the unverified `0x2D` command `[EXPERIMENTAL]`, and the CLI output says so; other
+boards answer "not supported". The output the panel shows is the CLI's own text, which may name a model or its
+test status, as it does in a terminal.
 
 **`[EXPERIMENTAL]`**: as with every other panel, a board that ignores a command still answers success.
 

@@ -207,8 +207,8 @@ fn plan_lines(slot: u8, blob: &[u8; PROFILE_LEN], backup: &Path, activate: bool)
     Ok(lines)
 }
 
-/// The keyboard this family's commands run on: the first wired Apex Pro TKL 2023.
-fn open_wired_2023(manager: Option<&mut DeviceManager>) -> Result<(Box<dyn Keyboard>, String)> {
+/// The keyboard this family's commands run on: the first one with `can_run_gen3_commands`.
+fn open_gen3_keyboard(manager: Option<&mut DeviceManager>) -> Result<(Box<dyn Keyboard>, String)> {
     refuse_while_gg_runs(&running_process_names())?;
     let Some(manager) = manager else {
         return Err(Error::Other("the Gen3 profile command needs a device".to_string()));
@@ -503,7 +503,7 @@ pub(crate) fn cmd_gen3_write(manager: Option<&mut DeviceManager>, args: OnboardG
     require_yes(args.yes, "gen3-write")?;
     ensure_fresh_dir(&backup)?;
 
-    let (mut keyboard, name) = open_wired_2023(manager)?;
+    let (mut keyboard, name) = open_gen3_keyboard(manager)?;
     println!("writing slot {} on {name}", args.slot);
     let reads = backup_slots(&mut |slot| keyboard.read_gen3_profile(slot), &backup, &[])?;
     check_target_is_lossless(&reads, args.slot)?;
@@ -514,7 +514,7 @@ pub(crate) fn cmd_gen3_write(manager: Option<&mut DeviceManager>, args: OnboardG
 
 pub(crate) fn cmd_gen3_activate(manager: Option<&mut DeviceManager>, args: &OnboardGen3ActivateArgs) -> Result<()> {
     require_yes(args.yes, "gen3-activate")?;
-    let (mut keyboard, name) = open_wired_2023(manager)?;
+    let (mut keyboard, name) = open_gen3_keyboard(manager)?;
     print_replies(&keyboard.activate_gen3_profile(args.slot)?);
     println!("slot {} activated on {name}", args.slot);
     Ok(())
@@ -571,7 +571,7 @@ pub(crate) fn cmd_gen3_restore(manager: Option<&mut DeviceManager>, args: Onboar
     require_yes(args.yes, "gen3-restore")?;
     ensure_fresh_dir(&backup)?;
 
-    let (mut keyboard, name) = open_wired_2023(manager)?;
+    let (mut keyboard, name) = open_gen3_keyboard(manager)?;
     println!("restoring slots {slots:?} on {name}");
     // A slot being repaired may be unreadable or fail its checksum: the saved file is validated instead.
     let reads = backup_slots(&mut |slot| keyboard.read_gen3_profile(slot), &backup, &slots)?;

@@ -860,7 +860,8 @@ async fn cmd_per_key_rgb(keyboard: &mut Box<dyn Keyboard>, action: PerKeyAction)
             if perkey_supported {
                 println!("Per-key colours: yes (a key mapping exists for this keyboard)");
                 println!(
-                    "Note: confirmed on the Apex Pro TKL 2023 (0x1628) and the Apex Pro (2024) (0x1640); \
+                    "Note: confirmed on the Apex Pro TKL 2023 (0x1628, Windows; Linux untested) and the Apex Pro \
+                     (2024) (0x1640, Linux); \
                      [EXPERIMENTAL] on other boards, which may ignore the frames and still answer success"
                 );
             } else {
