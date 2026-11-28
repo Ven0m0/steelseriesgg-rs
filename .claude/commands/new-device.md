@@ -15,6 +15,7 @@ every yes/no capability is a `can_*` field with a plain doc comment.
 In every case, add the product ID to `product_ids` in `src/devices/mod.rs`.
 
 **For a keyboard:**
+
 - Add a row to `KEYBOARD_MODELS` (`src/devices/keyboards/models.rs`): name, class, direct frame and the
   behaviour properties it needs (interfaces, zone count, `can_*` flags). A wired Gen 3 board also gets a
   `MODEL_CAPS` row (`src/devices/keyboards/model_caps.rs`).
@@ -26,6 +27,7 @@ In every case, add the product ID to `product_ids` in `src/devices/mod.rs`.
   - Use `HidReportBuilder` for all HID output — never raw bytes
 
 **For a headset:**
+
 - If it speaks the Nova 7 frames: a row in `NOVA7_MODELS` (`src/devices/headsets/nova7.rs`).
 - Otherwise `src/devices/headsets/<snake_case_name>.rs` implementing the `Headset` trait, with its own model table
   and a lookup of that table in `DeviceManager::open_headset` (`src/devices/discovery.rs`); without it the headset
@@ -33,6 +35,7 @@ In every case, add the product ID to `product_ids` in `src/devices/mod.rs`.
 - Add the name and type arms in `src/devices/mod.rs`.
 
 **For a mouse:**
+
 - A row in `MOUSE_MODELS` (`src/devices/mice/modern.rs`) with its `MouseSpec`, plus the name and type arms in
   `src/devices/mod.rs`. A mouse outside the Modern family needs its own driver, its own table and a lookup in
   `DeviceManager::open_mouse`.
