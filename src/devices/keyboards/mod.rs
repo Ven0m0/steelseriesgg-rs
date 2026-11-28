@@ -610,7 +610,7 @@ impl GenericKeyboard {
 
     async fn send_zone_buffer_async(&mut self) -> Result<()> {
         // A keyboard without the 0xFF "all zones" selector gets one command per zone, zones counted from 1.
-        if !models::keyboard_model(self.info.product_id).is_none_or(|model| model.can_set_all_zones_at_once) {
+        if models::keyboard_model(self.info.product_id).is_some_and(|model| !model.can_set_all_zones_at_once) {
             for i in 0..self.zone_color_buffer.len() {
                 let color = self.zone_color_buffer[i];
                 let zone_index = (i + 1) as u8; // zones start at 1, not 0

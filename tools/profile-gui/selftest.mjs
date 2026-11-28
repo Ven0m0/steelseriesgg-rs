@@ -1904,7 +1904,7 @@ ok('every ssgg action the CLI has for actuation is in the panel', () => {
   return eq(have, ['clear-second', 'rapid-tap', 'rapid-tap-pairs', 'rapid-trigger', 'release-mode', 'set', 'set-key', 'set-value']);
 });
 ok('the control panel labels and notes name no model and no product ID', () => {
-  // .claude/rules/device-capabilities.md: a form runs on whatever board is connected, and ssgg refuses what it cannot do.
+  // .claude/rules/device-capabilities.md: a form runs on whatever board is connected, and ssgg refuses what its model tables mark unsupported.
   const names = Object.values(app.PRODUCTS ? app.PRODUCTS.products : {}).map((p) => p.name).filter(Boolean);
   const texts = control.GROUPS.flatMap(([title, list]) => [title, ...list.flatMap((c) => [c.label, c.note ?? '',
     ...(c.fields ?? []).flatMap((f) => [f.name ?? '', f.hint ?? '', ...(f.options ?? []).map(String)])])]);

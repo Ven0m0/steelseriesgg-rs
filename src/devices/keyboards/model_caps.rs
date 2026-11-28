@@ -91,7 +91,8 @@ pub struct ModelCaps {
     pub can_write_region: bool,
     /// The Gen 3 commands `ssgg onboard gen3-*`, `ssgg keymap` and `ssgg device` look for this keyboard (the Apex 7
     /// `ssgg onboard read`/`write`/`load` commands do not use this flag). Only the Apex Pro TKL 2023 `0x1628`, which
-    /// they were built for: its reads and base-layer key-mapping write are confirmed (Windows, 2026-11-10/11); the
+    /// they were built for: its reads (`83 01`, `B6`, `B7`, `F2`, `F5`) and base-layer key-mapping write are confirmed
+    /// (Windows, 2026-11-10/11), the `90 00` firmware poll of `ssgg device info` is not recorded there; the
     /// profile write, activation, meta key and region are `[EXPERIMENTAL]`. The other boards' reads are in the
     /// library only.
     pub can_run_gen3_commands: bool,

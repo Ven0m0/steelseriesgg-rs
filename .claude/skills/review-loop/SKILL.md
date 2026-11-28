@@ -33,7 +33,9 @@ check says so. Today these are:
 | `re-verifier` | hardware status claims against `.claude/rules/experimental-protocol.md` |
 | `release-reviewer` | commit messages, PR title and squash message, version bump |
 
-If `.claude/agents/` has more agents than this table, start them too.
+The area is what the review-loop prompt gives each agent; it can be wider than the agent's own file (for example
+`docs-drift-auditor` also reads the skills and the PR text). If `.claude/agents/` has more agents than this table,
+start them too.
 
 ## Scope
 
@@ -61,7 +63,8 @@ Start the agents of one round in one message, so they run at the same time.
 3. Fix the real problems on the branch. Keep each fix minimal; do not refactor beyond the finding.
 4. Run the checks (all must pass before the next round):
    - `cargo fmt --all -- --check`
-   - `cargo clippy --all-targets --locked -- -D warnings`, and with `--features sonar`, `remap`, `desktop`
+   - `cargo clippy --all-targets --locked -- -D warnings`, and with each feature of the CI matrix (`audio`,
+     `sonar`, `remap`, `desktop`; see `.github/workflows/ci.yml`, or run the `ci-matrix` skill)
    - `cargo test --locked`
    - `node tools/profile-gui/sync-products.mjs --check` (regenerate without `--check` when Rust tables changed)
    - the `gui-selftest` skill (source and minified selftest) when the editor or `src/gui.rs` changed
