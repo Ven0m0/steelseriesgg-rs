@@ -51,14 +51,22 @@ pub trait Headset: Device {
 
 /// Settings a headset model takes. A step count is the number of distinct levels the headset has, so
 /// `ssgg`'s 0-100 scale maps onto `0..steps`; 0 means the model has no such setting.
+///
+/// Every value comes from the model's `nova7::Nova7Model` row (two community forks, GG's specs and the hardware
+/// reports its fields name; `[EXPERIMENTAL]`), whose fields say what was confirmed on the Arctis Nova 7 Gen 2
+/// `0x227E`; `0` or `false` on [`GenericHeadset`].
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize)]
 pub struct HeadsetCapabilities {
+    /// How many sidetone levels `ssgg headset sidetone` and the Headset tab offer; 0 hides the control.
     pub sidetone_steps: u8,
+    /// How many microphone-volume levels `ssgg headset mic-volume` and the Headset tab offer.
     pub mic_volume_steps: u8,
-    pub auto_off: bool,
-    pub chat_mix: bool,
-    /// Whether the model answers a status query (battery, connection, charging).
-    pub status: bool,
+    /// The headset can turn itself off after an idle time that `ssgg` sets.
+    pub can_set_auto_off: bool,
+    /// The headset reports the position of its ChatMix dial.
+    pub can_report_chat_mix: bool,
+    /// The headset answers a status query: battery, connection and charging.
+    pub can_report_status: bool,
 }
 
 /// Headset state as far as the protocol reports it; `None` marks a field the headset cannot report.
@@ -193,5 +201,34 @@ impl Headset for GenericHeadset {
 
     fn set_auto_off(&mut self, _minutes: u8) -> Result<()> {
         Err(self.no_protocol("Auto-off"))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The editor's Headset tab reads these keys (`tools/profile-gui/headset.js`; the self-test checks the same
+    /// list), so a renamed field must be renamed there too.
+    #[test]
+    fn the_capability_keys_are_the_ones_the_headset_tab_reads() {
+        let json = serde_json::to_value(HeadsetCapabilities::default()).expect("serialises");
+        let mut keys: Vec<&str> = json
+            .as_object()
+            .expect("an object")
+            .keys()
+            .map(String::as_str)
+            .collect();
+        keys.sort_unstable();
+        assert_eq!(
+            keys,
+            [
+                "can_report_chat_mix",
+                "can_report_status",
+                "can_set_auto_off",
+                "mic_volume_steps",
+                "sidetone_steps"
+            ]
+        );
     }
 }

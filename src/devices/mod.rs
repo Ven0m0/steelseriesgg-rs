@@ -728,19 +728,12 @@ pub fn device_name_from_product_id(product_id: u16) -> &'static str {
     }
 }
 
-/// Get RGB zone count for keyboard product IDs.
-/// Returns the number of independently controllable RGB zones.
+/// How many lighting zones the zone commands address on a keyboard: its [`KeyboardModel`] row's `zone_count`, or 1
+/// for a product ID with no row.
+///
+/// [`KeyboardModel`]: keyboards::models::KeyboardModel
 pub fn zone_count_for_product_id(product_id: u16) -> usize {
-    use product_ids::*;
-
-    match product_id {
-        APEX_3 => 10,
-        APEX_3_TKL => 8,
-        APEX_PRO_TKL_2023 | APEX_PRO_TKL_2023_WIRELESS | APEX_PRO_TKL_2023_WIRELESS_2 => 9,
-        // Zone counts for these models are unverified — 1 is a safe default until captured.
-        APEX_PRO | APEX_PRO_TKL | APEX_5 | APEX_7 | APEX_7_TKL | APEX_150 => 1,
-        _ => 1,
-    }
+    keyboards::models::keyboard_model(product_id).map_or(1, |model| model.zone_count)
 }
 
 #[cfg(test)]

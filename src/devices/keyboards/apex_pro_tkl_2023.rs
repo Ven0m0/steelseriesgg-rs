@@ -126,8 +126,9 @@ pub(crate) const MINI_FRAME: DirectFrame = DirectFrame {
 /// - GG's decrypted device spec (`apex_pro_tkl_2022` `device-key-idx-to-hid`, first 70 entries minus its two
 ///   blanks) lists the same 68 usages in the same order, an independent check of every slot (2026-10-25).
 ///
-/// The checksum at offset 12320 is solved (`apex_pro_tkl_2023_profile`), but writing the blob stays blocked:
-/// the write chain (`02 01`, `03 01`, `B1`) is untested; the read-back (`read_gen3_profile`) is confirmed (2026-11-10).
+/// The checksum at offset 12320 is solved (`apex_pro_tkl_2023_profile`). Writing the blob is implemented and gated
+/// (`ssgg onboard gen3-write --yes`, `can_write_profile`), but the write chain (`02 01`, `03 01`, `B1`) has not been
+/// sent from `ssgg` on hardware (`[EXPERIMENTAL]`); the read-back (`read_gen3_profile`) is confirmed (2026-11-10).
 pub const WIRED_2023_PROFILE_SLOTS: [u8; 68] = [
     // ` 1 2 3 4 5 6 7 8 9 0 - = Yen
     0x35, 0x1E, 0x1F, 0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x2D, 0x2E, 0x89,
@@ -561,15 +562,9 @@ pub struct ApexProTkl2023 {
 }
 
 impl ApexProTkl2023 {
-    /// Product ID for Apex Pro TKL 2023.
-    pub const PRODUCT_ID: u16 = 0x1628;
-
     /// Create from a generic keyboard; the software brightness is the level last saved for this model.
     pub fn new(keyboard: GenericKeyboard) -> Self {
-        if matches!(
-            keyboard.info().product_id,
-            product_ids::APEX_PRO_MINI | product_ids::APEX_PRO_MINI_2024 | product_ids::APEX_9_MINI
-        ) {
+        if keyboard_model(keyboard.info().product_id).is_some_and(|model| model.us_key_table_without_layout_query) {
             tracing::warn!(
                 "{} direct lighting supports US layouts only; layout detection is unavailable. \
                  ISO/UK/JP layouts may leave keys unlit or address nonexistent keys",
@@ -596,12 +591,6 @@ impl ApexProTkl2023 {
     /// Whether this device uses the new 2023 per-key direct protocol.
     fn uses_new_protocol(&self) -> bool {
         self.direct_packet_id().is_some()
-    }
-
-    /// The wired 2023 model (`0x1628`) uses GG's own key table and frame size, and its 0x4B init
-    /// was not seen in the capture.
-    fn is_wired_2023(&self) -> bool {
-        self.inner.info().product_id == product_ids::APEX_PRO_TKL_2023
     }
 
     /// The direct frame of this model's [`KeyboardModel`](super::models::KeyboardModel) row, picked by the
@@ -791,7 +780,7 @@ impl ApexProTkl2023 {
     /// On the wired board this sends the spec's live hall thresholds for every analog key (0.1-4.0 mm);
     /// elsewhere the unverified `0x2D` guess, a confirmed no-op on `0x1628`.
     pub fn set_actuation_point(&mut self, value: u8) -> Result<()> {
-        if self.is_wired_2023() {
+        if model_caps(self.inner.info().product_id).is_some_and(|caps| caps.can_set_actuation_live) {
             self.send_analog_setting(&AnalogSetting::Actuation {
                 layer: HallLayer::Primary,
                 tenths_mm: Some(value),
@@ -802,16 +791,6 @@ impl ApexProTkl2023 {
         let command = ActuationCommand::new(value);
         command.validate()?;
         self.send_actuation_command(command)
-    }
-
-    fn require_wired_2023(&self, what: &str) -> Result<()> {
-        if self.is_wired_2023() {
-            return Ok(());
-        }
-        Err(crate::Error::DeviceCommunication(format!(
-            "{what} is only defined for the wired Apex Pro TKL 2023 (0x1628), not {:#06x}",
-            self.inner.info().product_id
-        )))
     }
 
     /// The capability row of this keyboard when `allowed` holds for it; otherwise an error that says `what` is
@@ -830,10 +809,10 @@ impl ApexProTkl2023 {
     }
 
     /// The boards whose typed commands (mapping, macro, query) are sized for the 645-byte feature report.
-    fn require_wide_reports(&self, what: &str) -> Result<&'static ModelCaps> {
+    fn require_645_byte_commands(&self, what: &str) -> Result<&'static ModelCaps> {
         self.require_caps(
             what,
-            ModelCaps::wide_reports,
+            ModelCaps::can_take_645_byte_commands,
             "its feature report is not the 645 bytes this command is sized for",
         )
     }
@@ -843,10 +822,10 @@ impl ApexProTkl2023 {
         self.require_caps(
             what,
             |caps| {
-                caps.wide_reports()
+                caps.can_take_645_byte_commands()
                     && caps.mapping_keys == MAPPING_KEYS
                     && (layer != MappingLayer::Second
-                        || (caps.has_second_actuation && caps.analog_keys == layer.keys()))
+                        || (caps.can_use_second_actuation_layer && caps.analog_keys == layer.keys()))
             },
             "its feature report size, key list or second actuation layer is not the 0x1628's",
         )
@@ -869,7 +848,7 @@ impl ApexProTkl2023 {
     pub fn send_analog_setting(&mut self, setting: &AnalogSetting) -> Result<Option<Vec<u8>>> {
         self.require_caps(
             "a live analog-key setting",
-            |caps| caps.live_analog,
+            |caps| caps.can_set_actuation_live,
             "its raw hall-threshold table or report size is not the wired 0x1628's, or it has no analog keys",
         )?;
         let (report, feature) = analog_report(setting)?;
@@ -902,7 +881,7 @@ impl ApexProTkl2023 {
         if matches!(command, Apex2022DisplayCommand::ClearDirect) {
             self.require_caps(
                 "the direct-mode release",
-                |caps| caps.clear_direct,
+                |caps| caps.can_restore_onboard_lighting,
                 "its `clear_direct_write` output report has not been confirmed on hardware",
             )?;
         } else {
@@ -922,7 +901,7 @@ impl ApexProTkl2023 {
     pub fn read_gen3_profile(&mut self, slot: u8) -> Result<Gen3ProfileRead> {
         self.require_caps(
             "the Gen3 on-board profile read",
-            |caps| caps.profile_read,
+            |caps| caps.can_read_profile,
             "its on-board profile is not the 0x1628's 12,500-byte blob",
         )?;
         let requests = gen3_read_requests(slot)?;
@@ -982,7 +961,11 @@ impl ApexProTkl2023 {
     /// echo its command with status 0, and no chunk follows an erase that was not answered so. Wired board only.
     /// Not yet replayed from `ssgg` on hardware. The answers are returned for the log.
     pub fn write_gen3_profile(&mut self, slot: u8, blob: &[u8; PROFILE_LEN]) -> Result<Vec<Gen3Reply>> {
-        self.require_wired_2023("the Gen3 on-board profile write")?;
+        self.require_caps(
+            "the Gen3 on-board profile write",
+            |caps| caps.can_write_profile,
+            "not built for this board",
+        )?;
         let erase = ProfileEraseCommand { slot };
         erase.validate()?;
         self.drain_input_reports()?;
@@ -1018,7 +1001,11 @@ impl ApexProTkl2023 {
     /// echoes `B2` with status 0), then `34 00`, as GG does to activate. **Changes what the keyboard runs now.**
     /// Wired board only. Not yet replayed from `ssgg` on hardware.
     pub fn activate_gen3_profile(&mut self, slot: u8) -> Result<Vec<Gen3Reply>> {
-        self.require_wired_2023("the Gen3 on-board profile activation")?;
+        self.require_caps(
+            "the Gen3 on-board profile activation",
+            |caps| caps.can_switch_profile,
+            "not built for this board",
+        )?;
         let load = LoadProfileCommand { slot };
         load.validate()?;
         self.drain_input_reports()?;
@@ -1047,7 +1034,7 @@ impl ApexProTkl2023 {
         self.require_mapping("the key-mapping write", layer)?;
         self.require_caps(
             "the key-mapping write",
-            |caps| caps.mapping_write_confirmed,
+            |caps| caps.can_write_key_mappings,
             "key-mapping writes are only wired for the 0x1628",
         )?;
         for report in key_mapping_reports(layer, entries)? {
@@ -1078,7 +1065,11 @@ impl ApexProTkl2023 {
 
     /// `[EXPERIMENTAL]` Assign the SteelSeries (meta) key to a HID usage (`00 35 <hid>`). Wired board only.
     pub fn meta_key(&mut self, hid: u8) -> Result<()> {
-        self.require_wired_2023("the meta-key assignment")?;
+        self.require_caps(
+            "the meta-key assignment",
+            |caps| caps.can_set_meta_key,
+            "not built for this board",
+        )?;
         self.send_report(&command_report(MetaToggleCommand { hid }, KEYBOARD_REPORT_SIZE)?, false)
     }
 
@@ -1094,7 +1085,11 @@ impl ApexProTkl2023 {
 
     /// `[EXPERIMENTAL]` **Writes flash**: set the region id (`00 75 <region>`). Wired board only.
     pub fn write_region(&mut self, region: u8) -> Result<()> {
-        self.require_wired_2023("the region write")?;
+        self.require_caps(
+            "the region write",
+            |caps| caps.can_write_region,
+            "not built for this board",
+        )?;
         self.send_report(
             &command_report(RegionWriteCommand { region }, KEYBOARD_REPORT_SIZE)?,
             false,
@@ -1105,7 +1100,7 @@ impl ApexProTkl2023 {
     pub fn read_macro_data(&mut self) -> Result<Vec<u8>> {
         self.require_caps(
             "the macro data read",
-            |caps| caps.wide_reports() && caps.macro_data_size == MacroReadCommand::DATA_LEN,
+            |caps| caps.can_take_645_byte_commands() && caps.macro_data_size == MacroReadCommand::DATA_LEN,
             "its feature report or macro data size is not the 0x1628's",
         )?;
         let mut replies = Vec::new();
@@ -1123,7 +1118,7 @@ impl ApexProTkl2023 {
 
     /// Send a layout or region query (output report) and take the first input report that carries its answer.
     fn query_device(&mut self, query: DeviceQueryCommand) -> Result<u8> {
-        self.require_wide_reports("the layout/region query")?;
+        self.require_645_byte_commands("the layout/region query")?;
         self.send_report(&command_report(query, KEYBOARD_REPORT_SIZE)?, false)?;
         for _ in 0..5 {
             let Some(reply) = self.inner.read_profile_input_packet(KEYBOARD_REPORT_SIZE, 500)? else {
@@ -1320,7 +1315,7 @@ crate::impl_keyboard_with_delegation!(ApexProTkl2023, {
     }
 
     fn firmware_version(&mut self) -> Result<Option<String>> {
-        self.require_wide_reports("the firmware poll")?;
+        self.require_645_byte_commands("the firmware poll")?;
         Ok(self.poll_firmware_version())
     }
 
@@ -1810,14 +1805,16 @@ mod tests {
             for layer in [MappingLayer::Base, MappingLayer::Meta, MappingLayer::Second] {
                 keyboard.require_mapping("mapping", layer).unwrap();
             }
-            keyboard.require_wide_reports("query").unwrap();
-            let live = refusal(keyboard.require_caps("analog", |c| c.live_analog, "table"));
+            keyboard.require_645_byte_commands("query").unwrap();
+            let live = refusal(keyboard.require_caps("analog", |c| c.can_set_actuation_live, "table"));
             assert!(live.contains("not supported on"), "{pid:#06x}: {live}");
             let oled = refusal(keyboard.require_caps("oled", |c| c.oled == OledImage::RowMajor, "layout"));
             assert!(oled.contains("[EXPERIMENTAL]"), "{pid:#06x}: {oled}");
         }
         let wired = keyboard_for(product_ids::APEX_PRO_TKL_2023);
-        wired.require_caps("analog", |c| c.live_analog, "table").unwrap();
+        wired
+            .require_caps("analog", |c| c.can_set_actuation_live, "table")
+            .unwrap();
         wired
             .require_caps("oled", |c| c.oled == OledImage::RowMajor, "layout")
             .unwrap();
@@ -1858,7 +1855,7 @@ mod tests {
             let mut keyboard = keyboard_for(caps.product_id);
             if caps.product_id == product_ids::APEX_PRO_TKL_2023 {
                 keyboard
-                    .require_caps("release", |c| c.clear_direct, "unconfirmed")
+                    .require_caps("release", |c| c.can_restore_onboard_lighting, "unconfirmed")
                     .unwrap();
             } else {
                 let text = refusal(keyboard.send_display_command(Apex2022DisplayCommand::ClearDirect));

@@ -9,14 +9,13 @@ use super::headsets::nova7::{Nova7Headset, nova7_model};
 use super::headsets::{GenericHeadset, Headset};
 use super::hid_reports::ConnectionHealth;
 use super::keyboards::apex::{Apex3, Apex3Tkl};
-use super::keyboards::apex_m750::{ApexM750, CONTROL_INTERFACE as APEX_M750_CONTROL_INTERFACE};
+use super::keyboards::apex_m750::ApexM750;
 use super::keyboards::apex_pro_tkl_2023::ApexProTkl2023;
 pub use super::keyboards::models::KeyboardClass;
 use super::keyboards::models::keyboard_model;
 use super::keyboards::{GenericKeyboard, Keyboard};
 use super::mice::Mouse;
 use super::mice::modern::{ModernMouse, model_for as mouse_model};
-use super::product_ids::{APEX_M750, APEX_PRO_TKL_2023_WIRELESS, APEX_PRO_TKL_2023_WIRELESS_2};
 use super::{
     DeviceInfo, DeviceType, STEELSERIES_CONTROL_USAGE_PAGE, device_name_from_product_id, device_type_from_product_id,
 };
@@ -36,14 +35,10 @@ use crate::{Error, Result, STEELSERIES_VENDOR_ID};
 ///    (kept as a fallback since the wireless PIDs are unverified against this ranking).
 /// 4. Standard OS-facing pages (Generic Desktop `0x0001`, Consumer `0x000C`) never qualify.
 fn control_score(usage_page: u16, interface_number: i32, product_id: u16, device_type: DeviceType) -> Option<u32> {
-    // [EXPERIMENTAL] The M750 exposes many interfaces and only interface 2 takes the lighting feature
-    // reports (community fork, untested), so no other interface qualifies, vendor page or not.
-    if product_id == APEX_M750 {
-        return (interface_number == APEX_M750_CONTROL_INTERFACE).then_some(if usage_page >= 0xFF00 {
-            3_000_000
-        } else {
-            1_000_000
-        });
+    // A keyboard with one control interface (the M750: many interfaces, lighting on one) qualifies nowhere else,
+    // vendor page or not.
+    if let Some(only) = keyboard_model(product_id).and_then(|model| model.only_control_interface) {
+        return (interface_number == only).then_some(if usage_page >= 0xFF00 { 3_000_000 } else { 1_000_000 });
     }
     // Modern-family mice take their commands on one interface per model (community fork; interface 3 confirmed on
     // a wired Rival 3 Gen 2, [EXPERIMENTAL] on other models), so no other interface qualifies, vendor page or not.
@@ -60,12 +55,7 @@ fn control_score(usage_page: u16, interface_number: i32, product_id: u16, device
     }
 
     let fallback_interface = match device_type {
-        DeviceType::Keyboard
-            if product_id == APEX_PRO_TKL_2023_WIRELESS || product_id == APEX_PRO_TKL_2023_WIRELESS_2 =>
-        {
-            3
-        }
-        DeviceType::Keyboard => 1,
+        DeviceType::Keyboard => keyboard_model(product_id).map_or(1, |model| model.fallback_control_interface),
         DeviceType::Headset => 3,
         DeviceType::Mouse | DeviceType::Unknown => return None,
     };
@@ -469,7 +459,7 @@ impl DeviceManager {
         // that only works through the raw feature report path.
         let hid_device = match self.open_device(info) {
             Ok(dev) => dev,
-            Err(e) if keyboard_model(info.product_id).is_some_and(|m| m.raw_fallback) => {
+            Err(e) if keyboard_model(info.product_id).is_some_and(|m| m.can_open_through_raw_hidraw) => {
                 tracing::warn!("hidapi open failed for wireless keyboard (expected): {e}. Using raw hidraw path.");
                 return Ok(Box::new(ApexProTkl2023::new_wireless_raw(info.clone())));
             }
@@ -524,7 +514,7 @@ impl DeviceManager {
                     continue;
                 }
             };
-            if !keyboard.supports_onboard_profile() {
+            if !keyboard.can_use_onboard_profile() {
                 continue;
             }
             candidates.push((info.product_id, info.name.to_string(), keyboard));
@@ -1023,6 +1013,8 @@ pub enum OnboardKeyboard {
 
 #[cfg(test)]
 mod tests {
+    use super::super::keyboards::apex_m750::CONTROL_INTERFACE as APEX_M750_CONTROL_INTERFACE;
+    use super::super::product_ids::{APEX_M750, APEX_PRO_TKL_2023_WIRELESS};
     use super::*;
     use crate::devices::product_ids::{APEX_3, APEX_3_TKL, APEX_7, APEX_PRO, APEX_PRO_TKL_2023};
 

@@ -14,6 +14,7 @@ use steelseries_gg::devices::keyboards::key_action::{
     KeyAction, MappingLayer, default_key_mappings, differing_bindings, key_mapping_read_request, key_mapping_reports,
     merge_key_mappings,
 };
+use steelseries_gg::devices::keyboards::model_caps::model_caps;
 use steelseries_gg::devices::{DeviceManager, DeviceType, HidDeviceType, KeyMappingDatabase, product_ids};
 use steelseries_gg::fs_utils::secure_write_async;
 use steelseries_gg::{Error, Result};
@@ -25,8 +26,10 @@ fn open_keyboard(manager: &DeviceManager) -> Result<Box<dyn Keyboard>> {
     let info = manager
         .devices_by_type(DeviceType::Keyboard)
         .into_iter()
-        .find(|info| info.product_id == product_ids::APEX_PRO_TKL_2023)
-        .ok_or_else(|| Error::DeviceNotFound("no wired Apex Pro TKL 2023 (0x1628) connected".to_string()))?;
+        .find(|info| model_caps(info.product_id).is_some_and(|caps| caps.can_run_gen3_commands))
+        .ok_or_else(|| {
+            Error::DeviceNotFound("no keyboard that these commands support is connected (built for 0x1628)".to_string())
+        })?;
     let keyboard = manager.open_keyboard(info)?;
     crate::warn_if_gg_engine_running();
     println!(

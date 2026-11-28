@@ -715,6 +715,15 @@ function onboardModelPids() {
   return PRODUCTS === null ? LEGACY_ONBOARD_PIDS.slice() : PRODUCTS.onboardPids.map((hex) => Number.parseInt(hex, 16));
 }
 
+/// Whether Rust's registry says the model answers the on-board profile protocol this page encodes
+/// (`can_use_onboard_profile` in the generated table). Only when the table was not imported does the page fall
+/// back to its own copy, `LEGACY_ONBOARD_PIDS`.
+function canUseOnboardProfile(pid) {
+  if (PRODUCTS === null) return LEGACY_ONBOARD_PIDS.includes(pid);
+  const hex = productHex(pid);
+  return hex !== null && PRODUCTS.products[hex]?.can_use_onboard_profile === true;
+}
+
 /// What kind of device a product ID is in Rust's registry (`device_type_from_product_id` in
 /// src/devices/mod.rs): keyboard, mouse, headset, the registry's fallback, or null when the import is
 /// absent.
@@ -733,7 +742,7 @@ function deviceFeatures(pid) {
   const hex = productHex(pid);
   if (hex === null) return ['not a product ID'];
   const info = PRODUCTS === null ? null : PRODUCTS.products[hex] ?? null;
-  const onboard = info ? info.onboard === true : LEGACY_ONBOARD_PIDS.includes(pid);
+  const onboard = canUseOnboardProfile(pid);
   const kind = productKind(pid);
   const features = [
     // No import means no kind facts at all: say that rather than implying the registry is silent.
@@ -1700,7 +1709,7 @@ function deviceLabel(doc) {
     // False when the crate's registry does not list the ID: its name is a placeholder, so the reader
     // trusts the number.
     known: listed !== null || Boolean(claim),
-    legacy: onboardModelPids().includes(pid),
+    legacy: canUseOnboardProfile(pid),
   };
 }
 
@@ -2692,7 +2701,7 @@ const SsggProfileApp = {
   MASK_MODE_REPORT_BOTH, HID2OFF, OFF2HID, KEY_NAMES, keyName, LAYOUT_LABELS, boardLabel, labelClass, subClass, fitSubText, ARROW_GLYPHS,
   WHEEL_UP, WHEEL_DOWN, WHEEL_KEYS, OLED_RECT, OLED_W, OLED_H, oledBytes, oledPixels, oledDataUrl, paintOled, renderOledPanel,
   MACRO_DATA_LEN, macroBlockBytes,
-  wheelEntry, copyName, CODE_COUNT, CONSUMER_TARGETS, PRODUCT_NAMES, LEGACY_ONBOARD_PIDS, PRODUCTS, IMPORT_SOURCE, onboardModelPids, importedName, productKind, deviceFeatures, deviceLabel, productHex, MEDIA_NAMES, MOUSE_FUNCTIONS, MOUSE_NAMES, META_ACTION_NAMES, META_CAP_LABELS, BINDING_GROUPS, FACTORY_BASE_ZEROS, FACTORY_BASE_MEDIA, FACTORY_BASE_EXTRA, FACTORY_META, bindingGroup, factoryEntry, optionSelect, bindingGroupOptions, mouseActionOptions, keyboardKeyOptions, mediaKeyOptions, metaActionOptions, macroBindingOptions, macroSummary, bindingOf, bindingCounts, codesPerEntry, customBindings, normalizeDoc, normalizeEntry, selectKey, renderBindingsPanel, FUNCTION_NAMES, functionName, hex2, hexOf, parseHex, colorToHex, hexToColor, LAYOUT_ROWS, LAYOUT, LAYOUT_HIDS, EXTRA_HIDS, MAPPING_COUNT, LAYER_BASE, LAYER_META, EXPECTED_ARRAYS, isValidProfileDoc, layerArray, keyEntry, mappingCodes, writeCodes, setFunction, setCode, setAllCodes, keyState, rapidTap, setRapidPair, rapidTapKeysFor, lighting, setLightingColor, NAME_FIELD_BYTES, setProfileName, serializeDoc, cloneDoc, diffAgainst, summarizeChanges, changeKeyHids, SVG_NS, el, svg, state, activeFile, activeDoc, nextFileId, addFile, downloadText, saveFile, fileChanges, changedFiles, codeOptions, CODE_OPTIONS, buildKeySelect, buildFunctionSelect, UNIT, GAP, boardKeyList, buildBoard, FILL_COLORS, paintBoard, ui, panel, line, numberInput, textInput, button, renderTabs, renderHeader, mappingRows, renderKeyPanel, renderBindingPanel, renderNameBar, panelPlan,
+  wheelEntry, copyName, CODE_COUNT, CONSUMER_TARGETS, PRODUCT_NAMES, LEGACY_ONBOARD_PIDS, PRODUCTS, IMPORT_SOURCE, onboardModelPids, canUseOnboardProfile, importedName, productKind, deviceFeatures, deviceLabel, productHex, MEDIA_NAMES, MOUSE_FUNCTIONS, MOUSE_NAMES, META_ACTION_NAMES, META_CAP_LABELS, BINDING_GROUPS, FACTORY_BASE_ZEROS, FACTORY_BASE_MEDIA, FACTORY_BASE_EXTRA, FACTORY_META, bindingGroup, factoryEntry, optionSelect, bindingGroupOptions, mouseActionOptions, keyboardKeyOptions, mediaKeyOptions, metaActionOptions, macroBindingOptions, macroSummary, bindingOf, bindingCounts, codesPerEntry, customBindings, normalizeDoc, normalizeEntry, selectKey, renderBindingsPanel, FUNCTION_NAMES, functionName, hex2, hexOf, parseHex, colorToHex, hexToColor, LAYOUT_ROWS, LAYOUT, LAYOUT_HIDS, EXTRA_HIDS, MAPPING_COUNT, LAYER_BASE, LAYER_META, EXPECTED_ARRAYS, isValidProfileDoc, layerArray, keyEntry, mappingCodes, writeCodes, setFunction, setCode, setAllCodes, keyState, rapidTap, setRapidPair, rapidTapKeysFor, lighting, setLightingColor, NAME_FIELD_BYTES, setProfileName, serializeDoc, cloneDoc, diffAgainst, summarizeChanges, changeKeyHids, SVG_NS, el, svg, state, activeFile, activeDoc, nextFileId, addFile, downloadText, saveFile, fileChanges, changedFiles, codeOptions, CODE_OPTIONS, buildKeySelect, buildFunctionSelect, UNIT, GAP, boardKeyList, buildBoard, FILL_COLORS, paintBoard, ui, panel, line, numberInput, textInput, button, renderTabs, renderHeader, mappingRows, renderKeyPanel, renderBindingPanel, renderNameBar, panelPlan,
   MACRO_MARKER, MACRO_MODE_NAMES, macroRecords, macroIndex, macroOrdinal, macroKeystrokes, macroBoundKeys, macroLine, macroDetailRows, renderMacrosPanel,
   META_TOGGLE_FUNCTION, META_LOCK_WIN_ACTION, computeMetaMask, metaMaskDiffers, META_KEY_HID, META_KEY_GG_CODE, META_KEY_SLOT, hidSlot, boardHid, metaToggleByte, toggleByteFor, isLockWinEntry, lockWinBinding, lockWinMarkers,
   PAYLOAD_LEN_A, PAYLOAD_LEN_B, PROFILE_REGION_BYTES, payloadLenForSchema, payloadSplit,

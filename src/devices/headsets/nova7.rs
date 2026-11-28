@@ -1,7 +1,9 @@
 //! Headsets using one-byte `<id> <opcode> <value>` frames: Arctis Nova 4/5/7, Nova 3, Nova Pro and Arctis 7+.
 //!
-//! [EXPERIMENTAL] The protocol comes from community forks and GG's decrypted device specs. Status, sidetone, mic
-//! volume and auto-off are confirmed on the PIDs in [`HARDWARE_CONFIRMED`] only; every other model is untested.
+//! [EXPERIMENTAL] The protocol comes from community forks and GG's decrypted device specs. On the PIDs in
+//! [`HARDWARE_CONFIRMED`] only these are confirmed: sidetone off and highest, mic volume lowest and highest, auto-off
+//! set to 1 minute (`a3 01`; off after about a minute idle), and status (battery, charging, ChatMix); every other
+//! value and model is untested.
 //! Frames are 64-byte output reports on the vendor control collection (usage page `0xFFC0`),
 //! report number 0 (6 on the Nova Pro family). The save frame `<id> 09` is never sent: it would persist
 //! settings on the headset.
@@ -43,41 +45,60 @@ pub enum StatusQuery {
 }
 
 /// Per-PID behaviour of one Nova 7 variant.
+///
+/// The values come from two community forks and GG's decrypted device specs (read 2026-10-25); the family
+/// constructors and table comments name a spec where one was used. They are `[EXPERIMENTAL]` except where a field
+/// says what was confirmed on the Arctis Nova 7 Gen 2 `0x227E`.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Nova7Model {
     pub product_id: u16,
+    /// How the status reply gives the battery charge: percent, or 4, 5 or 8 steps. Percent is confirmed on the
+    /// `0x227E` (it matched an independent reading, Linux, 2026-10-25).
     pub battery: BatteryScale,
-    pub sidetone: bool,
-    pub chat_mix: bool,
-    /// Lowest microphone-volume wire value: 0, or 1 on the Arctis 7+ family.
+    /// `ssgg headset sidetone` can set how loud the headset plays the microphone back. Confirmed on the Arctis
+    /// Nova 7 Gen 2 `0x227E` for levels 0 and 3 (Linux, 2026-10-25); levels 1-2 and the other models are
+    /// `[EXPERIMENTAL]`.
+    pub can_set_sidetone: bool,
+    /// The headset reports the position of its ChatMix dial in its status reply. Confirmed on the Arctis Nova 7
+    /// Gen 2 `0x227E` (Linux, 2026-10-25), `[EXPERIMENTAL]` on the other models that set it. `false` on the Nova 7P
+    /// (`0x220A`, `0x2298`, `0x22A7`), Arctis 7P+ and 7X+, where GG's spec has no ChatMix; on the Nova Pro family
+    /// and the wired Nova 3, where the spec's ChatMix is software-side and no frame is read; and on the Nova 5
+    /// `0x2232`, which has no dial (owner report, Linux, 2026-11-24).
+    pub can_report_chat_mix: bool,
+    /// Lowest microphone-volume wire value: 0, or 1 on the Arctis 7+ family, the Nova Pro family and the wired
+    /// Nova 3. 0 confirmed on the `0x227E` (Linux, 2026-10-25).
     pub mic_min: u8,
-    /// Highest sidetone wire value: 3, or 10 on the Nova 5 family.
+    /// Highest sidetone wire value: 3, or 10 on the Nova 5 family. 3 confirmed on the `0x227E` (Linux, 2026-10-25).
     pub sidetone_max: u8,
-    /// Highest microphone-volume wire value: 7, or 15 on the Nova 5 family.
+    /// Highest microphone-volume wire value: 7, 10 on the Nova Pro family, or 15 on the Nova 5 family. 7 confirmed
+    /// on the `0x227E` (Linux, 2026-10-25).
     pub mic_max: u8,
     /// Bytes between the power and battery bytes of a status reply: 0, or 1 on the Nova 5 family.
     pub status_gap: usize,
     /// Report number in byte 0 of every frame: 0, or 6 on the Nova Pro family.
     pub report_id: u8,
-    /// The status query the model answers.
+    /// The status query the model answers. `B0` confirmed on the `0x227E` (battery, charging and ChatMix, Linux,
+    /// 2026-10-25).
     pub status: StatusQuery,
-    /// Whether the spec has an `inactivity_timer` (`a3`) for the model.
-    pub auto_off: bool,
+    /// `ssgg headset auto-off` can set the idle time after which the headset turns off (the spec's
+    /// `inactivity_timer`, `a3`). On the Arctis Nova 7 Gen 2 `0x227E` only `a3 01` was observed (off after about a
+    /// minute, Linux, 2026-10-25); disabling (`a3 00`), other times and the other models are `[EXPERIMENTAL]`.
+    pub can_set_auto_off: bool,
 }
 
 const fn model(product_id: u16, battery: BatteryScale, sidetone_and_chat_mix: bool) -> Nova7Model {
     Nova7Model {
         product_id,
         battery,
-        sidetone: sidetone_and_chat_mix,
-        chat_mix: sidetone_and_chat_mix,
+        can_set_sidetone: sidetone_and_chat_mix,
+        can_report_chat_mix: sidetone_and_chat_mix,
         mic_min: 0,
         sidetone_max: 3,
         mic_max: 7,
         status_gap: 0,
         report_id: 0,
         status: StatusQuery::B0,
-        auto_off: true,
+        can_set_auto_off: true,
     }
 }
 
@@ -89,8 +110,8 @@ const fn nova_pro_model(product_id: u16, wireless: bool) -> Nova7Model {
     Nova7Model {
         product_id,
         battery: BatteryScale::Steps8,
-        sidetone: true,
-        chat_mix: false,
+        can_set_sidetone: true,
+        can_report_chat_mix: false,
         mic_min: 1,
         sidetone_max: 3,
         mic_max: 10,
@@ -101,7 +122,7 @@ const fn nova_pro_model(product_id: u16, wireless: bool) -> Nova7Model {
         } else {
             StatusQuery::None
         },
-        auto_off: false,
+        can_set_auto_off: false,
     }
 }
 
@@ -112,15 +133,15 @@ const fn nova5_model(product_id: u16, chat_mix: bool) -> Nova7Model {
     Nova7Model {
         product_id,
         battery: BatteryScale::Percent,
-        sidetone: true,
-        chat_mix,
+        can_set_sidetone: true,
+        can_report_chat_mix: chat_mix,
         mic_min: 0,
         sidetone_max: 10,
         mic_max: 15,
         status_gap: 1,
         report_id: 0,
         status: StatusQuery::B0,
-        auto_off: true,
+        can_set_auto_off: true,
     }
 }
 
@@ -130,15 +151,15 @@ const fn plus_model(product_id: u16, sidetone: bool, chat_mix: bool) -> Nova7Mod
     Nova7Model {
         product_id,
         battery: BatteryScale::Steps5,
-        sidetone,
-        chat_mix,
+        can_set_sidetone: sidetone,
+        can_report_chat_mix: chat_mix,
         mic_min: 1,
         sidetone_max: 3,
         mic_max: 7,
         status_gap: 0,
         report_id: 0,
         status: StatusQuery::B0,
-        auto_off: true,
+        can_set_auto_off: true,
     }
 }
 
@@ -185,8 +206,10 @@ pub const NOVA7_MODELS: &[Nova7Model] = &[
     nova_pro_model(ARCTIS_NOVA_3, false),
 ];
 
-/// PIDs on which status, sidetone, mic volume and auto-off were sent from `ssgg` on hardware and worked: Arctis
-/// Nova 7 Gen 2, Linux, 2026-10-25 (`.claude/rules/experimental-protocol.md`).
+/// PIDs on which `ssgg` frames were tested on hardware: Arctis Nova 7 Gen 2, Linux, 2026-10-25. Confirmed there:
+/// sidetone off and highest, mic volume lowest and highest, auto-off set to 1 minute (`a3 01`; off after about a
+/// minute idle), and status (battery, charging, ChatMix); the details are in
+/// `.claude/rules/experimental-protocol.md`.
 pub const HARDWARE_CONFIRMED: &[u16] = &[ARCTIS_NOVA_7_WIRELESS_GEN2];
 
 /// Look up the Nova 7 behaviour for a product ID; `None` for every other headset.
@@ -237,7 +260,7 @@ pub fn decode_status(model: &Nova7Model, reply: &[u8]) -> Result<HeadsetStatus> 
         BatteryScale::Steps8 => steps8_percent(battery),
     });
     let chat_mix = model
-        .chat_mix
+        .can_report_chat_mix
         .then(|| ((f32::from(chat.min(100)) - f32::from(game.min(100))) / 100.0).clamp(-1.0, 1.0));
     Ok(HeadsetStatus {
         connected: Some(connected),
@@ -406,7 +429,7 @@ impl Headset for Nova7Headset {
     }
 
     fn set_sidetone(&mut self, level: u8) -> Result<()> {
-        if !self.model.sidetone {
+        if !self.model.can_set_sidetone {
             return Err(unsupported("Sidetone", &self.info));
         }
         let wire = scale_to_wire(level, self.model.sidetone_max, "Sidetone level")?;
@@ -428,14 +451,14 @@ impl Headset for Nova7Headset {
     }
 
     fn chat_mix(&mut self) -> Result<f32> {
-        if !self.model.chat_mix {
+        if !self.model.can_report_chat_mix {
             return Err(unsupported("ChatMix", &self.info));
         }
         Ok(self.query_status()?.chat_mix.unwrap_or(0.0))
     }
 
     fn set_auto_off(&mut self, minutes: u8) -> Result<()> {
-        if !self.model.auto_off {
+        if !self.model.can_set_auto_off {
             return Err(unsupported("Auto-off", &self.info));
         }
         self.set_wire_value(CommandCode::HeadsetAutoOff, minutes)
@@ -452,11 +475,15 @@ impl Headset for Nova7Headset {
 
 fn capabilities_of(model: &Nova7Model) -> HeadsetCapabilities {
     HeadsetCapabilities {
-        sidetone_steps: if model.sidetone { model.sidetone_max + 1 } else { 0 },
+        sidetone_steps: if model.can_set_sidetone {
+            model.sidetone_max + 1
+        } else {
+            0
+        },
         mic_volume_steps: model.mic_max - model.mic_min + 1,
-        auto_off: model.auto_off,
-        chat_mix: model.chat_mix,
-        status: model.status != StatusQuery::None,
+        can_set_auto_off: model.can_set_auto_off,
+        can_report_chat_mix: model.can_report_chat_mix,
+        can_report_status: model.status != StatusQuery::None,
     }
 }
 
@@ -487,7 +514,12 @@ mod tests {
         };
         for model in NOVA7_MODELS {
             let caps = capabilities_of(model);
-            assert_eq!(caps.sidetone_steps > 0, model.sidetone, "{:#06x}", model.product_id);
+            assert_eq!(
+                caps.sidetone_steps > 0,
+                model.can_set_sidetone,
+                "{:#06x}",
+                model.product_id
+            );
             for step in 0..caps.sidetone_steps {
                 let wire = scale_to_wire(level(step, caps.sidetone_steps), model.sidetone_max, "sidetone");
                 assert_eq!(wire.ok(), Some(step), "{:#06x} sidetone", model.product_id);
@@ -519,7 +551,7 @@ mod tests {
                 (6, 1, 10, 3),
                 "{pid:#06x}"
             );
-            assert!(!m.auto_off && !m.chat_mix, "{pid:#06x}");
+            assert!(!m.can_set_auto_off && !m.can_report_chat_mix, "{pid:#06x}");
             let expected = if battery_query {
                 StatusQuery::ProBattery
             } else {
@@ -563,11 +595,11 @@ mod tests {
     #[test]
     fn nova_5_has_no_chat_mix_dial() {
         let m = nova7_model(0x2232).unwrap();
-        assert!(m.sidetone && !m.chat_mix);
+        assert!(m.can_set_sidetone && !m.can_report_chat_mix);
         let s = decode_status(m, &[0xb0, 3, 0, 17, 3, 50, 50]).unwrap();
         assert_eq!((s.battery_percent, s.chat_mix), (Some(17), None));
         for pid in [0x2253, 0x2264, 0x2269, 0x226D] {
-            assert!(nova7_model(pid).unwrap().chat_mix, "{pid:#06x}");
+            assert!(nova7_model(pid).unwrap().can_report_chat_mix, "{pid:#06x}");
         }
     }
 
@@ -620,7 +652,7 @@ mod tests {
         ] {
             let m = nova7_model(pid).unwrap();
             assert_eq!(
-                (m.sidetone, m.chat_mix, m.mic_min),
+                (m.can_set_sidetone, m.can_report_chat_mix, m.mic_min),
                 (sidetone, chat_mix, 1),
                 "{pid:#06x}"
             );
@@ -651,10 +683,15 @@ mod tests {
                 "{:#06x}",
                 m.product_id
             );
-            assert_eq!(m.sidetone, !no_extras.contains(&m.product_id), "{:#06x}", m.product_id);
             assert_eq!(
-                m.chat_mix,
-                m.sidetone && !sidetone_without_chat_mix.contains(&m.product_id),
+                m.can_set_sidetone,
+                !no_extras.contains(&m.product_id),
+                "{:#06x}",
+                m.product_id
+            );
+            assert_eq!(
+                m.can_report_chat_mix,
+                m.can_set_sidetone && !sidetone_without_chat_mix.contains(&m.product_id),
                 "{:#06x}",
                 m.product_id
             );

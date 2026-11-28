@@ -292,7 +292,8 @@ pub(crate) async fn cmd_onboard(mut manager: Option<&mut DeviceManager>, action:
 async fn cmd_gen3_read(manager: Option<&mut DeviceManager>, args: crate::cli::OnboardGen3ReadArgs) -> Result<()> {
     use steelseries_gg::devices::hid_reports::{HidReportBuilder, PROFILE_CHUNK_REPORT_SIZE};
     use steelseries_gg::devices::keyboards::apex_pro_tkl_2023::gen3_read_requests;
-    use steelseries_gg::devices::{DeviceType, HidDeviceType, product_ids};
+    use steelseries_gg::devices::keyboards::model_caps::model_caps;
+    use steelseries_gg::devices::{DeviceType, HidDeviceType};
 
     let requests = gen3_read_requests(args.slot)?;
     if args.dry_run {
@@ -315,8 +316,10 @@ async fn cmd_gen3_read(manager: Option<&mut DeviceManager>, args: crate::cli::On
     let info = manager
         .devices_by_type(DeviceType::Keyboard)
         .into_iter()
-        .find(|info| info.product_id == product_ids::APEX_PRO_TKL_2023)
-        .ok_or_else(|| Error::DeviceNotFound("no wired Apex Pro TKL 2023 (0x1628) connected".to_string()))?;
+        .find(|info| model_caps(info.product_id).is_some_and(|caps| caps.can_run_gen3_commands))
+        .ok_or_else(|| {
+            Error::DeviceNotFound("no keyboard that these commands support is connected (built for 0x1628)".to_string())
+        })?;
     let mut keyboard = manager.open_keyboard(info)?;
     crate::warn_if_gg_engine_running();
     println!("reading slot {} on {} [read-only]", args.slot, info.name);

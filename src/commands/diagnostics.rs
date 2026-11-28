@@ -105,7 +105,7 @@ pub(crate) async fn cmd_validate(
                     report.results.len()
                 );
 
-                if report.capabilities.per_key_rgb {
+                if report.capabilities.can_set_per_key_colors {
                     println!("   🎹 Per-key RGB: Supported ({} keys)", report.capabilities.key_count);
                 } else {
                     println!("   🌈 Zone RGB: {} zones", report.capabilities.zone_count);

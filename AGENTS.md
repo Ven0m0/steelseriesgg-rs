@@ -104,6 +104,7 @@ Debian/Ubuntu. `audio` builds on Windows but applies nothing (the PulseAudio bac
 8. **No mutable global state**, no panics in non-test code (unless explicitly fatal and documented), no ignored `Result`s.
 9. **`unsafe` blocks** must document the safety invariant inline.
 10. **Platform-gated deps**: Unix-only crates (`rustix`) live under `[target.'cfg(unix)'.dependencies]`; keep uses behind matching `cfg`.
+11. **Behaviour, not device**: a device difference is a behaviour property in the model table, not a product ID check in code; a yes/no capability starts with `can_` and has a plain doc comment; the editor's device panels show no per-model text. See `.claude/rules/device-capabilities.md`.
 
 ---
 
@@ -124,8 +125,8 @@ Debian/Ubuntu. `audio` builds on Windows but applies nothing (the PulseAudio bac
 
 ## Project tooling (`.claude/`)
 
-- Skills: `ci-matrix` (full local CI), `hid-protocol` (auto-loads for `src/devices/`), `hw-capture`, `promote-protocol`, `dep-audit`, `fuzz-runner`, `benchmark-compare`.
-- Review agents: `protocol-reviewer` (device diffs), `security-reviewer` (GameSense server), `dependency-auditor`, `docs-drift-auditor`, `re-verifier`, `release-reviewer`.
+- Skills: `ci-matrix` (full local CI), `hid-protocol` (auto-loads for `src/devices/`), `hw-capture`, `promote-protocol`, `dep-audit`, `fuzz-runner`, `benchmark-compare`, `gui-selftest`, `review-loop` (all review agents in rounds until a full round finds nothing; user-invoked only).
+- Review agents: `protocol-reviewer` (device diffs), `security-reviewer` (GameSense server), `dependency-auditor`, `docs-drift-auditor`, `re-verifier`, `release-reviewer`, `gui-reviewer` (profile editor).
 
 ---
 

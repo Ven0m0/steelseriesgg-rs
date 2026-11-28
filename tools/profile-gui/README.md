@@ -41,9 +41,10 @@ Wayland is a known WebKitGTK renderer problem: start with `WEBKIT_DISABLE_DMABUF
 `ssgg-gui` serves these files and a small lighting API on 127.0.0.1 only, and opens the first keyboard
 (as `ssgg rgb` does). The page shows a **Live lighting** panel (colour, brightness, off) when that keyboard
 opened; opened from a file or any other server there is no panel. **`[EXPERIMENTAL]`**: the calls are the ones
-`ssgg rgb color|brightness|off` sends, and only a solid colour on the wired Apex Pro TKL 2023 (`0x1628`) is
-confirmed on hardware - a board that ignores a call still answers success. Close GG first, it overwrites other
-programs. Stop `ssgg daemon` first too: two programs should not hold one keyboard.
+`ssgg rgb color|brightness|off` sends; which of them are confirmed on which board is summarised in
+[docs/development/devices.md](../../docs/development/devices.md), with every result (software brightness too) in
+`.claude/rules/experimental-protocol.md`, and elsewhere a board that ignores a call still answers success. Close GG first, it overwrites other programs. Stop `ssgg daemon` first too: two programs should
+not hold one keyboard.
 
 The API is not CORS-enabled (the page is same-origin). Each run has a random token the page receives only by
 being served here; a request needs that token, a `Host` of `127.0.0.1:<port>` or `localhost:<port>`, and no
@@ -89,6 +90,13 @@ Three rules shape the panel:
   and run on the second. The mouse DPI form also has the `--yes` box the CLI needs for it. `--dry-run`
   is offered wherever the CLI has it, and `validate` and `verify-performance` accept the same `--output`
   file the CLI does.
+
+The panel's own labels and notes name no model: a form runs on whatever board is connected, and `ssgg` refuses a
+command that its model tables mark as unsupported for that board. Not every command is refused: on the boards
+that `ssgg` drives with the `0x3A`, `0x40` or `0x61` direct lighting frame, except the wired Apex Pro TKL 2023
+(`0x1628`), `actuation set` and `actuation set-value` without `--second` send the unverified `0x2D` command
+`[EXPERIMENTAL]`, and the CLI output says so; other boards answer "not supported". The output the panel shows
+is the CLI's own text, which may name a model or its test status, as it does in a terminal.
 
 **`[EXPERIMENTAL]`**: as with every other panel, a board that ignores a command still answers success.
 

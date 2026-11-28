@@ -5,6 +5,7 @@ use steelseries_gg::devices::hid_reports::{
     Apex2022DisplayCommand, HallLayer, HidReportBuilder, PROFILE_CHUNK_REPORT_SIZE,
 };
 use steelseries_gg::devices::keyboards::apex_pro_tkl_2023::{AnalogSetting, analog_report, key_actuation_setting};
+use steelseries_gg::devices::keyboards::model_caps::model_caps;
 use steelseries_gg::devices::keyboards::oled;
 use steelseries_gg::devices::{DeviceManager, DeviceType, HidDeviceType, KeyMappingDatabase, product_ids};
 use steelseries_gg::{Error, Result};
@@ -121,7 +122,7 @@ pub(crate) async fn cmd_actuation(manager: &DeviceManager, action: ActuationActi
     println!("Using keyboard: {}", keyboard_info.name);
     let mut keyboard = manager.open_keyboard(keyboard_info)?;
 
-    if keyboard_info.product_id == product_ids::APEX_PRO_TKL_2023 {
+    if model_caps(keyboard_info.product_id).is_some_and(|caps| caps.can_set_actuation_live) {
         crate::warn_if_gg_engine_running();
         // No APPLY/initialize: GG sends neither around these frames, and direct mode ignores APPLY.
         let reply = keyboard.send_analog_setting(&setting)?;

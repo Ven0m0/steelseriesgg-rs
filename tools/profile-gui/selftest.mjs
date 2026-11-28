@@ -14,7 +14,7 @@
 //
 // Every check is a thunk: a check the suite gets wrong fails and the run reaches the summary.
 // Exits non-zero when any check fails.
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { spawnSync } from 'node:child_process';
 import { installFakeDom, loadApp } from './fake-dom.mjs';
@@ -342,7 +342,7 @@ ok('the page sees the imported table', () => app.PRODUCTS === globalThis.SsggPro
 ok('every model Rust names is imported with that name', () => {
   for (const [hex, info] of Object.entries(rustProducts.products)) {
     const page = app.PRODUCTS.products[hex];
-    if (!page || page.name !== info.name || page.onboard !== info.onboard) return false;
+    if (!page || page.name !== info.name || page.can_use_onboard_profile !== info.can_use_onboard_profile) return false;
   }
   return Object.keys(rustProducts.products).length === Object.keys(app.PRODUCTS.products).length
     && rustProducts.namedCount >= 40;
@@ -353,8 +353,9 @@ ok('without the import the page says the registry was not imported', () => {
   delete globalThis.SsggProducts;
   const bare = loadApp(JS_DIR);
   const line = bare.deviceFeatures(0x1612).join(' | ');
+  const outside = bare.canUseOnboardProfile(0x1620) === false && bare.deviceLabel({ product_id: 0x1620 }).legacy === false;
   globalThis.SsggProducts = saved;
-  return bare.PRODUCTS === null && /device registry: not imported/.test(line)
+  return bare.PRODUCTS === null && outside && /device registry: not imported/.test(line)
     && /read back on this family/.test(line) && bare.deviceLabel({ product_id: 0x1612, product: 'Apex 7' }).name === 'Apex 7';
 }, () => app.deviceFeatures(0x1612));
 
@@ -1902,6 +1903,15 @@ ok('every ssgg action the CLI has for actuation is in the panel', () => {
   const have = control.GROUPS.flatMap(([, list]) => list).filter((c) => c.args[0] === 'actuation').map((c) => c.args[1]).sort();
   return eq(have, ['clear-second', 'rapid-tap', 'rapid-tap-pairs', 'rapid-trigger', 'release-mode', 'set', 'set-key', 'set-value']);
 });
+ok('the control panel labels and notes name no model and no product ID', () => {
+  // .claude/rules/device-capabilities.md: a form runs on whatever board is connected, and ssgg refuses what its model tables mark unsupported.
+  const names = Object.values(app.PRODUCTS ? app.PRODUCTS.products : {}).map((p) => p.name).filter(Boolean);
+  const texts = control.GROUPS.flatMap(([title, list]) => [title, ...list.flatMap((c) => [c.label, c.note ?? '',
+    ...(c.fields ?? []).flatMap((f) => [f.name ?? '', f.hint ?? '', ...(f.options ?? []).map(String)])])]);
+  // Product names, product IDs and the product family words (a name can be written another way, "Apex Pro TKL 2023").
+  const family = /\b(Apex|Rival|Arctis|Aerox|Prime|Sensei|Nova)\b/;
+  return names.length > 40 && texts.every((t) => !/0x[0-9a-f]{4}/i.test(t) && !family.test(t) && !names.some((n) => t.includes(n)));
+}, () => 'model names or product IDs in control.js labels');
 ok('the commands that only return when stopped are in the panel, and each one says what stops it', () => {
   const long = control.GROUPS.find(([title]) => /Long-running/.test(title));
   const have = long[1].map((c) => c.args.join(' ')).sort();
@@ -1944,6 +1954,36 @@ ok('every step of every step count reaches its own wire value and reads back as 
   }
   return headset.levelForStep(0, 4) === 0 && headset.levelForStep(3, 4) === 100 && headset.levelForStep(1, 4) === 33;
 });
+let panelModelText = [];
+ok('the device panels and the server messages name no model and no product ID', () => {
+  // .claude/rules/device-capabilities.md: per-model text stays in the CLI. One pass per file matches strings and
+  // comments together and keeps only the strings, so a `//` or `/*` inside a string is not taken for a comment.
+  // Limits: a JS regex literal or a Rust raw string (`r#".."#`) that contains a quote would break the pairing; the
+  // checked files have none. Rust char literals such as '"' are matched and skipped.
+  const family = /\b(Apex|Rival|Arctis|Aerox|Prime|Sensei|Nova)\b|0x[0-9a-f]{4}\b/i;
+  const jsToken = /(['"`])((?:(?!\1)[^\\]|\\.)*)\1|\/\*[\s\S]*?\*\/|\/\/[^\n]*/g;
+  const rustToken = /"((?:[^"\\]|\\.)*)"|'(?:[^'\\]|\\.)'|\/\*[\s\S]*?\*\/|\/\/[^\n]*/g;
+  // Every page script except the profile editor (app.js, which may name the board its file format comes from) and
+  // the generated product table; a new device tab file is checked without a list change.
+  const editorOnly = new Set(['app.js', 'products.generated.js']);
+  const panelFiles = readdirSync(`${REPO}/tools/profile-gui`).filter((f) => f.endsWith('.js') && !editorOnly.has(f));
+  const js = panelFiles
+    .flatMap((f) => [...read(`tools/profile-gui/${f}`).matchAll(jsToken)].filter((m) => m[1]).map((m) => m[2]));
+  const parts = read('src/gui.rs').split(/#\[cfg\(test\)\]\s*mod tests\b/);
+  if (parts.length !== 2) { panelModelText = ['src/gui.rs: expected one `#[cfg(test)] mod tests`']; return false; }
+  const rust = [...parts[0].matchAll(rustToken)].filter((m) => m[1] !== undefined).map((m) => m[1]);
+  panelModelText = [...js, ...rust].filter((t) => family.test(t));
+  return js.length > 300 && rust.length > 50 && panelModelText.length === 0;
+}, () => panelModelText.join(' | '));
+ok('headset.js reads only the capability keys HeadsetCapabilities sends', () => {
+  // The fields of `pub struct HeadsetCapabilities` in src/devices/headsets/mod.rs, which serialises them unrenamed.
+  // Reads the source headset.js in both runs: the minifier renames the local `caps`, so the minified file has no
+  // `caps.` to find; property names, which the check is about, survive minification unchanged.
+  const struct = read('src/devices/headsets/mod.rs').match(/pub struct HeadsetCapabilities \{([\s\S]*?)\n\}/);
+  const sent = struct ? [...struct[1].matchAll(/^\s*pub ([a-z_]+):/gm)].map((m) => m[1]).sort() : [];
+  const used = [...new Set([...read('tools/profile-gui/headset.js').matchAll(/\bcaps\.([a-z_]+)/g)].map((m) => m[1]))].sort();
+  return sent.length === 5 && eq(used, sent);
+}, () => 'caps.* keys in headset.js');
 ok('four sidetone steps are named, other counts are numbered', () => eq(headset.stepLabels(4), ['Off', 'Low', 'Med', 'High'])
   && eq(headset.stepLabels(3), ['0', '1', '2']));
 ok('ChatMix maps -1..+1 onto 0..100 percent and prints its sign', () => headset.chatMixPercent(-1) === 0

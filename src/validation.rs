@@ -212,18 +212,27 @@ impl ValidationReport {
 /// Device capability summary.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeviceCapabilities {
-    /// Supports per-key RGB control
-    pub per_key_rgb: bool,
-    /// Supports zone-based RGB control
-    pub zone_rgb: bool,
+    /// The keyboard can set the colour of each key on its own (from `Keyboard::can_set_per_key_colors`).
+    /// Reports written before 2026-11-28 used the key `per_key_rgb`; it is still read.
+    #[serde(alias = "per_key_rgb")]
+    pub can_set_per_key_colors: bool,
+    /// The keyboard can set the colour of its lighting zones; assumed for every keyboard.
+    /// Reports written before 2026-11-28 used the key `zone_rgb`; it is still read.
+    #[serde(alias = "zone_rgb")]
+    pub can_set_zone_colors: bool,
     /// Number of controllable zones
     pub zone_count: usize,
     /// Number of individually controllable keys
     pub key_count: usize,
-    /// Supports brightness control
-    pub brightness_control: bool,
-    /// Supports reactive effects
-    pub reactive_effects: bool,
+    /// The keyboard can change its brightness; assumed for every keyboard.
+    /// Reports written before 2026-11-28 used the key `brightness_control`; it is still read.
+    #[serde(alias = "brightness_control")]
+    pub can_set_brightness: bool,
+    /// `ssgg validate` ran its per-key effect and reactive tests (from `Keyboard::can_run_per_key_effects`,
+    /// `[EXPERIMENTAL]`).
+    /// Reports written before 2026-11-28 used the key `reactive_effects`; it is still read.
+    #[serde(alias = "reactive_effects")]
+    pub can_run_per_key_effects: bool,
     /// Maximum supported refresh rate (Hz)
     pub max_refresh_rate: f64,
     /// Communication reliability (0-100%)
@@ -233,12 +242,12 @@ pub struct DeviceCapabilities {
 impl Default for DeviceCapabilities {
     fn default() -> Self {
         Self {
-            per_key_rgb: false,
-            zone_rgb: false,
+            can_set_per_key_colors: false,
+            can_set_zone_colors: false,
             zone_count: 0,
             key_count: 0,
-            brightness_control: false,
-            reactive_effects: false,
+            can_set_brightness: false,
+            can_run_per_key_effects: false,
             max_refresh_rate: 0.0,
             communication_reliability: 0.0,
         }
@@ -378,7 +387,7 @@ impl RgbValidator {
         report.add_result(self.test_zone_reliability(keyboard).await);
 
         // Per-key RGB tests (if supported)
-        if keyboard.supports_per_key_rgb() {
+        if keyboard.can_set_per_key_colors() {
             report.add_result(self.test_per_key_basic(keyboard).await);
             report.add_result(self.test_per_key_effects(keyboard).await);
             report.add_result(self.test_reactive_effects(keyboard).await);
@@ -563,7 +572,7 @@ impl RgbValidator {
         let start = Instant::now();
         let test_name = "Per-Key RGB Basic".to_string();
 
-        if !keyboard.supports_per_key_rgb() {
+        if !keyboard.can_set_per_key_colors() {
             return ValidationResult::success(test_name, start.elapsed())
                 .with_note("Per-key RGB not supported - skipped");
         }
@@ -600,7 +609,7 @@ impl RgbValidator {
         let start = Instant::now();
         let test_name = "Per-Key RGB Effects".to_string();
 
-        if !keyboard.supports_per_key_effects() {
+        if !keyboard.can_run_per_key_effects() {
             return ValidationResult::success(test_name, start.elapsed())
                 .with_note("Per-key effects not supported - skipped");
         }
@@ -623,7 +632,7 @@ impl RgbValidator {
         let start = Instant::now();
         let test_name = "Reactive Effects".to_string();
 
-        if !keyboard.supports_per_key_effects() {
+        if !keyboard.can_run_per_key_effects() {
             return ValidationResult::success(test_name, start.elapsed())
                 .with_note("Reactive effects not supported - skipped");
         }
@@ -746,16 +755,16 @@ impl RgbValidator {
     /// Detect device capabilities.
     fn detect_capabilities(&self, keyboard: &mut dyn Keyboard) -> DeviceCapabilities {
         DeviceCapabilities {
-            per_key_rgb: keyboard.supports_per_key_rgb(),
-            zone_rgb: true, // All keyboards support zone RGB
+            can_set_per_key_colors: keyboard.can_set_per_key_colors(),
+            can_set_zone_colors: true, // All keyboards support zone RGB
             zone_count: keyboard.zone_count(),
             key_count: if let Some(mapping) = keyboard.get_key_mapping() {
                 mapping.total_keys
             } else {
                 0
             },
-            brightness_control: true, // Assume all keyboards support brightness
-            reactive_effects: keyboard.supports_per_key_effects(),
+            can_set_brightness: true, // Assume all keyboards support brightness
+            can_run_per_key_effects: keyboard.can_run_per_key_effects(),
             max_refresh_rate: 60.0,          // Typical maximum
             communication_reliability: 95.0, // Will be updated based on test results
         }
@@ -858,8 +867,8 @@ pub fn print_test_results(report: &ValidationReport, verbose: bool, use_colors: 
     println!("  Health Score: {}", health_colored);
 
     println!("\nDevice Capabilities:");
-    println!("  Per-key RGB:  {}", report.capabilities.per_key_rgb);
-    println!("  Zone RGB:     {}", report.capabilities.zone_rgb);
+    println!("  Per-key RGB:  {}", report.capabilities.can_set_per_key_colors);
+    println!("  Zone RGB:     {}", report.capabilities.can_set_zone_colors);
     println!("  Zone count:   {}", report.capabilities.zone_count);
     println!("  Reliability:  {:.1}%", report.capabilities.communication_reliability);
 
@@ -923,6 +932,24 @@ mod tests {
     use super::*;
 
     #[test]
+    fn capabilities_are_written_as_can_keys_and_old_reports_still_read() {
+        let json = serde_json::to_value(DeviceCapabilities::default()).expect("serialises");
+        for key in [
+            "can_set_per_key_colors",
+            "can_set_zone_colors",
+            "can_set_brightness",
+            "can_run_per_key_effects",
+        ] {
+            assert!(json.get(key).is_some(), "{key} in {json}");
+        }
+        let old = r#"{"per_key_rgb":true,"zone_rgb":true,"zone_count":9,"key_count":87,"brightness_control":true,
+            "reactive_effects":true,"max_refresh_rate":60.0,"communication_reliability":95.0}"#;
+        let caps: DeviceCapabilities = serde_json::from_str(old).expect("an old report still reads");
+        assert!(caps.can_set_per_key_colors && caps.can_set_zone_colors && caps.can_set_brightness);
+        assert!(caps.can_run_per_key_effects);
+    }
+
+    #[test]
     fn test_validation_result_creation() {
         let duration = Duration::from_millis(100);
 
@@ -955,8 +982,8 @@ mod tests {
     #[test]
     fn test_device_capabilities_default() {
         let caps = DeviceCapabilities::default();
-        assert!(!caps.per_key_rgb);
-        assert!(!caps.zone_rgb);
+        assert!(!caps.can_set_per_key_colors);
+        assert!(!caps.can_set_zone_colors);
         assert_eq!(caps.zone_count, 0);
     }
 

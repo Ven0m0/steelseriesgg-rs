@@ -6,8 +6,9 @@
 //! same origin. A browser page on another origin cannot read the token, and a request that arrives under a
 //! foreign `Host` (DNS rebinding) or `Origin` is refused before the token is looked at.
 //!
-//! `[EXPERIMENTAL]` The lighting calls are the ones `ssgg rgb` sends; only a solid colour on the wired Apex Pro
-//! TKL 2023 (`0x1628`) is confirmed on hardware, so a keyboard that ignores a call still answers success.
+//! `[EXPERIMENTAL]` The lighting calls are the ones `ssgg rgb` sends. Which of them are confirmed on which board is
+//! summarised in `docs/development/devices.md`, with every result (software brightness too) in
+//! `.claude/rules/experimental-protocol.md`; elsewhere a keyboard that ignores a call still answers success.
 //!
 //! `[EXPERIMENTAL]` The headset calls are the ones `ssgg headset` sends, and a value the page asks to persist
 //! goes to `[headset]` in `config.toml` like `--persistent` does.

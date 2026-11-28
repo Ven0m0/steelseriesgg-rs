@@ -58,22 +58,29 @@ pub enum DpiEncoding {
     Linear { dpi_per_code: u16 },
 }
 
-/// DPI range, encoding and command layout of a model.
+/// DPI range, encoding and command layout of a model. From the community rivalcfg-derived fork and rivalcfg;
+/// `[EXPERIMENTAL]` except what a field says was confirmed on the wired Rival 3 Gen 2 `0x1870`.
 #[derive(Clone, Copy, Debug)]
 pub struct DpiSpec {
     pub opcode: u8,
+    /// Lowest DPI that `ssgg mouse dpi` accepts.
     pub min: u16,
+    /// Highest DPI that `ssgg mouse dpi` accepts.
     pub max: u16,
+    /// DPI step: `ssgg mouse dpi` accepts only `min + n * step`.
     pub step: u16,
     pub encoding: DpiEncoding,
-    /// Index of the stage the single DPI value is sent as.
+    /// Index of the stage the single DPI value is sent as; 0 on the Rival 3 Gen 2, confirmed on the `0x1870`
+    /// (2026-11-17).
     pub first_preset: u8,
-    /// The command carries the code twice, once per axis.
+    /// The command carries the code twice, once per axis (a frame layout, not a capability; from rivalcfg).
     pub per_axis: bool,
-    /// The model takes several stages in one command ([`MouseDpiStagesCommand`]). Set only where that frame is
-    /// evidenced: the Rival 3 Gen 2, by rivalcfg's test vectors and the third-party hardware test (macOS) of the
-    /// two-stage frame in its PR #292, and from `ssgg` with 2 and 4 stages (contributor, Linux, 2026-11-17/18).
-    pub multi_stage: bool,
+    /// `ssgg mouse dpi` can set several DPI stages for the mouse's DPI button in one command
+    /// ([`MouseDpiStagesCommand`]). Set only where that frame is evidenced: the Rival 3 Gen 2, by rivalcfg's test
+    /// vectors, the third-party hardware test (macOS) of the two-stage frame in its PR #292, and from `ssgg` with 2
+    /// stages (first active) and 4 (second active; contributor, Linux, 2026-11-17/18). 3 and 5 stages and the other
+    /// active stages are `[EXPERIMENTAL]`.
+    pub can_set_dpi_stages: bool,
 }
 
 impl DpiSpec {
@@ -98,15 +105,27 @@ impl DpiSpec {
     }
 }
 
-/// What the mice of one rivalcfg profile share.
+/// What the mice of one rivalcfg profile share. From the community rivalcfg-derived fork; `[EXPERIMENTAL]` except
+/// what a field says was confirmed on the wired Rival 3 Gen 2 `0x1870`.
 #[derive(Clone, Copy, Debug)]
 pub struct MouseSpec {
     pub dpi: DpiSpec,
-    /// Codes for 125, 250, 500 and 1000 Hz.
+    /// Codes for 125, 250, 500 and 1000 Hz; 125 and 1000 Hz confirmed on the `0x1870` (2026-11-17).
     pub poll_codes: [u8; 4],
+    /// How the colour frame addresses the LED zones; the mask layout is confirmed on the `0x1870` (2026-11-16/18).
     pub color_layout: MouseColorLayout,
+    /// How many LED zones `ssgg mouse color --zone` can address; the three zones of the `0x1870` are confirmed
+    /// (2026-11-18).
     pub zone_count: u8,
-    pub battery: bool,
+    /// The mouse runs on a battery and `ssgg mouse info` can ask for its charge (`92`, `D2` through a receiver).
+    /// From the community rivalcfg-derived fork; `[EXPERIMENTAL]`, untested on hardware.
+    pub can_report_battery: bool,
+    /// `ssgg mouse info` can ask the mouse for its firmware version (`90 00`) and polling rate (`AB`) over the
+    /// cable. Set on the models with no wireless mode (Mousework's family F2: Aerox 3, Aerox 5, Prime Mini, Rival 3
+    /// Gen 2, Rival 5), whose reply starts with the echoed opcode. Confirmed on a wired Rival 3 Gen 2 `0x1870`
+    /// (Linux, 2026-11-17), `[EXPERIMENTAL]` on the others; `false` on models with a wireless mode, whose cabled
+    /// answer has no echoed opcode in Mousework's probe.
+    pub can_read_firmware_and_poll_rate: bool,
 }
 
 const SPEC_AEROX_3: MouseSpec = MouseSpec {
@@ -118,12 +137,13 @@ const SPEC_AEROX_3: MouseSpec = MouseSpec {
         encoding: DpiEncoding::Table(&TRUEMOVE_CORE),
         first_preset: 1,
         per_axis: false,
-        multi_stage: false,
+        can_set_dpi_stages: false,
     },
     poll_codes: [4, 3, 2, 1],
     color_layout: MouseColorLayout::Mask8,
     zone_count: 3,
-    battery: false,
+    can_report_battery: false,
+    can_read_firmware_and_poll_rate: true,
 };
 
 /// The preset index is 0-based on this model, unlike the Aerox 3 it shares the sensor table with: rivalcfg PR #292
@@ -134,7 +154,7 @@ const SPEC_RIVAL_3_GEN_2: MouseSpec = MouseSpec {
         opcode: MouseDpiCommand::OPCODE_RIVAL_3_GEN_2,
         first_preset: 0,
         per_axis: true,
-        multi_stage: true,
+        can_set_dpi_stages: true,
         ..SPEC_AEROX_3.dpi
     },
     ..SPEC_AEROX_3
@@ -149,12 +169,13 @@ const SPEC_AEROX_5: MouseSpec = MouseSpec {
         encoding: DpiEncoding::Table(&TRUEMOVE_AIR),
         first_preset: 0,
         per_axis: false,
-        multi_stage: false,
+        can_set_dpi_stages: false,
     },
     poll_codes: [4, 3, 2, 1],
     color_layout: MouseColorLayout::Mask8,
     zone_count: 3,
-    battery: false,
+    can_report_battery: false,
+    can_read_firmware_and_poll_rate: true,
 };
 
 const SPEC_RIVAL_5: MouseSpec = MouseSpec {
@@ -166,7 +187,8 @@ const SPEC_RIVAL_5: MouseSpec = MouseSpec {
 const SPEC_AEROX_WIRELESS: MouseSpec = MouseSpec {
     poll_codes: [3, 2, 1, 0],
     color_layout: MouseColorLayout::Indexed,
-    battery: true,
+    can_report_battery: true,
+    can_read_firmware_and_poll_rate: false,
     ..SPEC_AEROX_5
 };
 
@@ -188,14 +210,17 @@ const SPEC_PRIME_MINI: MouseSpec = MouseSpec {
     ..SPEC_AEROX_5
 };
 
-/// One USB product ID of a Modern-family mouse.
+/// One USB product ID of a Modern-family mouse. From the community rivalcfg-derived fork; `[EXPERIMENTAL]` except
+/// what a field says was confirmed on the wired Rival 3 Gen 2 `0x1870`.
 #[derive(Clone, Copy, Debug)]
 pub struct MouseModel {
     pub product_id: u16,
     pub name: &'static str,
-    /// USB interface that takes the commands.
+    /// USB interface that takes the commands; interface 3 confirmed on the wired Rival 3 Gen 2 `0x1870`, the others
+    /// from the community fork, `[EXPERIMENTAL]`.
     pub interface_number: i32,
-    /// 2.4 GHz receiver PID of a dual-mode mouse.
+    /// 2.4 GHz receiver PID of a dual-mode mouse: the frames use the receiver opcodes and no echo is read (a
+    /// transport fact, not a capability). No receiver PID has been tested.
     pub dongle: bool,
     pub spec: &'static MouseSpec,
 }
@@ -366,10 +391,10 @@ impl MouseModel {
 
     /// One command for 1 to [`MouseDpiStagesCommand::MAX_STAGES`] DPI stages with stage `active` (0-based) running
     /// (confirmed on a wired Rival 3 Gen 2 for 2 stages with `active` 0 and 4 with `active` 1, the rest
-    /// [EXPERIMENTAL]). Refused on a model without [`DpiSpec::multi_stage`].
+    /// [EXPERIMENTAL]). Refused on a model without [`DpiSpec::can_set_dpi_stages`].
     pub fn dpi_stages_command(&self, stages: &[u16], active: u8) -> Result<MouseDpiStagesCommand> {
         let dpi_spec = &self.spec.dpi;
-        if !dpi_spec.multi_stage {
+        if !dpi_spec.can_set_dpi_stages {
             return Err(unsupported("setting DPI stages", self.name));
         }
         let command = MouseDpiStagesCommand {
@@ -430,16 +455,14 @@ impl MouseModel {
     /// `None` for a model without a battery.
     pub fn battery_query(&self) -> Option<MouseBatteryQueryCommand> {
         self.spec
-            .battery
+            .can_report_battery
             .then_some(MouseBatteryQueryCommand { dongle: self.dongle })
     }
 
-    /// A model with no wireless mode (no receiver PID, no battery): Aerox 3, Aerox 5, Prime Mini, Rival 3 Gen 2 and
-    /// Rival 5, Mousework's family F2. Its `90` reply starts with the echoed opcode in GG's capture of a Rival 3
-    /// Gen 2 and in Mousework's read-only probe (`mousework/probe.py`), which sends `90` and `AB` to the whole
-    /// family.
-    fn wired_only(&self) -> bool {
-        !self.dongle && !self.spec.battery
+    /// The cabled PID of a model that answers the `90` and `AB` queries
+    /// ([`MouseSpec::can_read_firmware_and_poll_rate`]).
+    fn can_read_firmware_and_poll_rate(&self) -> bool {
+        !self.dongle && self.spec.can_read_firmware_and_poll_rate
     }
 
     /// The read-only firmware query, `90 00` zero padded to 64 bytes: GG's own frame to a wired Rival 3 Gen 2, which
@@ -448,13 +471,15 @@ impl MouseModel {
     /// Mousework's probe reads its answer over the cable without the echoed opcode, which [`await_reply`] would not
     /// take for the reply.
     pub fn firmware_query(&self) -> Option<OnboardFirmwareVersionCommand> {
-        self.wired_only().then_some(OnboardFirmwareVersionCommand::KEYBOARD)
+        self.can_read_firmware_and_poll_rate()
+            .then_some(OnboardFirmwareVersionCommand::KEYBOARD)
     }
 
     /// The read-only polling-rate query `AB`, from Mousework's probe; confirmed on a wired `0x1870` (Linux,
     /// 2026-11-17), [EXPERIMENTAL] on the other wired-only models. `None` on a model with a wireless mode.
     pub fn poll_rate_query(&self) -> Option<MousePollRateQueryCommand> {
-        self.wired_only().then_some(MousePollRateQueryCommand)
+        self.can_read_firmware_and_poll_rate()
+            .then_some(MousePollRateQueryCommand)
     }
 
     /// Polling rate in an `AB` reply, taken as `ab <level>` like every other reply of the Rival 3 Gen 2 in GG's
@@ -1171,7 +1196,7 @@ mod tests {
     /// Capture frame 15 is `90 00` zero padded to 64 bytes (`SET_REPORT wValue 0x0200 wIndex 3`); hidapi takes it
     /// with report number 0 in front.
     #[test]
-    fn queries_are_ggs_firmware_frame_and_ab_on_the_wired_only_models() {
+    fn queries_are_ggs_firmware_frame_and_ab_where_the_model_can_read_them() {
         let mut gg = vec![0x00, 0x90];
         gg.resize(MOUSE_REPORT_BUFFER_SIZE, 0);
         assert_eq!(bytes(&pid(RIVAL_3_GEN_2).firmware_query().unwrap()), gg);
@@ -1179,15 +1204,15 @@ mod tests {
         ab.resize(MOUSE_REPORT_BUFFER_SIZE, 0);
         assert_eq!(bytes(&pid(RIVAL_3_GEN_2).poll_rate_query().unwrap()), ab);
 
-        let mut wired_only = 0;
+        let mut readable = 0;
         for m in MOUSE_MODELS {
             let expected = !m.dongle && !m.name.contains("Wireless");
-            wired_only += usize::from(expected);
+            readable += usize::from(expected);
             assert_eq!(m.firmware_query().is_some(), expected, "{}", m.name);
             assert_eq!(m.poll_rate_query().is_some(), expected, "{}", m.name);
         }
         assert_eq!(
-            wired_only, 6,
+            readable, 6,
             "Aerox 3, Aerox 5, Prime Mini, Rival 3 Gen 2, Rival 5 and its Destiny Edition"
         );
     }

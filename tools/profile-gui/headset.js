@@ -93,7 +93,7 @@
         node('div', { className: 'hs-bar' }, [battFill]),
       ]),
     ];
-    if (caps.chat_mix) {
+    if (caps.can_report_chat_mix) {
       cards.push(node('div', { className: 'hs-card' }, [
         node('div', { className: 'hs-line spread' }, [node('span', { className: 'hint', textContent: 'ChatMix dial' }), mixText]),
         node('div', { className: 'hs-mix' }, [node('div', { className: 'hs-track' }), mixKnob]),
@@ -215,12 +215,12 @@
       fieldsets.push(node('fieldset', { className: 'hs-set' }, [
         node('legend', { textContent: 'Mic volume' }),
         node('div', { className: 'hs-line' }, [range, out]),
-        node('span', { className: 'hint', textContent: `${steps} steps (0 to ${steps - 1}). 0 is close to silent, not a mute.` }),
+        node('span', { className: 'hint', textContent: `${steps} steps (0 to ${steps - 1}). 0 is the lowest level; it may not mute.` }),
         s.row,
       ]));
     }
 
-    if (caps.auto_off) {
+    if (caps.can_set_auto_off) {
       const minutes = node('input', { type: 'number', min: 0, max: 255, step: 1, ariaLabel: 'Auto-off minutes' });
       const show = (value) => { minutes.value = value == null ? '' : String(value); };
       const s = setting('/api/headset/auto-off', 'Auto-off', saved.auto_off ?? null, show);
@@ -242,7 +242,7 @@
       ]));
     }
 
-    const supported = fieldsets.length > 0 || caps.status;
+    const supported = fieldsets.length > 0 || caps.can_report_status;
     root.replaceChildren(node('section', { className: 'panel hs-panel' }, [
       node('div', { className: 'hs-head' }, [
         node('h2', {}, [`${info.name} `, node('span', { className: 'tag', textContent: '[EXPERIMENTAL]' })]),
@@ -250,7 +250,7 @@
         node('p', { className: 'mono note dev', textContent: pid }),
       ]),
       ...(supported ? [] : [node('p', { textContent: 'ssgg detects this headset but knows no commands for it. Nothing can be read or set yet.' })]),
-      ...(caps.status ? [node('div', { className: 'hs-cards' }, cards), polled] : []),
+      ...(caps.can_report_status ? [node('div', { className: 'hs-cards' }, cards), polled] : []),
       offNote,
       ...(fieldsets.length ? [node('div', { className: 'hs-sets' }, fieldsets)] : []),
       result,
@@ -259,14 +259,14 @@
 
     // Poll only while the headset tab is open and the browser tab is visible.
     const active = () => !root.hidden && doc.visibilityState !== 'hidden';
-    if (caps.status) {
+    if (caps.can_report_status) {
       setInterval(() => { if (active()) poll(); }, POLL_MS);
       doc.addEventListener('visibilitychange', () => { if (active()) poll(); });
     }
     for (const button of tabs.querySelectorAll('button[data-view]')) {
       button.addEventListener('click', () => {
         showView(doc, tabs, button.dataset.view);
-        if (caps.status && active()) poll();
+        if (caps.can_report_status && active()) poll();
       });
     }
     tabs.hidden = false;

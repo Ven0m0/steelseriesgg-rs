@@ -413,7 +413,11 @@ fn cmd_headset(manager: &DeviceManager, action: HeadsetAction) -> Result<()> {
     headset.initialize()?;
 
     if HARDWARE_CONFIRMED.contains(&headset_info.product_id) {
-        eprintln!("Status, sidetone, mic volume and auto-off are confirmed on this model (2026-10-25).");
+        eprintln!(
+            "Confirmed on this model (Linux, 2026-10-25): status (battery, charging, ChatMix), sidetone off and highest, mic \
+             volume lowest and highest, auto-off set to 1 minute (off after about a minute idle). Middle levels, \
+             other auto-off times and turning auto-off off are [EXPERIMENTAL]."
+        );
     } else {
         eprintln!(
             "{}",
@@ -706,7 +710,7 @@ async fn cmd_per_key_rgb(keyboard: &mut Box<dyn Keyboard>, action: PerKeyAction)
             let color = require_color(&color)?;
 
             // Check if per-key RGB is supported
-            if !keyboard.supports_per_key_rgb() {
+            if !keyboard.can_set_per_key_colors() {
                 println!("Warning: Per-key RGB not supported on this keyboard");
                 println!("Available key mapping: None");
                 println!("Falling back to zone-based RGB (setting entire keyboard)");
@@ -746,7 +750,7 @@ async fn cmd_per_key_rgb(keyboard: &mut Box<dyn Keyboard>, action: PerKeyAction)
             }
 
             // Check if per-key RGB is supported
-            if !keyboard.supports_per_key_rgb() {
+            if !keyboard.can_set_per_key_colors() {
                 println!("Warning: Per-key RGB not supported on this keyboard");
                 println!("Falling back to setting first color on entire keyboard");
                 keyboard.set_color(key_colors[0].1).await?;
@@ -852,12 +856,16 @@ async fn cmd_per_key_rgb(keyboard: &mut Box<dyn Keyboard>, action: PerKeyAction)
 
         PerKeyAction::Status => {
             println!("Per-key RGB Status:");
-            let perkey_supported = keyboard.supports_per_key_rgb();
+            let perkey_supported = keyboard.can_set_per_key_colors();
             if perkey_supported {
-                println!("Provisional: true (key mapping exists, hardware protocol unverified)");
-                println!("Note: Per-key RGB protocol is experimental - actual hardware behavior may vary");
+                println!("Per-key colours: yes (a key mapping exists for this keyboard)");
+                println!(
+                    "Note: confirmed on the Apex Pro TKL 2023 (0x1628, Windows; Linux untested) and the Apex Pro \
+                     (2024) (0x1640, ISO-DE, Linux; ANSI untested); \
+                     [EXPERIMENTAL] on other boards, which may ignore the frames and still answer success"
+                );
             } else {
-                println!("Provisional: false");
+                println!("Per-key colours: no");
             }
 
             if let Some(mapping) = keyboard.get_key_mapping() {
@@ -880,7 +888,7 @@ async fn cmd_per_key_rgb(keyboard: &mut Box<dyn Keyboard>, action: PerKeyAction)
 async fn test_rainbow_pattern(keyboard: &mut Box<dyn Keyboard>) -> Result<()> {
     let colors = Color::RAINBOW_COLORS;
 
-    if keyboard.supports_per_key_rgb() {
+    if keyboard.can_set_per_key_colors() {
         // Use logical key mapping if available
         if let Some(mapping) = keyboard.get_key_mapping() {
             let all_keys = mapping.get_all_keys();
@@ -918,7 +926,7 @@ async fn test_checkerboard_pattern(keyboard: &mut Box<dyn Keyboard>) -> Result<(
         direct_colors.push((KeyAddress::new(hid_code), color));
     }
 
-    if keyboard.supports_per_key_rgb() {
+    if keyboard.can_set_per_key_colors() {
         keyboard.set_key_colors_direct(&direct_colors).await?;
     } else {
         println!("Checkerboard pattern requires per-key RGB support");
@@ -938,7 +946,7 @@ async fn test_wave_pattern(keyboard: &mut Box<dyn Keyboard>) -> Result<()> {
         direct_colors.push((KeyAddress::new(hid_code), color));
     }
 
-    if keyboard.supports_per_key_rgb() {
+    if keyboard.can_set_per_key_colors() {
         keyboard.set_key_colors_direct(&direct_colors).await?;
     } else {
         println!("Wave pattern requires per-key RGB support");
@@ -958,7 +966,7 @@ async fn test_basic_positions(keyboard: &mut Box<dyn Keyboard>) -> Result<()> {
         (KeyAddress::new(0x28), Color::WHITE),  // ENTER key
     ];
 
-    if keyboard.supports_per_key_rgb() {
+    if keyboard.can_set_per_key_colors() {
         keyboard.set_key_colors_direct(&test_positions).await?;
     } else {
         println!("Basic position test requires per-key RGB support");

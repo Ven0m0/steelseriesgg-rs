@@ -1,7 +1,9 @@
 //! Keyboard models: one row per keyboard product ID. A row decides the class discovery builds, the
-//! registry name, the raw-hidraw fallback, and the `[EXPERIMENTAL]` direct lighting frame. Headsets and
+//! registry name, the `[EXPERIMENTAL]` direct lighting frame, and the behaviour properties
+//! (`can_open_through_raw_hidraw`, control interfaces, zone count, zone and layout flags). Headsets and
 //! mice keep their own tables (`headsets::nova7`, `mice::modern`).
 
+use super::apex_m750::CONTROL_INTERFACE as APEX_M750_CONTROL_INTERFACE;
 use super::apex_pro_tkl_2023::{
     APEX_9_FRAME, APEX_9_GEN3_FRAME, GEN1_FRAME, GEN3_FRAME, MINI_FRAME, WIRED_2023_FRAME, WIRELESS_FRAME,
 };
@@ -29,7 +31,9 @@ pub enum KeyboardClass {
 }
 
 /// [EXPERIMENTAL] A direct-mode lighting frame: packet id, report length including the report-ID byte,
-/// key table, and whether the `0x4B` init report precedes the first frame.
+/// key table, and whether the `0x4B` init report precedes the first frame (a frame fact, not a capability; the
+/// init comes from OpenRGB's Gen 3 `SendInitialization`, 2026-10-25). The frames confirmed on hardware are listed in
+/// `.claude/rules/experimental-protocol.md`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DirectFrame {
     pub packet_id: CommandCode,
@@ -65,6 +69,8 @@ impl DirectLighting {
         }
     }
 
+    /// `ssgg` sends the `90 00` firmware poll before the first direct frame, to choose between the two frames (a
+    /// connection fact, not a capability). From OpenRGB `SendInitialization` (2026-10-25); `[EXPERIMENTAL]`, untested.
     #[must_use]
     pub fn probes_firmware(self) -> bool {
         matches!(self, Self::ByFirmware { .. })
@@ -76,26 +82,86 @@ impl DirectLighting {
 pub struct KeyboardModel {
     pub product_id: u16,
     pub name: &'static str,
+    /// The driver class discovery builds for this keyboard; it decides which protocol answers (see
+    /// [`KeyboardClass`]).
     pub class: KeyboardClass,
-    /// Wireless models that hidapi may fail to open; discovery then builds them on raw hidraw
-    /// feature reports instead.
-    pub raw_fallback: bool,
+    /// Discovery can open this keyboard through raw hidraw feature reports when hidapi fails to open it. Set on the
+    /// Apex Pro TKL (2023) Wireless (`0x1630`, `0x1632`) and Apex Pro TKL Wireless (2024) rows, where hidapi may
+    /// fail; `[EXPERIMENTAL]`.
+    pub can_open_through_raw_hidraw: bool,
+    /// The direct-mode lighting frame that `ssgg rgb` streams to this keyboard, or `None` where it uses the older
+    /// zone commands. `[EXPERIMENTAL]` except where `.claude/rules/experimental-protocol.md` records a hardware test.
     pub direct: Option<DirectLighting>,
+    /// The only USB interface that takes this keyboard's lighting commands; discovery ignores every other
+    /// interface. `None` on most boards, which discovery ranks by usage page. Apex M750: 2 (community fork,
+    /// `[EXPERIMENTAL]`).
+    pub only_control_interface: Option<i32>,
+    /// The interface discovery picks when the keyboard shows no vendor-defined usage page: 1 on most boards, 3 on
+    /// the Apex Pro TKL 2023 Wireless (`0x1630`, `0x1632`). Both values come from the older per-model table;
+    /// `[EXPERIMENTAL]`.
+    pub fallback_control_interface: i32,
+    /// The keyboard takes the colours of all its zones in one command (zone selector `0xFF`). `false` on the Apex
+    /// Pro TKL 2023 Wireless (`0x1630`, `0x1632`), which needs one command per zone, zones counted from 1 (code
+    /// comment from an earlier contributor). `[EXPERIMENTAL]` on every board: no hardware test of either form since
+    /// the legacy output path was fixed (2026-10-25).
+    pub can_set_all_zones_at_once: bool,
+    /// How many lighting zones the zone commands and the daemon address: 10 on the
+    /// Apex 3, 8 on the Apex 3 TKL (OpenRGB), 9 on the Apex Pro TKL 2023 wired and wireless, 1 elsewhere, where the
+    /// count is not captured. `[EXPERIMENTAL]`, from the older per-model table.
+    pub zone_count: usize,
+    /// The per-key key table holds only US keys and `ssgg` does not send the layout query (`F2`, a 645-byte
+    /// command) to these 513-byte boards, so `ssgg` warns when it opens the keyboard that ISO, UK and JP keys may
+    /// stay dark (a key-table fact, not a capability). Set on the Mini boards, from GG's specs, `[EXPERIMENTAL]`.
+    /// Where it is `false`, the layout can be queried or is not checked; a non-US layout is confirmed only on the
+    /// Apex Pro (2024) `0x1640` ISO-DE (Linux, 2026-11-02).
+    pub us_key_table_without_layout_query: bool,
 }
 
 const fn model(
     product_id: u16,
     name: &'static str,
     class: KeyboardClass,
-    raw_fallback: bool,
+    can_open_through_raw_hidraw: bool,
     direct: Option<DirectLighting>,
 ) -> KeyboardModel {
     KeyboardModel {
         product_id,
         name,
         class,
-        raw_fallback,
+        can_open_through_raw_hidraw,
         direct,
+        only_control_interface: None,
+        fallback_control_interface: 1,
+        can_set_all_zones_at_once: true,
+        us_key_table_without_layout_query: false,
+        zone_count: 1,
+    }
+}
+
+impl KeyboardModel {
+    const fn only_control_interface(mut self, interface: i32) -> Self {
+        self.only_control_interface = Some(interface);
+        self
+    }
+
+    const fn fallback_control_interface(mut self, interface: i32) -> Self {
+        self.fallback_control_interface = interface;
+        self
+    }
+
+    const fn zones_one_by_one(mut self) -> Self {
+        self.can_set_all_zones_at_once = false;
+        self
+    }
+
+    const fn zones(mut self, count: usize) -> Self {
+        self.zone_count = count;
+        self
+    }
+
+    const fn us_key_table_without_layout_query(mut self) -> Self {
+        self.us_key_table_without_layout_query = true;
+        self
     }
 }
 
@@ -122,11 +188,11 @@ pub const KEYBOARD_MODELS: &[KeyboardModel] = &[
     model(APEX_PRO_TKL, "Apex Pro TKL", C::ApexProTkl2023, false, GEN1_OR_GEN3),
     model(APEX_150, "Apex 150", C::Generic, false, None),
     model(APEX_7_TKL, "Apex 7 TKL", C::ApexProTkl2023, false, GEN1),
-    model(APEX_3, "Apex 3", C::Apex3, false, None),
+    model(APEX_3, "Apex 3", C::Apex3, false, None).zones(10),
     model(APEX_5, "Apex 5", C::ApexProTkl2023, false, GEN1),
-    model(APEX_PRO_MINI, "Apex Pro Mini", C::ApexProTkl2023, false, MINI),
-    model(APEX_9_MINI, "Apex 9 Mini", C::ApexProTkl2023, false, MINI),
-    model(APEX_3_TKL, "Apex 3 TKL", C::Apex3Tkl, false, None),
+    model(APEX_PRO_MINI, "Apex Pro Mini", C::ApexProTkl2023, false, MINI).us_key_table_without_layout_query(),
+    model(APEX_9_MINI, "Apex 9 Mini", C::ApexProTkl2023, false, MINI).us_key_table_without_layout_query(),
+    model(APEX_3_TKL, "Apex 3 TKL", C::Apex3Tkl, false, None).zones(8),
     model(
         APEX_PRO_MINI_WIRELESS_DONGLE,
         "Apex Pro Mini Wireless (Dongle)",
@@ -147,21 +213,28 @@ pub const KEYBOARD_MODELS: &[KeyboardModel] = &[
         C::ApexProTkl2023,
         false,
         WIRED_2023,
-    ),
+    )
+    .zones(9),
     model(
         APEX_PRO_TKL_2023_WIRELESS_2,
         "Apex Pro TKL (2023) Wireless",
         C::ApexProTkl2023,
         true,
         WIRELESS,
-    ),
+    )
+    .fallback_control_interface(3)
+    .zones_one_by_one()
+    .zones(9),
     model(
         APEX_PRO_TKL_2023_WIRELESS,
         "Apex Pro TKL (2023) Wireless",
         C::ApexProTkl2023,
         true,
         WIRELESS,
-    ),
+    )
+    .fallback_control_interface(3)
+    .zones_one_by_one()
+    .zones(9),
     model(APEX_9_TKL, "Apex 9 TKL", C::ApexProTkl2023, false, APEX_9),
     model(APEX_PRO_2024, "Apex Pro (2024)", C::ApexProTkl2023, false, GEN1),
     model(APEX_PRO_TKL_2024, "Apex Pro TKL (2024)", C::ApexProTkl2023, false, GEN3),
@@ -185,7 +258,8 @@ pub const KEYBOARD_MODELS: &[KeyboardModel] = &[
         C::ApexProTkl2023,
         false,
         MINI,
-    ),
+    )
+    .us_key_table_without_layout_query(),
     model(
         APEX_PRO_TKL_2024_CYBER,
         "Apex Pro TKL (2024) Cyber",
@@ -202,7 +276,7 @@ pub const KEYBOARD_MODELS: &[KeyboardModel] = &[
     ),
     model(APEX_5_2024, "Apex 5 (2024)", C::ApexProTkl2023, false, GEN1),
     model(APEX_7_2024, "Apex 7 (2024)", C::Generic, false, None),
-    model(APEX_M750, "Apex M750", C::ApexM750, false, None),
+    model(APEX_M750, "Apex M750", C::ApexM750, false, None).only_control_interface(APEX_M750_CONTROL_INTERFACE),
 ];
 
 #[must_use]
@@ -214,6 +288,39 @@ pub fn keyboard_model(product_id: u16) -> Option<&'static KeyboardModel> {
 mod tests {
     use super::*;
 
+    /// Which rows set each property today; a new row that needs one adds it to its builder call and to this list.
+    #[test]
+    fn the_interface_zone_and_layout_properties_are_set_on_the_expected_rows() {
+        let wireless_2023 = [APEX_PRO_TKL_2023_WIRELESS, APEX_PRO_TKL_2023_WIRELESS_2];
+        let minis = [APEX_PRO_MINI, APEX_PRO_MINI_2024, APEX_9_MINI];
+        for m in KEYBOARD_MODELS {
+            let pid = m.product_id;
+            assert_eq!(m.only_control_interface, (pid == APEX_M750).then_some(2), "{pid:#06x}");
+            let fallback = if wireless_2023.contains(&pid) { 3 } else { 1 };
+            assert_eq!(m.fallback_control_interface, fallback, "{pid:#06x}");
+            assert_eq!(m.can_set_all_zones_at_once, !wireless_2023.contains(&pid), "{pid:#06x}");
+            assert_eq!(m.us_key_table_without_layout_query, minis.contains(&pid), "{pid:#06x}");
+            let zones = match pid {
+                APEX_3 => 10,
+                APEX_3_TKL => 8,
+                APEX_PRO_TKL_2023 | APEX_PRO_TKL_2023_WIRELESS | APEX_PRO_TKL_2023_WIRELESS_2 => 9,
+                _ => 1,
+            };
+            assert_eq!(m.zone_count, zones, "{pid:#06x}");
+        }
+    }
+
+    /// The Apex 3 drivers size their colour frames with their own constants; they must match the table.
+    #[test]
+    fn the_apex_3_driver_zone_constants_match_the_table() {
+        use super::super::apex::{Apex3, Apex3Tkl};
+        assert_eq!(keyboard_model(APEX_3).map(|m| m.zone_count), Some(Apex3::ZONE_COUNT));
+        assert_eq!(
+            keyboard_model(APEX_3_TKL).map(|m| m.zone_count),
+            Some(Apex3Tkl::ZONE_COUNT)
+        );
+    }
+
     #[test]
     fn every_product_id_has_one_row() {
         let mut seen = std::collections::HashSet::new();
@@ -223,10 +330,10 @@ mod tests {
     }
 
     #[test]
-    fn raw_fallback_is_the_four_wireless_apex_pro_tkl_ids() {
+    fn raw_hidraw_opening_is_the_four_wireless_apex_pro_tkl_ids() {
         let raw: Vec<u16> = KEYBOARD_MODELS
             .iter()
-            .filter(|m| m.raw_fallback)
+            .filter(|m| m.can_open_through_raw_hidraw)
             .map(|m| m.product_id)
             .collect();
         assert_eq!(raw, [0x1630, 0x1632, 0x1644, 0x1646]);

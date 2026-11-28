@@ -49,7 +49,8 @@ pub trait Keyboard: Device {
         Ok(())
     }
 
-    /// Get the number of RGB zones.
+    /// How many lighting zones the zone commands address; from the `KeyboardModel` row's `zone_count`
+    /// (`[EXPERIMENTAL]`, older per-model table). 0 unless a keyboard class says otherwise.
     fn zone_count(&self) -> usize {
         0
     }
@@ -66,13 +67,12 @@ pub trait Keyboard: Device {
 
     // === Per-Key RGB Control ===
 
-    /// Check if per-key RGB key-mapping is available for this keyboard.
-    ///
-    /// ⚠️ **Experimental**: returning `true` means a HID key mapping exists, but the
-    /// per-key protocol (`CommandCode::PerKeyRgb`, `0x23`) has not been confirmed on
-    /// hardware. Calls to `set_key_color` / `set_key_colors` may be silently ignored by
-    /// the device until the packet format is verified via USB capture.
-    fn supports_per_key_rgb(&self) -> bool {
+    /// `ssgg rgb perkey` can give each key its own colour. `true` where the key-mapping database has this
+    /// keyboard. Confirmed on the Apex Pro TKL 2023 `0x1628` (direct frame `0x40`, Windows, 2026-10-21) and the Apex
+    /// Pro (2024) `0x1640` (`0x3A`, ISO-DE, Linux, 2026-11-02; ANSI untested); the older `0x23` per-key command is
+    /// `[PLACEHOLDER]`, and the other boards are `[EXPERIMENTAL]`: a board may ignore the frames and still answer
+    /// success.
+    fn can_set_per_key_colors(&self) -> bool {
         false
     }
 
@@ -160,8 +160,10 @@ pub trait Keyboard: Device {
 
     // === Per-Key RGB Effect Support ===
 
-    /// Check if per-key RGB effects are supported.
-    fn supports_per_key_effects(&self) -> bool {
+    /// `ssgg validate` can run its per-key effect and reactive tests (the `PerKeyRgbController` path): `true` where
+    /// the keyboard has a key mapping, `false` unless a keyboard class says otherwise. `[EXPERIMENTAL]`: no hardware
+    /// record exists for this path. `ssgg rgb effect` does not read it; it streams the direct frame instead.
+    fn can_run_per_key_effects(&self) -> bool {
         false
     }
 
@@ -352,8 +354,10 @@ pub trait Keyboard: Device {
         None
     }
 
-    /// Whether this keyboard answers the on-board profile protocol: whether [`Self::onboard_codec`] answers.
-    fn supports_onboard_profile(&self) -> bool {
+    /// `ssgg onboard read`, `write` and `load` can use this keyboard's stored profiles (the legacy on-board
+    /// protocol): true where [`Self::onboard_codec`] answers, the Apex 7 `0x1612` only. Read, write and deploy are
+    /// confirmed there (Linux, 2026-10-20).
+    fn can_use_onboard_profile(&self) -> bool {
         self.onboard_codec().is_some()
     }
 
@@ -606,12 +610,8 @@ impl GenericKeyboard {
     }
 
     async fn send_zone_buffer_async(&mut self) -> Result<()> {
-        // Wireless keyboards (e.g. Apex Pro TKL 2023 Wireless, PID 0x1632) don't
-        // support the 0xFF "all zones" selector. Send per-zone commands instead,
-        // with zone indices starting at 1.
-        if self.info.product_id == super::product_ids::APEX_PRO_TKL_2023_WIRELESS
-            || self.info.product_id == super::product_ids::APEX_PRO_TKL_2023_WIRELESS_2
-        {
+        // A keyboard without the 0xFF "all zones" selector gets one command per zone, zones counted from 1.
+        if models::keyboard_model(self.info.product_id).is_some_and(|model| !model.can_set_all_zones_at_once) {
             for i in 0..self.zone_color_buffer.len() {
                 let color = self.zone_color_buffer[i];
                 let zone_index = (i + 1) as u8; // zones start at 1, not 0
@@ -783,7 +783,7 @@ impl Keyboard for GenericKeyboard {
 
     // === Per-Key RGB Control Implementation ===
 
-    fn supports_per_key_rgb(&self) -> bool {
+    fn can_set_per_key_colors(&self) -> bool {
         self.key_mapping.is_some()
     }
 
@@ -978,7 +978,7 @@ impl Keyboard for GenericKeyboard {
 
     // === Per-Key RGB Effect Implementation ===
 
-    fn supports_per_key_effects(&self) -> bool {
+    fn can_run_per_key_effects(&self) -> bool {
         self.per_key_controller.is_some()
     }
 
@@ -1158,7 +1158,7 @@ macro_rules! impl_keyboard_with_delegation {
         impl Keyboard for $type {
             $($custom)*
             fn zone_count(&self) -> usize { self.inner.zone_count() }
-            fn supports_per_key_rgb(&self) -> bool { self.inner.supports_per_key_rgb() }
+            fn can_set_per_key_colors(&self) -> bool { self.inner.can_set_per_key_colors() }
             fn get_key_mapping(&self) -> Option<&KeyMapping> { self.inner.get_key_mapping() }
             async fn clear_per_key_rgb(&mut self) -> Result<()> { self.set_color(Color::BLACK).await }
             fn get_zone_mapping(&self) -> Option<&ZoneMapping> { self.inner.get_zone_mapping() }
@@ -1166,7 +1166,7 @@ macro_rules! impl_keyboard_with_delegation {
             async fn simulate_per_key_with_zones(&mut self, key_colors: &[(KeyId, Color)]) -> Result<()> { self.inner.simulate_per_key_with_zones(key_colors).await }
             async fn set_zone_colors_with_retry(&mut self, colors: &[Color], max_retries: usize) -> Result<()> { self.inner.set_zone_colors_with_retry(colors, max_retries).await }
             async fn test_zone_reliability(&mut self) -> Result<Vec<bool>> { self.inner.test_zone_reliability().await }
-            fn supports_per_key_effects(&self) -> bool { self.inner.supports_per_key_effects() }
+            fn can_run_per_key_effects(&self) -> bool { self.inner.can_run_per_key_effects() }
             async fn set_per_key_effect(&mut self, effect: PerKeyEffect) -> Result<()> { self.inner.set_per_key_effect(effect).await }
             fn get_per_key_effect(&self) -> Option<&PerKeyEffect> { self.inner.get_per_key_effect() }
             async fn trigger_key_reactive(&mut self, keys: &[KeyId], duration: f32) -> Result<()> { self.inner.trigger_key_reactive(keys, duration).await }
