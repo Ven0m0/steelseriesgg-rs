@@ -111,9 +111,8 @@ pub struct KeyboardModel {
     pub zone_count: usize,
     /// The per-key key table holds only US keys and `ssgg` does not send the layout query (`F2`, a 645-byte
     /// command) to these 513-byte boards, so `ssgg` warns when it opens the keyboard that ISO, UK and JP keys may
-    /// stay dark (a key-table fact, not a capability). Set on the
-    /// Mini boards, from GG's specs, `[EXPERIMENTAL]`. Where it is `false`, the layout can be queried or is not
-    /// checked; a non-US layout is confirmed only on the Apex Pro (2024) `0x1640` ISO-DE (Linux, 2026-11-02).
+    /// stay dark (a key-table fact, not a capability). Set on the Mini boards, from GG's specs, `[EXPERIMENTAL]`.
+    /// Where it is `false`, the layout can be queried or is not checked; a non-US layout is confirmed only on the Apex Pro (2024) `0x1640` ISO-DE (Linux, 2026-11-02).
     pub us_key_table_without_layout_query: bool,
 }
 

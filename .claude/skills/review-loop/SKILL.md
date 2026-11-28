@@ -76,12 +76,17 @@ Start the agents of one round in one message, so they run at the same time.
 Run the agents that had findings. Also run an agent that had none when the fixes since its last run touch its
 area (see the table): a fix can create a new problem in an area that was clean.
 
+Cosmetic findings do not need another run. A cosmetic finding changes no behaviour and no claim: line wrapping,
+spelling, word order, or a clearer phrase that says the same thing. Fix them, but if they are an agent's only
+findings, do not run that agent again for them, and do not start a new round only because of them. A wording fix
+that changes what a text claims (a status, a scope, a device list) is not cosmetic.
+
 ## Final round and stop
 
 When a narrow round has nothing to fix, run one final round with every agent on the whole change, to catch silent
 regressions. Stop when:
 
-- a full round has nothing to fix; or
+- a full round has nothing to fix, or only cosmetic findings (fix those and stop); or
 - agents contradict each other (ask the user); or
 - the round limit is reached: tell the user what is still open and ask whether to continue.
 
